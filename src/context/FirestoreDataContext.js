@@ -21,6 +21,7 @@ export const FirestoreDataProvider = ({ children }) => {
   const [allRates, setAllRates] = useState({});
   const [allTargets, setAllTargets] = useState({});
   const [allDownloadEvents, setAllDownloadEvents] = useState([]);
+  const [monthlyMetrics, setMonthlyMetrics] = useState([]);
   const [dataWarnings, setDataWarnings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -41,11 +42,12 @@ export const FirestoreDataProvider = ({ children }) => {
     try {
       await waitForAuth();
 
-      // Fetch users, clients, and downloads in parallel
-      const [usersSnap, clientsDoc, downloadsSnap] = await Promise.all([
+      // Fetch users, clients, downloads, and monthly metrics in parallel
+      const [usersSnap, clientsDoc, downloadsSnap, monthlyMetricsDoc] = await Promise.all([
         getDocs(collection(db, 'users')),
         getDoc(doc(db, 'clients', 'all')),
         getDocs(collection(db, 'driveDownloads')),
+        getDoc(doc(db, 'monthlyMetrics', 'all')),
       ]);
 
       // Process users and build rates/targets maps from profile arrays
@@ -360,11 +362,14 @@ export const FirestoreDataProvider = ({ children }) => {
         });
       });
 
+      const monthlyMetricsList = monthlyMetricsDoc.exists() ? (monthlyMetricsDoc.data().entries || []) : [];
+
       setAllBillableEntries(billableEntries);
       setAllOpsEntries(opsEntries);
       setUsers(userList);
       setClients(clientList);
       setAllDownloadEvents(downloadEvents);
+      setMonthlyMetrics(monthlyMetricsList);
       setAllRates(ratesMap);
       setAllTargets(targetsMap);
       setDataWarnings(warnings);
@@ -410,6 +415,7 @@ export const FirestoreDataProvider = ({ children }) => {
     allBillableEntries,
     allOpsEntries,
     allDownloadEvents,
+    monthlyMetrics,
     users,
     clients,
     allRates,

@@ -699,7 +699,9 @@ const ClientDetailView = ({ clientName }) => {
                     formatter={(value) => [`${formatHours(value)}h`]}
                     contentStyle={{ borderRadius: '8px', border: `1px solid ${TOOLTIP_BORDER}` }}
                   />
-                  <Legend />
+                  <Legend
+                    formatter={(value, entry) => `${value} (${formatHours(entry?.payload?.hours ?? 0)}h)`}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>

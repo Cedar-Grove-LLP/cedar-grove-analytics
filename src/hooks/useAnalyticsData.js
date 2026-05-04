@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import { useAllBillableEntries, useAllOpsEntries, useAllDownloadEvents, useUsers, useClients } from './useFirestoreData';
+import { useAllBillableEntries, useAllOpsEntries, useAllDownloadEvents, useUsers, useClients, useMonthlyMetrics } from './useFirestoreData';
 import { useAttorneyRates } from './useAttorneyRates';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import {
@@ -27,6 +27,7 @@ export const useAnalyticsData = ({
   const { users: firebaseUsers, loading: usersLoading, error: usersError } = useUsers();
   const { clients: firebaseClients, loading: clientsLoading, error: clientsError } = useClients();
   const { data: allDownloadEvents, loading: downloadsLoading } = useAllDownloadEvents();
+  const { data: monthlyMetrics } = useMonthlyMetrics();
   const { getRate, loading: ratesLoading } = useAttorneyRates();
   const { allTargets: userTargets } = useFirestoreCache();
 
@@ -976,6 +977,67 @@ export const useAnalyticsData = ({
     return Math.round((total / user.target) * 100);
   };
 
+  // Total firm-wide revenue accrued across all months (from monthlyMetrics/all)
+  const totalRevenueAccrued = useMemo(() => {
+    return (monthlyMetrics || []).reduce((acc, m) => acc + (m.revenueAccrued || 0), 0);
+  }, [monthlyMetrics]);
+
+  // Revenue accrued for the active date range. Null when range does not align
+  // to one or more whole calendar months (or when no monthlyMetrics entries match).
+  const periodRevenueAccrued = useMemo(() => {
+    if (!monthlyMetrics || monthlyMetrics.length === 0) return null;
+
+    if (dateRange === 'all-time') {
+      return totalRevenueAccrued > 0 ? totalRevenueAccrued : null;
+    }
+
+    const { startDate, endDate } = dateRangeInfo || {};
+    if (!startDate || !endDate) return null;
+
+    const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    // Enumerate every calendar month touched by [startDate, endDate]
+    const candidates = [];
+    let y = startDate.getFullYear();
+    let m = startDate.getMonth();
+    const endY = endDate.getFullYear();
+    const endM = endDate.getMonth();
+    while (y < endY || (y === endY && m <= endM)) {
+      candidates.push({ year: y, monthIndex: m });
+      m++; if (m > 11) { m = 0; y++; }
+    }
+
+    const now = getPSTDate();
+    const matched = candidates.filter(({ year, monthIndex }) => {
+      const monthFirst = new Date(year, monthIndex, 1, 0, 0, 0, 0);
+      const monthLast = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
+      const fullyCovered = startDate <= monthFirst && endDate >= monthLast;
+      // Allow the in-progress current month: range starts on the 1st and ends today
+      const isCurrentMonthToDate =
+        startDate.getTime() === monthFirst.getTime() &&
+        year === now.getFullYear() &&
+        monthIndex === now.getMonth() &&
+        endDate <= monthLast;
+      return fullyCovered || isCurrentMonthToDate;
+    });
+
+    if (matched.length === 0) return null;
+
+    let sum = 0;
+    let foundAny = false;
+    matched.forEach(({ year, monthIndex }) => {
+      const entry = monthlyMetrics.find(
+        e => e.year === year && e.month === monthNames[monthIndex]
+      );
+      if (entry && typeof entry.revenueAccrued === 'number') {
+        sum += entry.revenueAccrued;
+        foundAny = true;
+      }
+    });
+
+    return foundAny ? sum : null;
+  }, [dateRange, dateRangeInfo, monthlyMetrics, totalRevenueAccrued]);
+
   // Calculate total gross billables (rate * hours) - includes all entries (hidden users too)
   const totalGrossBillables = useMemo(() => {
     let total = 0;
@@ -1000,9 +1062,18 @@ export const useAnalyticsData = ({
     const totalBillableTarget = attorneyData.reduce((acc, att) => acc + att.billableTarget, 0);
     const totalOpsTarget = attorneyData.reduce((acc, att) => acc + att.opsTarget, 0);
 
-    const avgUtilization = attorneyData.length > 0
-      ? Math.round(attorneyData.reduce((acc, att) => acc + calculateUtilization(att), 0) / attorneyData.length)
+    // Use all visible tracked users (attorneyData already excludes hidden users)
+    const attorneysOnly = attorneyData;
+    const fteAttorneys = attorneysOnly.filter(att => att.employmentType === 'FTE');
+    const pteAttorneys = attorneysOnly.filter(att => att.employmentType === 'PTE');
+
+    const avgOf = (list) => list.length > 0
+      ? Math.round(list.reduce((acc, att) => acc + calculateUtilization(att), 0) / list.length)
       : 0;
+
+    const avgUtilization = avgOf(attorneysOnly);
+    const avgUtilizationFTE = avgOf(fteAttorneys);
+    const avgUtilizationPTE = avgOf(pteAttorneys);
 
     return {
       totalBillable,
@@ -1011,6 +1082,11 @@ export const useAnalyticsData = ({
       totalBillableTarget,
       totalOpsTarget,
       avgUtilization,
+      avgUtilizationFTE,
+      avgUtilizationPTE,
+      attorneyCountFTE: fteAttorneys.length,
+      attorneyCountPTE: pteAttorneys.length,
+      attorneyCountTotal: attorneysOnly.length,
     };
   }, [attorneyData, allAttorneyDataIncludingHidden]);
 
@@ -1031,6 +1107,8 @@ export const useAnalyticsData = ({
     calculateUtilization,
     dateRangeInfo,
     totalGrossBillables,
+    totalRevenueAccrued,
+    periodRevenueAccrued,
     ...totals,
   };
 };

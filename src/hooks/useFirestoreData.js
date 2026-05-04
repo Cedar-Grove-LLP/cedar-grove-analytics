@@ -118,6 +118,15 @@ export const useAllDownloadEvents = () => {
 };
 
 /**
+ * Get firm-wide monthly metrics from `monthlyMetrics/all`.
+ * Each entry: { month, year, revenueAccrued, syncedAt }
+ */
+export const useMonthlyMetrics = () => {
+  const { monthlyMetrics, loading, error } = useFirestoreCache();
+  return { data: monthlyMetrics || [], loading, error };
+};
+
+/**
  * Get billable entries for a specific user from the shared cache.
  * Supports lookup by display name or Firestore document ID.
  */

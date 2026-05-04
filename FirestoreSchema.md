@@ -63,6 +63,8 @@ firestore-root/
 │
 ├── invoices/all                          # All client invoices in a single document (entries array)
 │
+├── monthlyMetrics/all                    # Firm-wide per-month metrics (entries array)
+│
 ├── clientAliases/all                     # Counterparty-to-client name mappings (for invoice matching)
 │
 ├── transactions/{mercuryId}              # Bank transactions synced from Mercury API
@@ -489,6 +491,52 @@ Google Sheet ("Payment Status" tab) → Apps Script → Firestore
 - **Sync trigger**: Manual — run `syncInvoices()` or `forceSyncInvoices()` from Apps Script.
 - **Strategy**: Full overwrite. The entire `invoices/all` document is replaced with the parsed entries array and metadata in a single write.
 - **Cost per sync**: 1 write.
+
+---
+
+## Document: `monthlyMetrics/all`
+
+Stores firm-wide per-month metrics in a single document as an entries array. Synced from the monthly sheet tabs in the rates Google Sheets workbook (cell B10 of each month sheet contains "Revenue Accrued").
+
+### Document Schema
+
+```javascript
+{
+  entryCount: 5,                            // number — length of entries array
+  lastSyncedAt: "2026-05-04T...",           // string — ISO 8601 timestamp of last sync
+
+  entries: [
+    {
+      month: "January",                     // string — month name
+      year: 2026,                           // number
+      revenueAccrued: 343668,               // number — firm-wide revenue accrued for month (parsed from "$343,668")
+      syncedAt: "2026-05-04T..."            // string — ISO 8601 timestamp this entry was last synced
+    }
+    // ... one entry per synced month, sorted chronologically
+  ]
+}
+```
+
+### Field Notes
+
+- `revenueAccrued`: Parsed from cell B10 of the month sheet. Currency strings are normalized to plain numbers via `parseCurrency`.
+- `month` + `year`: Composite key. Re-syncing the same month replaces its entry rather than appending.
+- Entries are sorted chronologically (year, then month index).
+
+### Sync Architecture
+
+```
+Google Sheet ({Month} tab, cell B10) → Apps Script → Firestore
+                                          │
+                                          ├── 1. Read existing entries[] from monthlyMetrics/all
+                                          ├── 2. Read B10, parse currency
+                                          ├── 3. Upsert entry by month+year, sort
+                                          └── 4. PATCH entries field (preserves other doc fields)
+```
+
+- **Sync trigger**: Manual — run `forceSyncRevenueAccrued()` (current month) or `forceSyncRevenueAccruedSpecificMonth()` (named month).
+- **Strategy**: Field-level PATCH on `entries`. Read-modify-write to upsert one month at a time without overwriting other months.
+- **Cost per sync**: 1 read, 1 write.
 
 ---
 

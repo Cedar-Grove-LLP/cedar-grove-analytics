@@ -99,6 +99,12 @@ driveDownloads/{monthKey}  — month, totalDownloads, uniqueUsers, uniqueFiles, 
                               Google Drive activity across 5 tracked folders:
                               Administrative, Attorney Employment, Engagements,
                               Legal Memos, New Client Onboarding.
+
+monthlyMetrics/all       — firm-wide per-month metrics. Single doc with entries[] array:
+                              { entries: [{ month, year, revenueAccrued, syncedAt }],
+                                entryCount, lastSyncedAt }
+                              Synced manually from monthly sheet tab cell B10
+                              ("Revenue Accrued") via Apps Script.
 ```
 
 Legacy field names (`hours`, `secondaryHours`) are normalized to `billableHours`/`opsHours` in hooks.

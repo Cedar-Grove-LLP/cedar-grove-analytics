@@ -74,9 +74,16 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
     totalOps,
     totalEarnings,
     totalGrossBillables,
+    totalRevenueAccrued,
+    periodRevenueAccrued,
     totalBillableTarget,
     totalOpsTarget,
     avgUtilization,
+    avgUtilizationFTE,
+    avgUtilizationPTE,
+    attorneyCountFTE,
+    attorneyCountPTE,
+    attorneyCountTotal,
   } = useAnalyticsData({
     dateRange,
     customDateStart,
@@ -223,17 +230,25 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
         {/* Views */}
         {selectedView === 'overview' && (
           <OverviewView
+            dateRange={dateRange}
             dateRangeLabel={dateRangeLabel}
             filteredEntriesCount={(filteredBillableEntries?.length || 0) + (filteredOpsEntries?.length || 0)}
             globalAttorneyFilter={effectiveAttorneyFilter}
             allAttorneyNames={allAttorneyNames}
             avgUtilization={avgUtilization}
+            avgUtilizationFTE={avgUtilizationFTE}
+            avgUtilizationPTE={avgUtilizationPTE}
+            attorneyCountFTE={attorneyCountFTE}
+            attorneyCountPTE={attorneyCountPTE}
+            attorneyCountTotal={attorneyCountTotal}
             totalBillable={totalBillable}
             totalOps={totalOps}
             totalBillableTarget={totalBillableTarget}
             totalOpsTarget={totalOpsTarget}
             totalEarnings={totalEarnings}
             totalGrossBillables={totalGrossBillables}
+            totalRevenueAccrued={totalRevenueAccrued}
+            periodRevenueAccrued={periodRevenueAccrued}
             attorneyData={attorneyData}
             transactionData={transactionData}
           />
