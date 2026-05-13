@@ -9,7 +9,7 @@ import { useAnalyticsData } from '@/hooks/useAnalyticsData';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { DateRangeDropdown, AttorneyFilterDropdown } from './shared';
-import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView } from './views';
+import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView, TargetsView } from './views';
 
 const TRANSACTIONS_OPS_TABS = ['transactions', 'ops'];
 
@@ -42,7 +42,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   const [transactionAttorneyFilter, setTransactionAttorneyFilter] = useState('all');
 
   // View state — read initial tab from URL query param (?tab=clients)
-  const VALID_TABS = ['overview', 'attorneys', 'transactions', 'ops', 'clients', 'downloads'];
+  const VALID_TABS = ['overview', 'attorneys', 'transactions', 'ops', 'clients', 'downloads', 'targets'];
   const defaultTab = downloadsOnly ? 'downloads' : transactionsOpsOnly ? 'transactions' : 'overview';
   const tabFromUrl = searchParams.get('tab');
   const initialTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : defaultTab;
@@ -127,9 +127,9 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   // No data state (skip for downloads-only users who don't need billable/ops entries)
   if (!downloadsOnly && !transactionsOpsOnly && (!filteredBillableEntries || filteredBillableEntries.length === 0) && (!filteredOpsEntries || filteredOpsEntries.length === 0)) {
     return (
-      <div className="min-h-screen bg-cg-background p-6">
-        <div className="max-w-7xl mx-auto">
-          <Header 
+      <div className="min-h-screen bg-cg-background px-4 py-6">
+        <div className="max-w-[88rem] mx-auto">
+          <Header
             showDateDropdown={showDateDropdown}
             setShowDateDropdown={setShowDateDropdown}
             dateRange={dateRange}
@@ -162,8 +162,8 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   }
 
   return (
-    <div className="min-h-screen bg-cg-background p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-cg-background px-4 py-6">
+      <div className="max-w-[88rem] mx-auto">
         <Header
           showDateDropdown={showDateDropdown}
           setShowDateDropdown={setShowDateDropdown}
@@ -195,9 +195,11 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             { key: 'ops', label: 'Ops' },
             { key: 'clients', label: 'Clients' },
             { key: 'downloads', label: 'Downloads' },
+            { key: 'targets', label: 'Targets', adminOnly: true },
           ].filter(tab => {
             if (downloadsOnly) return tab.key === 'downloads';
             if (transactionsOpsOnly) return TRANSACTIONS_OPS_TABS.includes(tab.key);
+            if (tab.adminOnly && !isAdmin) return false;
             return true;
           }).map((tab) => (
             <button
@@ -277,6 +279,8 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             attorneyDownloadData={attorneyDownloadData}
           />
         )}
+
+        {selectedView === 'targets' && isAdmin && <TargetsView />}
       </div>
     </div>
   );

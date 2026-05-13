@@ -8,3 +8,4 @@ export { default as AttorneyDetailView } from './AttorneyDetailView';
 export { default as BillingSummariesView } from './BillingSummariesView';
 export { default as CategoryDetailView } from './CategoryDetailView';
 export { default as DownloadsView } from './DownloadsView';
+export { default as TargetsView } from './TargetsView';

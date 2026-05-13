@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Users, LogOut, ArrowLeft, Shield, FileText, DollarSign, Receipt, Briefcase, TrendingUp, Target } from 'lucide-react';
+import { Users, LogOut, ArrowLeft, Shield, FileText, DollarSign, Receipt, Briefcase, TrendingUp } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const AdminDashboard = () => {
@@ -21,13 +21,6 @@ const AdminDashboard = () => {
       href: '/admin/user-management',
       icon: Users,
       color: 'bg-blue-500',
-    },
-    {
-      title: 'Utilization Targets',
-      description: 'Set monthly billable and ops hour targets for each team member',
-      href: '/admin/targets',
-      icon: Target,
-      color: 'bg-rose-500',
     },
     {
       title: 'Billing Summaries',
@@ -124,7 +117,7 @@ const AdminDashboard = () => {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {adminLinks.filter(link => isAdmin || (link.href !== '/admin/user-management' && link.href !== '/admin/targets')).map((link) => (
+          {adminLinks.filter(link => isAdmin || link.href !== '/admin/user-management').map((link) => (
             <Link
               key={link.href}
               href={link.href}

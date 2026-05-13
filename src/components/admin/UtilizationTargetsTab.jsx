@@ -39,73 +39,191 @@ const monthTotal = (cell) => {
 const annualTotal = (userMatrix) =>
   MONTHS.reduce((sum, m) => sum + monthTotal(userMatrix?.[m.idx]), 0);
 
-const TargetTable = ({ title, users, matrix, onChange }) => (
+const annualBillable = (userMatrix) =>
+  MONTHS.reduce((sum, m) => sum + (parseFloat(userMatrix?.[m.idx]?.client) || 0), 0);
+
+const annualOps = (userMatrix) =>
+  MONTHS.reduce((sum, m) => sum + (parseFloat(userMatrix?.[m.idx]?.ops) || 0), 0);
+
+const TargetTable = ({ title, users, matrix, onChange }) => {
+  const maxRow = users.length - 1;
+  const maxCol = MONTHS.length * 2 - 1;
+
+  const focusCell = (table, r, c) => {
+    if (r < 0 || r > maxRow || c < 0 || c > maxCol) return false;
+    const target = table.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+    if (!target) return false;
+    target.focus();
+    target.select();
+    return true;
+  };
+
+  const handleKeyDown = (e, row, col) => {
+    const input = e.currentTarget;
+    const table = input.closest('table');
+    if (!table) return;
+
+    const key = e.key;
+    const shift = e.shiftKey;
+    const ctrl = e.ctrlKey || e.metaKey;
+
+    let nextRow = row;
+    let nextCol = col;
+    let consume = true;
+
+    switch (key) {
+      case 'ArrowUp':
+        nextRow = row - 1;
+        break;
+      case 'ArrowDown':
+        nextRow = row + 1;
+        break;
+      case 'ArrowLeft':
+        nextCol = col - 1;
+        break;
+      case 'ArrowRight':
+        nextCol = col + 1;
+        break;
+      case 'Enter':
+        nextRow = shift ? row - 1 : row + 1;
+        break;
+      case 'Tab':
+        if (shift) {
+          nextCol = col - 1;
+          if (nextCol < 0) { nextCol = maxCol; nextRow = row - 1; }
+        } else {
+          nextCol = col + 1;
+          if (nextCol > maxCol) { nextCol = 0; nextRow = row + 1; }
+        }
+        break;
+      case 'Home':
+        if (ctrl) { nextRow = 0; nextCol = 0; } else { nextCol = 0; }
+        break;
+      case 'End':
+        if (ctrl) { nextRow = maxRow; nextCol = maxCol; } else { nextCol = maxCol; }
+        break;
+      case 'PageUp':
+        nextRow = 0;
+        break;
+      case 'PageDown':
+        nextRow = maxRow;
+        break;
+      case 'Escape':
+        e.preventDefault();
+        input.blur();
+        return;
+      default:
+        consume = false;
+    }
+
+    if (!consume) return;
+
+    e.preventDefault();
+    focusCell(table, nextRow, nextCol);
+  };
+
+  const handlePaste = (e, row, col) => {
+    const text = e.clipboardData?.getData('text');
+    if (!text) return;
+    if (!text.includes('\t') && !text.includes('\n')) return;
+    e.preventDefault();
+    const rows = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
+    rows.forEach((rowStr, rOff) => {
+      const cells = rowStr.split('\t');
+      cells.forEach((val, cOff) => {
+        const r = row + rOff;
+        const c = col + cOff;
+        if (r < 0 || r > maxRow || c < 0 || c > maxCol) return;
+        const u = users[r];
+        if (!u) return;
+        const monthIdx = Math.floor(c / 2);
+        const field = c % 2 === 0 ? 'client' : 'ops';
+        onChange(u.id, monthIdx, field, val.trim());
+      });
+    });
+  };
+
+  return (
   <div className="bg-white rounded-lg shadow overflow-x-auto">
-    <table className="min-w-full text-sm border-collapse">
+    <table className="w-full text-xs border-collapse">
       <thead className="bg-cg-green text-white">
         <tr>
-          <th rowSpan={2} className="px-3 py-2 text-left align-middle whitespace-nowrap border-r border-cg-green/40">
+          <th rowSpan={2} className="px-2 py-1 text-left align-middle whitespace-nowrap border-r-2 border-cg-dark text-sm">
             {title}
           </th>
           {MONTHS.map(m => (
-            <th key={m.idx} colSpan={3} className="px-2 py-1 text-center border-l border-cg-green/40 font-semibold">
+            <th key={m.idx} colSpan={2} className="px-1 py-1 text-center border-l-2 border-cg-dark font-semibold">
               {m.short}
             </th>
           ))}
-          <th rowSpan={2} className="px-3 py-2 text-right align-middle whitespace-nowrap border-l border-cg-green/40">
-            Annual Hours
+          <th colSpan={3} className="px-1 py-1 text-center border-l-2 border-cg-dark font-semibold text-sm">
+            Annual
           </th>
         </tr>
         <tr>
           {MONTHS.map(m => (
             <Fragment key={m.idx}>
-              <th className="px-1 py-1 text-[11px] font-normal border-l border-cg-green/40">Client</th>
-              <th className="px-1 py-1 text-[11px] font-normal">Ops</th>
-              <th className="px-1 py-1 text-[11px] font-normal">Total</th>
+              <th className="px-0.5 py-0.5 text-[10px] font-normal border-l-2 border-cg-dark">Client</th>
+              <th className="px-0.5 py-0.5 text-[10px] font-normal">Ops</th>
             </Fragment>
           ))}
+          <th className="px-0.5 py-0.5 text-[10px] font-normal border-l-2 border-cg-dark">Client</th>
+          <th className="px-0.5 py-0.5 text-[10px] font-normal">Ops</th>
+          <th className="px-0.5 py-0.5 text-[10px] font-normal">Total</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-200">
-        {users.map(u => {
+        {users.map((u, rowIdx) => {
           const userMatrix = matrix[u.id] || buildEmptyUserMatrix();
           return (
             <tr key={u.id} className="hover:bg-gray-50">
-              <td className="px-3 py-2 font-medium text-gray-900 whitespace-nowrap border-r border-gray-200">
+              <td className="px-2 py-0.5 font-medium text-gray-900 whitespace-nowrap border-r-2 border-cg-dark text-sm">
                 {u.name || u.id}
               </td>
               {MONTHS.map(m => {
                 const cell = userMatrix[m.idx] || { client: '', ops: '' };
-                const total = monthTotal(cell);
+                const clientCol = m.idx * 2;
+                const opsCol = m.idx * 2 + 1;
                 return (
                   <Fragment key={m.idx}>
-                    <td className="px-1 py-1 border-l border-gray-200">
+                    <td className="px-0.5 py-0.5 border-l-2 border-cg-dark">
                       <input
                         type="number"
                         value={cell.client ?? ''}
                         onChange={(e) => onChange(u.id, m.idx, 'client', e.target.value)}
-                        className="w-14 px-1 py-1 text-sm text-right border border-gray-200 rounded focus:ring-1 focus:ring-cg-green focus:border-cg-green"
+                        onKeyDown={(e) => handleKeyDown(e, rowIdx, clientCol)}
+                        onPaste={(e) => handlePaste(e, rowIdx, clientCol)}
+                        data-row={rowIdx}
+                        data-col={clientCol}
+                        className="no-spinner w-full px-1 py-0.5 text-xs text-right border border-gray-200 rounded focus:ring-1 focus:ring-cg-green focus:border-cg-green"
                         min="0"
                         step="1"
                       />
                     </td>
-                    <td className="px-1 py-1">
+                    <td className="px-0.5 py-0.5">
                       <input
                         type="number"
                         value={cell.ops ?? ''}
                         onChange={(e) => onChange(u.id, m.idx, 'ops', e.target.value)}
-                        className="w-14 px-1 py-1 text-sm text-right border border-gray-200 rounded focus:ring-1 focus:ring-cg-green focus:border-cg-green"
+                        onKeyDown={(e) => handleKeyDown(e, rowIdx, opsCol)}
+                        onPaste={(e) => handlePaste(e, rowIdx, opsCol)}
+                        data-row={rowIdx}
+                        data-col={opsCol}
+                        className="no-spinner w-full px-1 py-0.5 text-xs text-right border border-gray-200 rounded focus:ring-1 focus:ring-cg-green focus:border-cg-green"
                         min="0"
                         step="1"
                       />
                     </td>
-                    <td className="px-1 py-1 text-sm text-right text-gray-700 font-medium">
-                      {total || ''}
-                    </td>
                   </Fragment>
                 );
               })}
-              <td className="px-3 py-2 text-right font-semibold text-gray-900 border-l border-gray-200 whitespace-nowrap">
+              <td className="px-1 py-0.5 text-right text-xs text-gray-700 border-l-2 border-cg-dark whitespace-nowrap">
+                {annualBillable(userMatrix) || ''}
+              </td>
+              <td className="px-1 py-0.5 text-right text-xs text-gray-700 whitespace-nowrap">
+                {annualOps(userMatrix) || ''}
+              </td>
+              <td className="px-1 py-0.5 text-right font-semibold text-gray-900 text-xs whitespace-nowrap">
                 {annualTotal(userMatrix) || ''}
               </td>
             </tr>
@@ -113,7 +231,7 @@ const TargetTable = ({ title, users, matrix, onChange }) => (
         })}
         {users.length === 0 && (
           <tr>
-            <td colSpan={MONTHS.length * 3 + 2} className="px-3 py-4 text-center text-gray-500">
+            <td colSpan={MONTHS.length * 2 + 4} className="px-3 py-4 text-center text-gray-500">
               No members in this group.
             </td>
           </tr>
@@ -121,7 +239,8 @@ const TargetTable = ({ title, users, matrix, onChange }) => (
       </tbody>
     </table>
   </div>
-);
+  );
+};
 
 const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -316,8 +435,8 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
         </div>
       </div>
 
-      <TargetTable title="Attorneys Part-time" users={groups.pte} matrix={matrix} onChange={handleChange} />
       <TargetTable title="Attorneys Full-time" users={groups.fte} matrix={matrix} onChange={handleChange} />
+      <TargetTable title="Attorneys Part-time" users={groups.pte} matrix={matrix} onChange={handleChange} />
       <TargetTable title="Other" users={groups.other} matrix={matrix} onChange={handleChange} />
 
       <div className="flex justify-end">
