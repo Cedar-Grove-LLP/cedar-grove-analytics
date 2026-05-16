@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail } from 'lucide-react';
+import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { db, auth } from '@/firebase/config';
@@ -97,6 +97,8 @@ const AdminInvoices = () => {
   const [savingAlias, setSavingAlias] = useState(null);
   const [confirmedMatches, setConfirmedMatches] = useState({});
   const [markingPaid, setMarkingPaid] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
 
   // Gmail API integration
   const [gmailToken, setGmailToken] = useState(null);
@@ -338,6 +340,37 @@ const AdminInvoices = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const refetchTransactions = useCallback(async () => {
+    try {
+      const txnSnap = await getDocs(collection(db, 'transactions'));
+      const txnDocs = txnSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((t) => t.amount > 0);
+      setTransactions(txnDocs);
+    } catch (err) {
+      console.error('Error refetching transactions:', err);
+    }
+  }, []);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncStatus(null);
+    try {
+      const res = await fetch('/api/sync-transactions', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setSyncStatus({ type: 'success', message: `Synced ${data.synced} transactions` });
+        await refetchTransactions();
+      } else {
+        setSyncStatus({ type: 'error', message: data.error || 'Sync failed' });
+      }
+    } catch (err) {
+      setSyncStatus({ type: 'error', message: err.message });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Restore confirmed matches from persisted matchedTransactionId on invoice entries
   useEffect(() => {
@@ -760,6 +793,19 @@ const AdminInvoices = () => {
                   <p className="text-sm text-gray-600">Invoice payment status</p>
                 </div>
               </div>
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                <span>{syncing ? 'Syncing...' : 'Sync from Mercury'}</span>
+              </button>
+              {syncStatus && (
+                <span className={`text-sm ${syncStatus.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                  {syncStatus.message}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-4">
