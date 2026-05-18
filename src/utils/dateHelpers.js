@@ -12,23 +12,35 @@ export const getPSTDate = () => {
   return new Date(pstString);
 };
 
-// Helper function to get date from entry
-// New schema: all entries have a `date` field (Firestore Timestamp)
-// Fallback to year+month construction if date is missing
-export const getEntryDate = (entry) => {
-  let date;
+// Helper function to get date from entry.
+// Entries are day-granularity: returns local midnight of the PST calendar day
+// the entry belongs to, so .getMonth()/.getDate()/.getFullYear() yield the
+// same answer regardless of the browser's timezone.
+const PST_DATE_PARTS = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Los_Angeles',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+});
 
+export const getEntryDate = (entry) => {
+  let raw;
   if (entry.date?.toDate) {
-    date = entry.date.toDate();
+    raw = entry.date.toDate();
   } else if (entry.date && typeof entry.date === 'object' && entry.date.seconds) {
-    date = new Date(entry.date.seconds * 1000);
+    raw = new Date(entry.date.seconds * 1000);
   } else if (entry.date) {
-    date = new Date(entry.date);
+    raw = new Date(entry.date);
   } else {
-    date = new Date(entry.year, getMonthNumber(entry.month) - 1);
+    return new Date(entry.year, getMonthNumber(entry.month) - 1);
   }
 
-  return date;
+  if (!raw || isNaN(raw.getTime())) return raw;
+
+  const parts = Object.fromEntries(
+    PST_DATE_PARTS.formatToParts(raw)
+      .filter(p => p.type !== 'literal')
+      .map(p => [p.type, parseInt(p.value, 10)])
+  );
+  return new Date(parts.year, parts.month - 1, parts.day);
 };
 
 /**
