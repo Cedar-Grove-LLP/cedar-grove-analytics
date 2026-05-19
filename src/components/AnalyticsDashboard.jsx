@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Settings, LogIn, LogOut, Shield, User } from 'lucide-react';
+import { LogOut, Shield, User } from 'lucide-react';
 import { getDateRangeLabel } from '@/utils/dateHelpers';
 import { useAnalyticsData } from '@/hooks/useAnalyticsData';
 import { useAuth } from '@/context/AuthContext';
@@ -12,6 +12,64 @@ import { DateRangeDropdown, AttorneyFilterDropdown } from './shared';
 import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView, TargetsView } from './views';
 
 const TRANSACTIONS_OPS_TABS = ['transactions', 'ops'];
+const DEFAULT_DASHBOARD_DATE_RANGE = 'current-month';
+const VALID_DATE_RANGES = new Set([
+  'current-week',
+  'last-week',
+  'current-month',
+  'last-month',
+  'trailing-60',
+  'all-time',
+  'custom',
+]);
+
+const isValidDateInput = (value) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+};
+
+const getInitialDashboardDateRange = (searchParams) => {
+  const dateRange = searchParams.get('dateRange');
+  const customDateStart = searchParams.get('start') || '';
+  const customDateEnd = searchParams.get('end') || '';
+
+  if (!dateRange || !VALID_DATE_RANGES.has(dateRange)) {
+    return {
+      dateRange: DEFAULT_DASHBOARD_DATE_RANGE,
+      customDateStart: '',
+      customDateEnd: '',
+    };
+  }
+
+  if (dateRange === 'custom') {
+    const hasValidCustomRange =
+      isValidDateInput(customDateStart) &&
+      isValidDateInput(customDateEnd) &&
+      customDateStart <= customDateEnd;
+
+    return hasValidCustomRange
+      ? { dateRange, customDateStart, customDateEnd }
+      : {
+          dateRange: DEFAULT_DASHBOARD_DATE_RANGE,
+          customDateStart: '',
+          customDateEnd: '',
+        };
+  }
+
+  return {
+    dateRange,
+    customDateStart: '',
+    customDateEnd: '',
+  };
+};
 
 const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false }) => {
   const { user, isAdmin, signOut, userEmail } = useAuth();
@@ -20,6 +78,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   const searchParams = useSearchParams();
 
   const restrictedMode = downloadsOnly || transactionsOpsOnly;
+  const initialDateRangeState = getInitialDashboardDateRange(searchParams);
 
   // For restricted-access users, find their attorney page name for the "My Analytics" link
   const matchedUserName = useMemo(() => {
@@ -29,9 +88,9 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   }, [restrictedMode, userEmail, users]);
 
   // Date range state
-  const [dateRange, setDateRange] = useState('current-month');
-  const [customDateStart, setCustomDateStart] = useState('');
-  const [customDateEnd, setCustomDateEnd] = useState('');
+  const [dateRange, setDateRange] = useState(initialDateRangeState.dateRange);
+  const [customDateStart, setCustomDateStart] = useState(initialDateRangeState.customDateStart);
+  const [customDateEnd, setCustomDateEnd] = useState(initialDateRangeState.customDateEnd);
   const [showDateDropdown, setShowDateDropdown] = useState(false);
 
   // Attorney filter state - start with empty array, will default to all attorneys
@@ -48,11 +107,70 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   const initialTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : defaultTab;
   const [selectedView, setSelectedView] = useState(initialTab);
 
+  const updateDashboardUrl = useCallback((overrides = {}) => {
+    if (typeof window === 'undefined') return;
+
+    const nextTab = overrides.selectedView ?? selectedView;
+    const nextDateRange = overrides.dateRange ?? dateRange;
+    const nextCustomDateStart = overrides.customDateStart ?? customDateStart;
+    const nextCustomDateEnd = overrides.customDateEnd ?? customDateEnd;
+    const params = new URLSearchParams(window.location.search);
+
+    if (nextTab === defaultTab) {
+      params.delete('tab');
+    } else {
+      params.set('tab', nextTab);
+    }
+
+    if (nextDateRange === DEFAULT_DASHBOARD_DATE_RANGE) {
+      params.delete('dateRange');
+      params.delete('start');
+      params.delete('end');
+    } else {
+      params.set('dateRange', nextDateRange);
+
+      if (nextDateRange === 'custom') {
+        params.set('start', nextCustomDateStart);
+        params.set('end', nextCustomDateEnd);
+      } else {
+        params.delete('start');
+        params.delete('end');
+      }
+    }
+
+    const queryString = params.toString();
+    const nextUrl = queryString
+      ? `${window.location.pathname}?${queryString}`
+      : window.location.pathname;
+
+    window.history.replaceState(null, '', nextUrl);
+  }, [customDateEnd, customDateStart, dateRange, defaultTab, selectedView]);
+
+  const handleDateRangeChange = useCallback((nextDateRange) => {
+    setDateRange(nextDateRange);
+    updateDashboardUrl({ dateRange: nextDateRange });
+  }, [updateDashboardUrl]);
+
+  const handleCustomDateStartChange = useCallback((nextCustomDateStart) => {
+    setCustomDateStart(nextCustomDateStart);
+
+    if (dateRange === 'custom') {
+      updateDashboardUrl({ customDateStart: nextCustomDateStart });
+    }
+  }, [dateRange, updateDashboardUrl]);
+
+  const handleCustomDateEndChange = useCallback((nextCustomDateEnd) => {
+    setCustomDateEnd(nextCustomDateEnd);
+
+    if (dateRange === 'custom') {
+      updateDashboardUrl({ customDateEnd: nextCustomDateEnd });
+    }
+  }, [dateRange, updateDashboardUrl]);
+
   const switchTab = useCallback((tab) => {
     setSelectedView(tab);
-    const url = tab === defaultTab ? window.location.pathname : `${window.location.pathname}?tab=${tab}`;
-    window.history.replaceState(null, '', url);
-  }, [defaultTab]);
+    updateDashboardUrl({ selectedView: tab });
+  }, [updateDashboardUrl]);
 
   // Fetch and process data
   const {
@@ -133,11 +251,11 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             showDateDropdown={showDateDropdown}
             setShowDateDropdown={setShowDateDropdown}
             dateRange={dateRange}
-            setDateRange={setDateRange}
+            setDateRange={handleDateRangeChange}
             customDateStart={customDateStart}
-            setCustomDateStart={setCustomDateStart}
+            setCustomDateStart={handleCustomDateStartChange}
             customDateEnd={customDateEnd}
-            setCustomDateEnd={setCustomDateEnd}
+            setCustomDateEnd={handleCustomDateEndChange}
             showAttorneyDropdown={showAttorneyDropdown}
             setShowAttorneyDropdown={setShowAttorneyDropdown}
             allAttorneyNames={allAttorneyNames || []}
@@ -168,11 +286,11 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
           showDateDropdown={showDateDropdown}
           setShowDateDropdown={setShowDateDropdown}
           dateRange={dateRange}
-          setDateRange={setDateRange}
+          setDateRange={handleDateRangeChange}
           customDateStart={customDateStart}
-          setCustomDateStart={setCustomDateStart}
+          setCustomDateStart={handleCustomDateStartChange}
           customDateEnd={customDateEnd}
-          setCustomDateEnd={setCustomDateEnd}
+          setCustomDateEnd={handleCustomDateEndChange}
           showAttorneyDropdown={showAttorneyDropdown}
           setShowAttorneyDropdown={setShowAttorneyDropdown}
           allAttorneyNames={allAttorneyNames || []}
