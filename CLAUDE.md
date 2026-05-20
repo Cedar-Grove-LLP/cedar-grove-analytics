@@ -70,10 +70,23 @@ src/
 ## Firestore Data Model
 
 ```
-attorneys/{attorneyName}/
-  entries/{entryId}     — billableHours, opsHours, billableDate, opsDate, client, billingCategory, opsCategory, notes
-  rates/{monthKey}      — billableRate, month, year
-  targets/{monthKey}    — billableTarget, opsTarget, totalTarget
+users/{userId}/         — { name, role, email, employmentType,
+                              rates:   [{ rate, month, year }],
+                              targets: [{ month, year, billableHours, opsHours, totalHours, earnings }] }
+  billables/{monthDocId}  — { month, year, entries: [{ date, client, matter, hours,
+                                                       earnings, billingCategory,
+                                                       reimbursements, notes,
+                                                       sheetRowNumber }],
+                              sheetTotals }
+  ops/{monthDocId}        — { month, year, entries: [{ date, description, hours,
+                                                       category, sheetRowNumber }],
+                              sheetTotals }
+  eightThreeB/{monthDocId}— { month, year, entries: [{ ..., flatFee }] }
+
+  NOTE: legacy `attorneys/{name}/...` collection is deprecated. All
+        attorney profile data, rates, targets, and time entries live
+        under `users/{userId}` (subcollections for entries, arrays
+        for rates/targets).
 
 clients/all             — { clients: [array of client objects], lastSyncedAt, totalClients }
                            Each client: clientName, status, clientType, channel, contactEmail,
@@ -105,6 +118,17 @@ monthlyMetrics/all       — firm-wide per-month metrics. Single doc with entrie
                                 entryCount, lastSyncedAt }
                               Synced manually from monthly sheet tab cell B10
                               ("Revenue Accrued") via Apps Script.
+
+rateCard/all             — shared rate ladder used ONLY for predictive earnings
+                              modeling. Single doc:
+                              { levels: [{ rank, level, tier, clientRate,
+                                           attorneyRate, colinRate,
+                                           estAnnualSalary, cravathTotalComp }],
+                                notes, source, year, lastSyncedAt }
+                              20 entries, rank 0-19 (A1/A → P2/B). Seeded by
+                              scripts/seed-rate-card.js. Historical billing
+                              continues to use attorneys/{name}/rates — rate
+                              card is forward-looking only.
 ```
 
 Legacy field names (`hours`, `secondaryHours`) are normalized to `billableHours`/`opsHours` in hooks.
@@ -124,6 +148,7 @@ Legacy field names (`hours`, `secondaryHours`) are normalized to `billableHours`
 - **Target pro-rating:** Utilization targets are pro-rated by business days elapsed in the current period, accounting for US federal holidays.
 - **Hidden attorneys:** Configured in `hiddenAttorneys.js` with date thresholds. Hidden from UI but included in aggregate totals.
 - **Role overrides:** `roles.js` maps non-attorney staff to custom display roles.
+- **Earnings predictions:** Use `rateCard/all` only for forward projections. Derive an attorney's current rank by exact-matching their latest stored `billableRate` against `rateCard.levels[].clientRate`. For each projected month, bump rank by 1 at every Q2 (Apr 1) and Q4 (Oct 1) boundary, capped at rank 19. If the current rate has no exact match, warn and project a flat `currentRate` for the full horizon (no rank bumps).
 
 ## Environment Variables
 

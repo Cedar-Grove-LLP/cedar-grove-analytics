@@ -22,6 +22,7 @@ export const FirestoreDataProvider = ({ children }) => {
   const [allTargets, setAllTargets] = useState({});
   const [allDownloadEvents, setAllDownloadEvents] = useState([]);
   const [monthlyMetrics, setMonthlyMetrics] = useState([]);
+  const [rateCard, setRateCard] = useState(null);
   const [dataWarnings, setDataWarnings] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -42,12 +43,13 @@ export const FirestoreDataProvider = ({ children }) => {
     try {
       await waitForAuth();
 
-      // Fetch users, clients, downloads, and monthly metrics in parallel
-      const [usersSnap, clientsDoc, downloadsSnap, monthlyMetricsDoc] = await Promise.all([
+      // Fetch users, clients, downloads, monthly metrics, and rate card in parallel
+      const [usersSnap, clientsDoc, downloadsSnap, monthlyMetricsDoc, rateCardDoc] = await Promise.all([
         getDocs(collection(db, 'users')),
         getDoc(doc(db, 'clients', 'all')),
         getDocs(collection(db, 'driveDownloads')),
         getDoc(doc(db, 'monthlyMetrics', 'all')),
+        getDoc(doc(db, 'rateCard', 'all')),
       ]);
 
       // Process users and build rates/targets maps from profile arrays
@@ -364,12 +366,15 @@ export const FirestoreDataProvider = ({ children }) => {
 
       const monthlyMetricsList = monthlyMetricsDoc.exists() ? (monthlyMetricsDoc.data().entries || []) : [];
 
+      const rateCardData = rateCardDoc.exists() ? rateCardDoc.data() : null;
+
       setAllBillableEntries(billableEntries);
       setAllOpsEntries(opsEntries);
       setUsers(userList);
       setClients(clientList);
       setAllDownloadEvents(downloadEvents);
       setMonthlyMetrics(monthlyMetricsList);
+      setRateCard(rateCardData);
       setAllRates(ratesMap);
       setAllTargets(targetsMap);
       setDataWarnings(warnings);
@@ -416,6 +421,7 @@ export const FirestoreDataProvider = ({ children }) => {
     allOpsEntries,
     allDownloadEvents,
     monthlyMetrics,
+    rateCard,
     users,
     clients,
     allRates,
