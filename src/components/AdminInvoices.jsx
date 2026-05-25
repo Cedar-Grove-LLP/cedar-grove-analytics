@@ -185,7 +185,6 @@ const AdminInvoices = () => {
         const monthName = MONTH_NAMES[priorMonth.getMonth()];
         const year = priorMonth.getFullYear();
         const subjectQuery = `Cedar Grove LLP - Invoice (${monthName} ${year}) (${inv.client})`;
-        console.log('Gmail search query:', `in:sent subject:"${subjectQuery}"`);
         found = await searchAndExtract(`in:sent subject:"${subjectQuery}"`);
       }
 

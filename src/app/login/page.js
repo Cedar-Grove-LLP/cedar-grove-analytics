@@ -1,7 +1,6 @@
 "use client";
 
-import { Suspense } from 'react';
-import { useState, useEffect } from 'react';
+import { Suspense, useMemo, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
@@ -10,7 +9,38 @@ function LoginContent() {
   const { user, isAdmin, isAuthorized, loading, signInWithGoogle, signOut } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnUrl = searchParams.get('returnUrl') || '/';
+  const rawReturnUrl = searchParams.get('returnUrl') || '/';
+  // SEC-009: validate returnUrl as same-origin before passing to router.push.
+  // Cross-origin, protocol-relative (//evil), backslash-trick (/\evil), and
+  // non-http(s) schemes (javascript:) all collapse to '/'. `new URL(...,
+  // window.location.origin)` is the canonicalization; the post-parse origin
+  // compare is the authoritative gate, with the prefix re-check as
+  // defense-in-depth against edge cases that survive URL parsing.
+  const returnUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '/';
+
+    const candidate = rawReturnUrl.trim() || '/';
+
+    try {
+      const url = new URL(candidate, window.location.origin);
+
+      if (url.origin !== window.location.origin) return '/';
+
+      const safe = url.pathname + url.search + url.hash;
+
+      if (
+        !safe.startsWith('/') ||
+        safe.startsWith('//') ||
+        safe.includes('\\')
+      ) {
+        return '/';
+      }
+
+      return safe || '/';
+    } catch {
+      return '/';
+    }
+  }, [rawReturnUrl]);
   const errorParam = searchParams.get('error');
 
   // Initialize error from URL params

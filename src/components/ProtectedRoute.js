@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
@@ -15,8 +15,12 @@ export default function ProtectedRoute({
   const { users } = useFirestoreCache();
   const router = useRouter();
 
-  // Check if the logged-in user's email matches the email on this attorney's user doc
-  const canAccessAttorneyPage = () => {
+  // Check if the logged-in user's email matches the email on this attorney's
+  // user doc. Memoized so the useEffect dep array has a stable reference —
+  // react-hooks/exhaustive-deps. Behavior unchanged: identity changes only
+  // when [isAdmin, allowedAttorneyName, userEmail, users] change, which were
+  // already direct deps of the effect.
+  const canAccessAttorneyPage = useCallback(() => {
     if (isAdmin) return true;
     if (!allowedAttorneyName) return true;
     if (!userEmail) return false;
@@ -26,7 +30,7 @@ export default function ProtectedRoute({
     if (!attorneyUser || !attorneyUser.email) return false;
 
     return attorneyUser.email.toLowerCase() === userEmail;
-  };
+  }, [isAdmin, allowedAttorneyName, userEmail, users]);
 
   useEffect(() => {
     if (!loading) {
@@ -53,7 +57,7 @@ export default function ProtectedRoute({
         router.push('/login?error=access_denied');
       }
     }
-  }, [user, isAdmin, isPartialAdmin, isAuthorized, loading, router, requireAdmin, denyPartialAdmin, allowedAttorneyName, userEmail, users]);
+  }, [user, isAdmin, isPartialAdmin, isAuthorized, loading, router, requireAdmin, denyPartialAdmin, allowedAttorneyName, canAccessAttorneyPage]);
 
   if (loading) {
     return (

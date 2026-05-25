@@ -27,7 +27,6 @@ if (typeof window !== 'undefined') {
 
   onAuthStateChanged(auth, (user) => {
     if (user) {
-      console.log("User authenticated:", user.uid, user.isAnonymous ? "(anonymous)" : "(signed in)");
       authReadyResolve(user);
     } else {
       // No anonymous sign-in - site requires proper authentication

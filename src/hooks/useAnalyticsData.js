@@ -469,7 +469,12 @@ export const useAnalyticsData = ({
     });
 
     return Object.values(userStats);
-  }, [filteredBillableEntries, filteredOpsEntries, userMap, userTargets, getDefaultTarget]);
+    // userTargets is intentionally NOT in this dep array: this memo body
+    // does not read userTargets directly; it only calls getDefaultTarget
+    // (a useCallback with [dateRangeInfo, userTargets] deps). When
+    // userTargets changes, getDefaultTarget's identity changes and triggers
+    // re-computation transitively.
+  }, [filteredBillableEntries, filteredOpsEntries, userMap, getDefaultTarget]);
 
   // Process transaction data (from billable entries only)
   const transactionData = useMemo(() => {

@@ -73,14 +73,16 @@ const AdminMatterManagement = () => {
     return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
-  // Parse dates from Firestore Timestamps or strings
-  const parseDate = (val) => {
+  // Parse dates from Firestore Timestamps or strings.
+  // Stable identity (no closure deps) so the line-129 useMemo dep array
+  // doesn't change every render — react-hooks/exhaustive-deps.
+  const parseDate = useCallback((val) => {
     if (!val) return null;
     if (val.seconds) return new Date(val.seconds * 1000);
     if (val.toDate) return val.toDate();
     const d = new Date(val);
     return isNaN(d.getTime()) ? null : d;
-  };
+  }, []);
 
   const formatDate = (val) => {
     const d = parseDate(val);

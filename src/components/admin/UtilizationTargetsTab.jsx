@@ -307,8 +307,8 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
                 };
               });
             }
-          } catch (err) {
-            console.log(`No targets for ${u.id}:`, err.message);
+          } catch {
+            // Missing stored targets are a valid state for a user.
           }
           next[u.id] = userMatrix;
         }

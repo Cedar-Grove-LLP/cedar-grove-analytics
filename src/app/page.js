@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
@@ -11,41 +11,60 @@ function DashboardContent() {
   const { isAdmin, loading, userEmail, isAuthorized, hasDownloadsAccess, hasTransactionsOpsAccess, signOut } = useAuth();
   const { users, loading: usersLoading } = useFirestoreCache();
   const router = useRouter();
-  const [matchedAttorneyName, setMatchedAttorneyName] = useState(null);
-  const [checked, setChecked] = useState(false);
 
-  useEffect(() => {
-    if (loading || usersLoading || !isAuthorized || isAdmin || hasDownloadsAccess || hasTransactionsOpsAccess) {
-      setChecked(true);
-      return;
-    }
+  // matchedAttorneyName is purely derived state — find the user doc whose
+  // email matches the logged-in user's email. useMemo (rather than
+  // useEffect + useState) avoids the cascading-renders pattern flagged by
+  // react-hooks/set-state-in-effect.
+  const matchedAttorneyName = useMemo(() => {
+    if (loading || usersLoading) return null;
+    if (!isAuthorized || isAdmin || hasDownloadsAccess || hasTransactionsOpsAccess) return null;
+    if (!userEmail || !users || users.length === 0) return null;
 
-    if (!userEmail || !users || users.length === 0) {
-      setChecked(true);
-      return;
-    }
-
-    // Find user doc whose email matches the logged-in user's email
     const matchedUser = users.find(
       u => u.email && u.email.toLowerCase() === userEmail
     );
 
-    if (matchedUser) {
-      setMatchedAttorneyName(matchedUser.name || matchedUser.id);
-    }
-
-    setChecked(true);
-  }, [loading, usersLoading, isAdmin, hasDownloadsAccess, hasTransactionsOpsAccess, userEmail, isAuthorized, users]);
+    return matchedUser ? (matchedUser.name || matchedUser.id) : null;
+  }, [
+    loading,
+    usersLoading,
+    isAuthorized,
+    isAdmin,
+    hasDownloadsAccess,
+    hasTransactionsOpsAccess,
+    userEmail,
+    users,
+  ]);
 
   useEffect(() => {
-    // Redirect non-admins to their attorney page once we've found a match
-    if (checked && isAuthorized && !isAdmin && !hasDownloadsAccess && !hasTransactionsOpsAccess && matchedAttorneyName) {
+    // Redirect non-admins to their attorney page once we've found a match.
+    // router.push is a genuine side effect (browser history mutation), so it
+    // belongs in useEffect, not in derivation.
+    if (
+      !loading &&
+      !usersLoading &&
+      isAuthorized &&
+      !isAdmin &&
+      !hasDownloadsAccess &&
+      !hasTransactionsOpsAccess &&
+      matchedAttorneyName
+    ) {
       router.push(`/users/${encodeURIComponent(matchedAttorneyName)}`);
     }
-  }, [checked, isAdmin, hasDownloadsAccess, hasTransactionsOpsAccess, matchedAttorneyName, isAuthorized, router]);
+  }, [
+    loading,
+    usersLoading,
+    isAuthorized,
+    isAdmin,
+    hasDownloadsAccess,
+    hasTransactionsOpsAccess,
+    matchedAttorneyName,
+    router,
+  ]);
 
   // Show loading while checking or redirecting
-  if (loading || usersLoading || !checked || (!isAdmin && !hasDownloadsAccess && !hasTransactionsOpsAccess && matchedAttorneyName)) {
+  if (loading || usersLoading || (!isAdmin && !hasDownloadsAccess && !hasTransactionsOpsAccess && matchedAttorneyName)) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center">

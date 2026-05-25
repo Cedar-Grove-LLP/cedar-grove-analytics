@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Seed rateCard/all in Firestore from the 2026 rate sheet.
  *
