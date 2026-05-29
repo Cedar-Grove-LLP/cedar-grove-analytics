@@ -38,6 +38,7 @@ import { formatCurrency, formatHours, formatDate } from '@/utils/formatters';
 import { DATE_RANGE_OPTIONS } from '@/utils/constants';
 import { CHART_COLORS, CHART, GRAY, LABEL_LINE_COLOR, TOOLTIP_BORDER } from '@/utils/colors';
 import { getStatusBadge } from '@/utils/statusStyles';
+import { getClientRating, getClientRatingBadge, RATING_LABEL } from '@/utils/clientRating';
 import { DateRangeDropdown } from '@/components/shared';
 
 // Custom tooltip for charts - defined outside component to prevent re-creation on render
@@ -113,6 +114,9 @@ const ClientDetailView = ({ clientName }) => {
       c.clientName === clientName
     );
   }, [firebaseClients, clientName]);
+
+  // Ideal-fit rating (Ideal / Non-Ideal / TBD) from the synced client record
+  const idealRating = useMemo(() => getClientRating(clientMetadata), [clientMetadata]);
 
   // Calculate date range boundaries
   const dateRangeInfo = useMemo(() => {
@@ -486,6 +490,13 @@ const ClientDetailView = ({ clientName }) => {
                         getStatusBadge(clientMetadata.status)
                       }`}>
                         {clientMetadata.status}
+                      </span>
+                    )}
+                    {idealRating && (
+                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                        getClientRatingBadge(idealRating)
+                      }`}>
+                        {RATING_LABEL[idealRating]}
                       </span>
                     )}
                     {clientMetadata?.clientType && (

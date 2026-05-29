@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatCurrency, formatHours } from '../../utils/formatters';
 import { getStatusBadge } from '@/utils/statusStyles';
+import { getClientRatingBadge, RATING_LABEL } from '@/utils/clientRating';
 import { ClientRowTooltip } from '../tooltips';
 
 const ClientsTable = ({
@@ -30,33 +31,39 @@ const ClientsTable = ({
       <table className="min-w-full divide-y divide-gray-200 table-fixed">
         <thead className="bg-gray-50">
           <tr>
-            <th 
+            <th
               onClick={() => onSort('name')}
-              className="w-[32%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[28%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               Client Name {getSortIndicator('name')}
             </th>
-            <th 
+            <th
               onClick={() => onSort('status')}
               className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               Status {getSortIndicator('status')}
             </th>
-            <th 
+            <th
+              onClick={() => onSort('idealRating')}
+              className="w-[13%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+            >
+              Ideal {getSortIndicator('idealRating')}
+            </th>
+            <th
               onClick={() => onSort('billableHours')}
-              className="w-[18%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[16%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               Billable Hours {getSortIndicator('billableHours')}
             </th>
-            <th 
+            <th
               onClick={() => onSort('grossBillables')}
-              className="w-[18%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               Billables {getSortIndicator('grossBillables')}
             </th>
-            <th 
+            <th
               onClick={() => onSort('lastActivity')}
-              className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[16%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               Last Activity {getSortIndicator('lastActivity')}
             </th>
@@ -92,6 +99,17 @@ const ClientsTable = ({
                 >
                   {invoicedClients.has((client.name || '').toLowerCase()) ? 'Active' : 'Quiet'}
                 </span>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm">
+                {client.idealRating ? (
+                  <span
+                    className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getClientRatingBadge(client.idealRating)}`}
+                  >
+                    {RATING_LABEL[client.idealRating]}
+                  </span>
+                ) : (
+                  <span className="text-gray-300">—</span>
+                )}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {formatHours(client.billableHours || client.totalHours || 0)}h

@@ -10,6 +10,7 @@ import { ClientHoursChart, ServiceBreadthChart } from '../charts';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { useUsers } from '@/hooks/useFirestoreData';
 import { getEntryDate } from '@/utils/dateHelpers';
+import { RATING_RANK } from '@/utils/clientRating';
 
 function parseDateSent(dateSent, year) {
   if (!dateSent) return null;
@@ -176,7 +177,7 @@ const ClientsView = ({
 
   const handleSort = (key) => {
     let direction = 'desc';
-    if (key === 'name' || key === 'status') direction = 'asc';
+    if (key === 'name' || key === 'status' || key === 'idealRating') direction = 'asc';
     if (sortConfig.key === key) {
       direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
     }
@@ -206,6 +207,11 @@ const ClientsView = ({
         case 'status':
           aVal = (a.billableHours || a.totalHours) > 0 ? 'active' : 'inactive';
           bVal = (b.billableHours || b.totalHours) > 0 ? 'active' : 'inactive';
+          break;
+        case 'idealRating':
+          // Rank ideal first, untagged last; ties fall back to billable hours.
+          aVal = RATING_RANK[a.idealRating] ?? 99;
+          bVal = RATING_RANK[b.idealRating] ?? 99;
           break;
         case 'billableHours':
           aVal = a.billableHours || a.totalHours || 0;
