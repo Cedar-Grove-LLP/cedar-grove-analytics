@@ -437,6 +437,15 @@ const ClientDetailView = ({ clientName }) => {
 
   const dateRangeLabel = getDateRangeLabel(dateRange, customDateStart, customDateEnd);
 
+  // Status badge: Active/Quiet driven by billable hours in the selected range,
+  // matching the Clients list view. A Terminated/Dissolved CRM status is kept
+  // as-is since those clients are excluded from the list entirely (so we don't
+  // want a terminated client with historical hours to read as "Active").
+  const INACTIVE_CLIENT_STATUSES = ['Terminated', 'Dissolved'];
+  const displayStatus = INACTIVE_CLIENT_STATUSES.includes(clientMetadata?.status)
+    ? clientMetadata.status
+    : (clientStats.billableHours > 0 ? 'Active' : 'Quiet');
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
@@ -481,11 +490,11 @@ const ClientDetailView = ({ clientName }) => {
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">{clientName}</h1>
                   <div className="flex items-center gap-3 mt-1">
-                    {clientMetadata?.status && (
+                    {clientMetadata && (
                       <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
-                        getStatusBadge(clientMetadata.status)
+                        getStatusBadge(displayStatus)
                       }`}>
-                        {clientMetadata.status}
+                        {displayStatus}
                       </span>
                     )}
                     {clientMetadata?.clientType && (
