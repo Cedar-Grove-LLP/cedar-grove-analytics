@@ -1,33 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/firebase/config';
 import { DateRangeIndicator } from '../shared';
 import { ClientsTable } from '../tables';
 import { ClientHoursChart, ServiceBreadthChart } from '../charts';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { useUsers } from '@/hooks/useFirestoreData';
 import { getEntryDate } from '@/utils/dateHelpers';
-
-function parseDateSent(dateSent, year) {
-  if (!dateSent) return null;
-  if (typeof dateSent === 'object' && dateSent.seconds) {
-    return new Date(dateSent.seconds * 1000);
-  }
-  const str = String(dateSent).trim();
-  const parts = str.split('/');
-  if (parts.length === 3) {
-    return new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
-  }
-  if (parts.length === 2 && year) {
-    return new Date(year, parseInt(parts[0]) - 1, parseInt(parts[1]));
-  }
-  const d = new Date(str);
-  if (!isNaN(d.getTime())) return d;
-  return null;
-}
 
 const ClientsView = ({
   dateRangeLabel,
@@ -42,37 +22,6 @@ const ClientsView = ({
   const [clientFilter, setClientFilter] = useState('billable'); // 'all' | 'billable' | 'non-billable'
   const { getRate, loading: ratesLoading } = useAttorneyRates();
   const { users: firebaseUsers } = useUsers();
-
-  // Fetch invoices to determine billable/non-billable status
-  const [invoicedClients, setInvoicedClients] = useState(new Set());
-  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
-
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      try {
-        const snap = await getDoc(doc(db, 'invoices', 'all'));
-        if (snap.exists()) {
-          const entries = snap.data().entries || [];
-          const threeMonthsAgo = new Date();
-          threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-
-          const recentlyInvoiced = new Set();
-          entries.forEach(inv => {
-            const d = parseDateSent(inv.dateSent, inv.year);
-            if (d && d >= threeMonthsAgo && inv.client) {
-              recentlyInvoiced.add(inv.client.toLowerCase());
-            }
-          });
-          setInvoicedClients(recentlyInvoiced);
-        }
-      } catch (err) {
-        console.error('Error fetching invoices for billable status:', err);
-      } finally {
-        setInvoicesLoaded(true);
-      }
-    };
-    fetchInvoices();
-  }, []);
 
   // Build userId -> display name map
   const userMap = useMemo(() => {
@@ -232,7 +181,10 @@ const ClientsView = ({
     return filtered;
   };
 
-  const isBillableClient = (client) => invoicedClients.has((client.name || '').toLowerCase());
+  // A client is "Active" when they have billable hours in the selected date
+  // range, otherwise "Quiet". (Previously keyed off recent invoicing, which
+  // mislabeled clients with billable hours but no invoice in the last 3 months.)
+  const isBillableClient = (client) => (client.billableHours || client.totalHours || 0) > 0;
   const activeCount = clientsWithBillables.filter(isBillableClient).length;
   const inactiveCount = clientsWithBillables.filter(c => !isBillableClient(c)).length;
 
@@ -323,7 +275,6 @@ const ClientsView = ({
         clients={getSortedClients()}
         sortConfig={sortConfig}
         onSort={handleSort}
-        invoicedClients={invoicedClients}
       />
 
       {/* Client Charts */}
