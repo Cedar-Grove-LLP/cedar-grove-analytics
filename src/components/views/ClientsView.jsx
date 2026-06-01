@@ -8,6 +8,7 @@ import { ClientHoursChart, ServiceBreadthChart } from '../charts';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { useUsers } from '@/hooks/useFirestoreData';
 import { getEntryDate } from '@/utils/dateHelpers';
+import { RATING_RANK } from '@/utils/clientRating';
 
 const ClientsView = ({
   dateRangeLabel,
@@ -20,6 +21,7 @@ const ClientsView = ({
   const [clientSearch, setClientSearch] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'totalHours', direction: 'desc' });
   const [clientFilter, setClientFilter] = useState('billable'); // 'all' | 'billable' | 'non-billable'
+  const [ratingFilter, setRatingFilter] = useState('all'); // 'all' | 'ideal' | 'non-ideal' | 'tbd'
   const { getRate, loading: ratesLoading } = useAttorneyRates();
   const { users: firebaseUsers } = useUsers();
 
@@ -125,7 +127,7 @@ const ClientsView = ({
 
   const handleSort = (key) => {
     let direction = 'desc';
-    if (key === 'name' || key === 'status') direction = 'asc';
+    if (key === 'name' || key === 'status' || key === 'idealRating') direction = 'asc';
     if (sortConfig.key === key) {
       direction = sortConfig.direction === 'asc' ? 'desc' : 'asc';
     }
@@ -144,6 +146,12 @@ const ClientsView = ({
       filtered = filtered.filter(client => !isBillableClient(client));
     }
 
+    // Filter by ideal-client fit rating (untagged clients are excluded when a
+    // specific rating is selected)
+    if (ratingFilter !== 'all') {
+      filtered = filtered.filter(client => client.idealRating === ratingFilter);
+    }
+
     filtered.sort((a, b) => {
       let aVal, bVal;
       
@@ -155,6 +163,11 @@ const ClientsView = ({
         case 'status':
           aVal = (a.billableHours || a.totalHours) > 0 ? 'active' : 'inactive';
           bVal = (b.billableHours || b.totalHours) > 0 ? 'active' : 'inactive';
+          break;
+        case 'idealRating':
+          // Rank ideal first, untagged last; ties fall back to billable hours.
+          aVal = RATING_RANK[a.idealRating] ?? 99;
+          bVal = RATING_RANK[b.idealRating] ?? 99;
           break;
         case 'billableHours':
           aVal = a.billableHours || a.totalHours || 0;
@@ -228,7 +241,7 @@ const ClientsView = ({
               <div className="text-3xl font-bold text-amber-600 mt-2">{inactiveCount}</div>
             </div>
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
             <div className="flex items-center justify-between">
               <div className="text-gray-400 text-xs">
                 Total: {clientCounts.total} clients (Active + Quiet status)
@@ -244,6 +257,31 @@ const ClientsView = ({
                     onClick={() => setClientFilter(opt.key)}
                     className={`px-3 py-1 text-xs font-medium transition-colors ${
                       clientFilter === opt.key
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="text-gray-400 text-xs">
+                Ideal-client fit
+              </div>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {[
+                  { key: 'all', label: 'All' },
+                  { key: 'ideal', label: 'Ideal' },
+                  { key: 'non-ideal', label: 'Non-Ideal' },
+                  { key: 'tbd', label: 'TBD' },
+                ].map(opt => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setRatingFilter(opt.key)}
+                    className={`px-3 py-1 text-xs font-medium transition-colors ${
+                      ratingFilter === opt.key
                         ? 'bg-gray-900 text-white'
                         : 'bg-white text-gray-600 hover:bg-gray-50'
                     }`}

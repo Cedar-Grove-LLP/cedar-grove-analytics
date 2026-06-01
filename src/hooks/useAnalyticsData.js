@@ -13,6 +13,7 @@ import {
   shouldIncludeAttorneyData,
   filterHiddenAttorneys,
 } from '../utils/hiddenAttorneys';
+import { getClientRating } from '../utils/clientRating';
 
 export const useAnalyticsData = ({
   dateRange,
@@ -950,6 +951,7 @@ export const useAnalyticsData = ({
             : 'No activity',
           status: displayStatus,
           fbStatus: fbStatus,
+          idealRating: getClientRating(client),
           clientType: client.clientType || '',
           channel: client.channel || '',
           contactEmail: client.contactEmail || '',
