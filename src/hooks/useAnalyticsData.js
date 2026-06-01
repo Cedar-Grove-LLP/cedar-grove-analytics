@@ -286,6 +286,11 @@ export const useAnalyticsData = ({
 
       userMonthlyActivity[userName].billable += billableHours;
       userMonthlyActivity[userName].earnings += earnings;
+      // Gross billables = rate × hours (distinct from take-home `earnings`)
+      if (billableHours > 0) {
+        userMonthlyActivity[userName].grossBillables =
+          (userMonthlyActivity[userName].grossBillables || 0) + getRate(userName, entryDate) * billableHours;
+      }
 
       const category = entry.billingCategory || 'Other';
       const client = entry.client || 'Unknown';
@@ -402,6 +407,7 @@ export const useAnalyticsData = ({
         billable: data.billable,
         ops: data.ops,
         earnings: data.earnings,
+        grossBillables: data.grossBillables || 0,
         target: Math.round(totalTarget * 10) / 10,
         billableTarget: Math.round(totalBillableTarget * 10) / 10,
         opsTarget: Math.round(totalOpsTarget * 10) / 10,
@@ -425,7 +431,7 @@ export const useAnalyticsData = ({
     });
 
     return visibleUserData;
-  }, [filteredBillableEntries, filteredOpsEntries, userMap, dateRangeInfo, userTargets, getUserRole, userEmploymentTypeMap, getDefaultTarget, firebaseUsers, globalAttorneyFilter, dateRangeMonths]);
+  }, [filteredBillableEntries, filteredOpsEntries, userMap, getRate, dateRangeInfo, userTargets, getUserRole, userEmploymentTypeMap, getDefaultTarget, firebaseUsers, globalAttorneyFilter, dateRangeMonths]);
 
   // Create a separate dataset that includes hidden users for totals calculation
   const allAttorneyDataIncludingHidden = useMemo(() => {

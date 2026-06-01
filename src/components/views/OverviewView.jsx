@@ -55,10 +55,10 @@ const OverviewView = ({
     const ops = subset.reduce((acc, a) => acc + (a.ops || 0), 0);
     const billableTarget = subset.reduce((acc, a) => acc + (a.billableTarget || 0), 0);
     const opsTarget = subset.reduce((acc, a) => acc + (a.opsTarget || 0), 0);
-    const earnings = subset.reduce((acc, a) => acc + (a.earnings || 0), 0);
+    const grossBillablesSum = subset.reduce((acc, a) => acc + (a.grossBillables || 0), 0);
     const grossBillables = cohort === 'full-team' && periodRevenueAccrued != null
       ? periodRevenueAccrued
-      : earnings;
+      : grossBillablesSum;
 
     const utilizationValues = subset.map((a) => {
       const total = (a.billable || 0) + (a.ops || 0);
