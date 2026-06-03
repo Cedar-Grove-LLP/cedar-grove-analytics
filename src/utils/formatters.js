@@ -26,6 +26,17 @@ export const formatHours = (hours) => {
   return rounded.toFixed(1);
 };
 
+// Build a human phrase for the OOO/holiday context behind a pro-rated target,
+// e.g. "3 days out of office and 1 firm holiday". Returns '' when both are 0, so
+// callers can gate the whole sentence on a truthy result. Used by the attorney
+// detail OOO note and the Overview pace-card tooltip.
+export const formatTimeOffContext = (oooDays = 0, holidayDays = 0) => {
+  const parts = [];
+  if (oooDays > 0) parts.push(`${oooDays} day${oooDays === 1 ? '' : 's'} out of office`);
+  if (holidayDays > 0) parts.push(`${holidayDays} firm holiday${holidayDays === 1 ? '' : 's'}`);
+  return parts.join(' and ');
+};
+
 // Format date from various formats (Firestore Timestamp, string, Date)
 export const formatDate = (date) => {
   if (!date) return 'No date';

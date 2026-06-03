@@ -39,15 +39,14 @@ import {
   getEntryDate,
   getPSTDate,
   getDateRangeLabel,
-  getMonthProRateFraction,
 } from '@/utils/dateHelpers';
 import {
   parseTimeOff,
   getHolidaySet,
   getOooSetFor,
-  countTimeOffInRange,
+  proRateMonth,
 } from '@/utils/timeOff';
-import { formatCurrency, formatHours, formatDate } from '@/utils/formatters';
+import { formatCurrency, formatHours, formatDate, formatTimeOffContext } from '@/utils/formatters';
 import { CHART_COLORS, CHART, GRAY, LABEL_LINE_COLOR } from '@/utils/colors';
 import { getUtilizationColor, getUtilizationBgColor, getProgressBarColor } from '@/utils/statusStyles';
 import { DateRangeDropdown } from '@/components/shared';
@@ -212,7 +211,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
 
   // Calculate targets based on active months
   const calculatedTargets = useMemo(() => {
-    const { startDate, endDate, currentMonthKey, now } = dateRangeInfo;
+    const { startDate, endDate, currentMonthKey } = dateRangeInfo;
     
     // Get unique months from entries
     const activeMonths = new Set();
@@ -246,42 +245,22 @@ const AttorneyDetailView = ({ attorneyName }) => {
 
     Array.from(activeMonths).forEach(monthKey => {
       const [year, month] = monthKey.split('-').map(Number);
-      const monthStart = new Date(year, month - 1, 1);
-      const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
 
       const monthTarget = attorneyTargets[monthKey];
       const billableTarget = monthTarget?.billableHours ?? defaultTarget.billableTarget;
       const opsTarget = monthTarget?.opsHours ?? defaultTarget.opsTarget;
       const monthTotalTarget = monthTarget?.totalHours ?? defaultTarget.totalTarget;
 
-      // Effective window = month ∩ range, with the current month pro-rated to today.
-      const effectiveStart = (startDate && startDate > monthStart) ? startDate : monthStart;
-      let effectiveEnd;
-      if (endDate && endDate < monthEnd) {
-        // Explicit end date before month end (e.g., last-week, custom range)
-        effectiveEnd = endDate;
-      } else if (monthKey === currentMonthKey) {
-        // Current month with no explicit early end — pro-rate to today
-        effectiveEnd = now;
-      } else {
-        effectiveEnd = monthEnd;
-      }
-
       // Capacity-model fraction — the attorney's OOO reduces the target for any
       // period (in-progress or completed); firm holidays only affect intra-month
       // pace (they cancel for a full month, leaving a full clean month at 1).
-      const { fraction } = getMonthProRateFraction(
-        year, month, effectiveStart, effectiveEnd, rangeHolidaySet, oooSet
-      );
+      const pm = proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooSet);
 
-      totalBillableTarget += billableTarget * fraction;
-      totalOpsTarget += opsTarget * fraction;
-      totalTarget += monthTotalTarget * fraction;
-
-      // OOO / holiday context for the period (UI messaging only).
-      const tc = countTimeOffInRange(parsedTimeOff, null, effectiveStart, effectiveEnd, rangeHolidaySet, oooSet);
-      oooDays += tc.oooBusinessDays;
-      holidayDays += tc.holidayBusinessDays;
+      totalBillableTarget += billableTarget * pm.fraction;
+      totalOpsTarget += opsTarget * pm.fraction;
+      totalTarget += monthTotalTarget * pm.fraction;
+      oooDays += pm.oooDays;        // OOO / holiday context (UI messaging only)
+      holidayDays += pm.holidayDays;
     });
 
     return {
@@ -663,16 +642,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
           </h3>
           {(calculatedTargets.oooDays > 0 || calculatedTargets.holidayDays > 0) && (
             <p className="text-xs text-gray-500 -mt-2 mb-4">
-              Targets reflect{' '}
-              {[
-                calculatedTargets.oooDays > 0
-                  ? `${calculatedTargets.oooDays} day${calculatedTargets.oooDays === 1 ? '' : 's'} out of office`
-                  : null,
-                calculatedTargets.holidayDays > 0
-                  ? `${calculatedTargets.holidayDays} firm holiday${calculatedTargets.holidayDays === 1 ? '' : 's'}`
-                  : null,
-              ].filter(Boolean).join(' and ')}{' '}
-              this period.
+              Targets reflect {formatTimeOffContext(calculatedTargets.oooDays, calculatedTargets.holidayDays)} this period.
             </p>
           )}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

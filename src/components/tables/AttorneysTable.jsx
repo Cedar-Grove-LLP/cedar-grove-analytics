@@ -119,7 +119,7 @@ const AttorneysTable = ({
                   {utilization === null ? (
                     <span
                       className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-500"
-                      title="No target this period (out of office)"
+                      title={attorney.oooDays > 0 ? 'Out of office this period — no billable target' : 'No target for this period'}
                     >
                       N/A
                     </span>

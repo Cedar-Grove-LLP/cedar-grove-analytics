@@ -5,13 +5,12 @@ import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import {
   getEntryDate,
   getPSTDate,
-  getMonthProRateFraction,
 } from '../utils/dateHelpers';
 import {
   parseTimeOff,
   getHolidaySet,
   getOooSetFor,
-  countTimeOffInRange,
+  proRateMonth,
 } from '../utils/timeOff';
 import {
   isAttorneyHidden,
@@ -258,7 +257,7 @@ export const useAnalyticsData = ({
     const userStats = {};
     const userMonthlyActivity = {};
 
-    const { startDate, endDate, currentMonthKey, now } = dateRangeInfo;
+    const { startDate, endDate } = dateRangeInfo;
 
     // Seed all users from the database so they appear even with zero hours
     firebaseUsers.forEach(user => {
@@ -384,8 +383,6 @@ export const useAnalyticsData = ({
       } else {
         monthsForTargets.forEach(monthKey => {
           const [year, month] = monthKey.split('-').map(Number);
-          const monthStart = new Date(year, month - 1, 1);
-          const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
 
           // Get the target for this month
           const monthTarget = userTargetData[monthKey];
@@ -393,35 +390,17 @@ export const useAnalyticsData = ({
           const opsTarget = monthTarget?.opsHours ?? defaultTarget.opsHours;
           const monthTotalTarget = monthTarget?.totalHours ?? defaultTarget.totalHours;
 
-          // Effective window = month ∩ range, with the current month pro-rated to today.
-          const effectiveStart = (startDate && startDate > monthStart) ? startDate : monthStart;
-          let effectiveEnd;
-          if (endDate && endDate < monthEnd) {
-            // Explicit end date before month end (e.g., last-week, custom range)
-            effectiveEnd = endDate;
-          } else if (monthKey === currentMonthKey) {
-            // Current month with no explicit early end — pro-rate to today
-            effectiveEnd = now;
-          } else {
-            effectiveEnd = monthEnd;
-          }
-
           // Capacity-model fraction: firm holidays cancel for a full month (they
           // only affect intra-month pace), while the attorney's OOO reduces the
           // target for any period — in-progress or completed. A fully-OOO month
-          // yields 0. A full clean month yields exactly 1 (unchanged behavior).
-          const { fraction } = getMonthProRateFraction(
-            year, month, effectiveStart, effectiveEnd, rangeHolidaySet, oooSet
-          );
+          // yields 0; a full clean month yields exactly 1 (unchanged behavior).
+          const pm = proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooSet);
 
-          totalBillableTarget += billableTarget * fraction;
-          totalOpsTarget += opsTarget * fraction;
-          totalTarget += monthTotalTarget * fraction;
-
-          // OOO / holiday context for the period (UI messaging only).
-          const tc = countTimeOffInRange(parsedTimeOff, null, effectiveStart, effectiveEnd, rangeHolidaySet, oooSet);
-          oooDays += tc.oooBusinessDays;
-          holidayDays += tc.holidayBusinessDays;
+          totalBillableTarget += billableTarget * pm.fraction;
+          totalOpsTarget += opsTarget * pm.fraction;
+          totalTarget += monthTotalTarget * pm.fraction;
+          oooDays += pm.oooDays;        // OOO / holiday context (UI messaging only)
+          holidayDays += pm.holidayDays;
         });
       }
 

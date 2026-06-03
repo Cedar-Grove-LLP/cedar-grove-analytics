@@ -200,11 +200,11 @@ export const countBusinessDays = (startDate, endDate, excludeDates = null) => {
  * Get business days info for a month
  * Returns { total: number, elapsed: number, remaining: number }
  */
-export const getMonthBusinessDays = (year, month, asOfDate = null, excludeDates = null) => {
+export const getMonthBusinessDays = (year, month, asOfDate = null) => {
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0); // Last day of month
 
-  const total = countBusinessDays(monthStart, monthEnd, excludeDates);
+  const total = countBusinessDays(monthStart, monthEnd);
 
   if (!asOfDate) {
     return { total, elapsed: total, remaining: 0 };
@@ -224,7 +224,7 @@ export const getMonthBusinessDays = (year, month, asOfDate = null, excludeDates 
   }
 
   // Count business days from month start to asOfDate
-  const elapsed = countBusinessDays(monthStart, asOf, excludeDates);
+  const elapsed = countBusinessDays(monthStart, asOf);
   const remaining = total - elapsed;
 
   return { total, elapsed, remaining };

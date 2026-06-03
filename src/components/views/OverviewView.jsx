@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Activity, Clock, Users, DollarSign } from 'lucide-react';
-import { formatCurrency, formatHours } from '../../utils/formatters';
+import { formatCurrency, formatHours, formatTimeOffContext } from '../../utils/formatters';
 import { DateRangeIndicator } from '../shared';
 import { TopTransactionsChart, BillableVsOpsChart } from '../charts';
 
@@ -111,10 +111,7 @@ const OverviewView = ({
 
   // Tooltip explaining the OOO/holiday adjustment behind the pace figures.
   const paceAdjustmentTitle = (cohortMetrics.oooDays > 0 || cohortMetrics.holidayDays > 0)
-    ? `Pace targets reflect ${[
-        cohortMetrics.oooDays > 0 ? `${cohortMetrics.oooDays} out-of-office day${cohortMetrics.oooDays === 1 ? '' : 's'}` : null,
-        cohortMetrics.holidayDays > 0 ? `${cohortMetrics.holidayDays} firm holiday${cohortMetrics.holidayDays === 1 ? '' : 's'}` : null,
-      ].filter(Boolean).join(' and ')} across the cohort this period`
+    ? `Pace targets reflect ${formatTimeOffContext(cohortMetrics.oooDays, cohortMetrics.holidayDays)} across the cohort this period`
     : undefined;
 
   const totalHours = cohortMetrics.billable + cohortMetrics.ops;

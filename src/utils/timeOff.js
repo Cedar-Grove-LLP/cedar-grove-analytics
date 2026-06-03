@@ -9,7 +9,7 @@
 // All consumers are read-only; the app never writes `timeOff/all`. Everything
 // here tolerates a null/missing doc so behavior is unchanged before the sync ships.
 
-import { getUSFederalHolidays, toDateKey } from './dateHelpers';
+import { getUSFederalHolidays, toDateKey, getMonthProRateFraction } from './dateHelpers';
 
 // Normalize a person name for matching: trim, lowercase, collapse inner whitespace.
 const normalizeName = (name) => (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -23,6 +23,14 @@ const parseDateKey = (s) => {
   const [y, m, d] = String(s || '').split('-').map(Number);
   if (!y || !m || !d) return null;
   return new Date(y, m - 1, d);
+};
+
+// Canonicalize a date string to zero-padded 'YYYY-MM-DD' so it matches the keys
+// produced by toDateKey (which every membership test uses). Tolerates a
+// non-zero-padded sync (e.g. '2026-7-3'); returns null for unparseable input.
+const normalizeDateKey = (s) => {
+  const d = parseDateKey(s);
+  return d ? toDateKey(d) : null;
 };
 
 // Expand an inclusive [start, end] date-string range to 'YYYY-MM-DD' keys.
@@ -65,7 +73,9 @@ export const parseTimeOff = (timeOffDoc) => {
 
   if (timeOffDoc && Array.isArray(timeOffDoc.holidays)) {
     timeOffDoc.holidays.forEach((h) => {
-      if (h && h.date) holidaySet.add(String(h.date));
+      if (!h || !h.date) return;
+      const key = normalizeDateKey(h.date); // zero-pad so it matches toDateKey
+      if (key) holidaySet.add(key);
     });
   }
 
@@ -164,6 +174,9 @@ export const countTimeOffInRange = (
   last.setHours(0, 0, 0, 0);
 
   while (cur <= last) {
+    // Plain weekday check (NOT isBusinessDay): we WANT weekday holidays — including
+    // federal ones — counted here so the UI can surface them; isBusinessDay would
+    // skip federal holidays and under-report. Holidays take precedence over OOO.
     const day = cur.getDay();
     if (day !== 0 && day !== 6) {
       const key = toDateKey(cur);
@@ -174,4 +187,47 @@ export const countTimeOffInRange = (
   }
 
   return { oooBusinessDays, holidayBusinessDays };
+};
+
+/**
+ * Resolve one month's capacity-model pro-rate fraction plus its OOO/holiday
+ * business-day counts for the effective window (month ∩ range, with the
+ * in-progress current month clamped to `now`). Shared by both utilization
+ * pro-rating sites (useAnalyticsData `attorneyData` and AttorneyDetailView
+ * `calculatedTargets`) so the effective-window + fraction + counting glue lives
+ * in one place; the caller multiplies its own per-month target by `fraction`.
+ *
+ * Note: each call site still owns its month SET (the aggregate view pro-rates
+ * every calendar month in range; the detail view only months with entries) — a
+ * deliberate, pre-existing difference tied to how each handles "all-time".
+ *
+ * @param {number} year
+ * @param {number} month - 1-indexed
+ * @param {{startDate: Date|null, endDate: Date|null, currentMonthKey: string, now: Date}} range
+ * @param {Set<string>} holidaySet
+ * @param {Set<string>} oooSet
+ * @returns {{ fraction:number, oooDays:number, holidayDays:number, effectiveStart:Date, effectiveEnd:Date }}
+ */
+export const proRateMonth = (year, month, range, holidaySet, oooSet) => {
+  const { startDate, endDate, currentMonthKey, now } = range || {};
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+  const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+
+  // Effective window = month ∩ range, with the current month pro-rated to today.
+  const effectiveStart = (startDate && startDate > monthStart) ? startDate : monthStart;
+  let effectiveEnd;
+  if (endDate && endDate < monthEnd) {
+    effectiveEnd = endDate;                  // explicit end before month end (last-week, custom)
+  } else if (monthKey === currentMonthKey) {
+    effectiveEnd = now;                      // in-progress current month → pro-rate to today
+  } else {
+    effectiveEnd = monthEnd;
+  }
+
+  const { fraction } = getMonthProRateFraction(year, month, effectiveStart, effectiveEnd, holidaySet, oooSet);
+  const { oooBusinessDays, holidayBusinessDays } =
+    countTimeOffInRange(null, null, effectiveStart, effectiveEnd, holidaySet, oooSet);
+
+  return { fraction, oooDays: oooBusinessDays, holidayDays: holidayBusinessDays, effectiveStart, effectiveEnd };
 };
