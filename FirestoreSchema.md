@@ -509,7 +509,12 @@ Stores firm-wide per-month metrics in a single document as an entries array. Syn
     {
       month: "January",                     // string — month name
       year: 2026,                           // number
-      revenueAccrued: 343668,               // number — firm-wide revenue accrued for month (parsed from "$343,668")
+
+      revenueAccrued: 256835,               // number — Revenue (Accrued), parsed from cell B10
+      attorneyBillables: 260193,            // number — "Attorney Billables" line from the sheet's
+                                            //   billing-summary table. Optional (present once the
+                                            //   sync writes it). Pulled directly, not derived.
+
       syncedAt: "2026-05-04T..."            // string — ISO 8601 timestamp this entry was last synced
     }
     // ... one entry per synced month, sorted chronologically
@@ -520,16 +525,18 @@ Stores firm-wide per-month metrics in a single document as an entries array. Syn
 ### Field Notes
 
 - `revenueAccrued`: Parsed from cell B10 of the month sheet. Currency strings are normalized to plain numbers via `parseCurrency`.
+- `attorneyBillables`: The "Attorney Billables" line from the month sheet's billing-summary table, pulled **directly** from the sheet (not derived from rate × hours). **Optional** — present once the sync writes it. Stored as a plain number (the dashboard checks `typeof === 'number'`; `parseCurrency` already returns numbers). Surfaced on the Billing Summaries page and used for the Overview "Total Billables" KPI on month-aligned date ranges (a month in progress or completed months); custom or partial ranges fall back to rate × hours.
 - `month` + `year`: Composite key. Re-syncing the same month replaces its entry rather than appending.
 - Entries are sorted chronologically (year, then month index).
 
 ### Sync Architecture
 
 ```
-Google Sheet ({Month} tab, cell B10) → Apps Script → Firestore
+Google Sheet ({Month} tab) → Apps Script → Firestore
                                           │
                                           ├── 1. Read existing entries[] from monthlyMetrics/all
-                                          ├── 2. Read B10, parse currency
+                                          ├── 2. Read B10 (Revenue Accrued) + the "Attorney
+                                          │      Billables" line (matched by column-A label text)
                                           ├── 3. Upsert entry by month+year, sort
                                           └── 4. PATCH entries field (preserves other doc fields)
 ```
@@ -537,6 +544,34 @@ Google Sheet ({Month} tab, cell B10) → Apps Script → Firestore
 - **Sync trigger**: Manual — run `forceSyncRevenueAccrued()` (current month) or `forceSyncRevenueAccruedSpecificMonth()` (named month).
 - **Strategy**: Field-level PATCH on `entries`. Read-modify-write to upsert one month at a time without overwriting other months.
 - **Cost per sync**: 1 read, 1 write.
+
+#### Reading Attorney Billables (label-based)
+
+`attorneyBillables` is pulled directly from the "Attorney Billables" line of the
+month sheet's billing-summary table. Match the **column-A label text** (case-
+insensitive, trimmed) rather than a hardcoded cell address, so minor label edits
+don't break the sync. Read the adjacent value with the existing `parseCurrency`
+helper (which returns a plain number):
+
+```javascript
+function readAttorneyBillables(sheet) {
+  var rows = sheet.getRange('A1:B40').getValues(); // generous label/value window
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() === 'attorney billables') {
+      return parseCurrency(rows[i][1]); // returns a number
+    }
+  }
+  return null;
+}
+
+// In forceSyncRevenueAccrued*, add it to the upserted entry alongside revenueAccrued:
+//   var entry = { month: month, year: year, syncedAt: now,
+//                 revenueAccrued: parseCurrency(sheet.getRange('B10').getValue()) };
+//   var ab = readAttorneyBillables(sheet);
+//   if (ab != null) entry.attorneyBillables = ab;
+```
+
+Keep `parseCurrency` returning numbers — the dashboard checks `typeof === 'number'`.
 
 ---
 

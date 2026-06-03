@@ -189,6 +189,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
     clientCounts,
     calculateUtilization,
     periodRevenueAccrued,
+    periodAttorneyBillables,
   } = useAnalyticsData({
     dateRange,
     customDateStart,
@@ -343,6 +344,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             globalAttorneyFilter={effectiveAttorneyFilter}
             allAttorneyNames={allAttorneyNames}
             periodRevenueAccrued={periodRevenueAccrued}
+            periodAttorneyBillables={periodAttorneyBillables}
             attorneyData={attorneyData}
             transactionData={transactionData}
           />

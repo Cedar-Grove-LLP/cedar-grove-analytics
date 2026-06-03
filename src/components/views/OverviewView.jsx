@@ -42,11 +42,11 @@ const OverviewView = ({
   globalAttorneyFilter,
   allAttorneyNames,
   periodRevenueAccrued = null,
+  periodAttorneyBillables = null,
   attorneyData,
   transactionData,
 }) => {
   const [cohort, setCohort] = useState('lawyers');
-  const showRevenueAccrued = cohort === 'full-team' && periodRevenueAccrued != null;
 
   const cohortMetrics = useMemo(() => {
     const subset = filterByCohort(attorneyData || [], cohort);
@@ -56,9 +56,30 @@ const OverviewView = ({
     const billableTarget = subset.reduce((acc, a) => acc + (a.billableTarget || 0), 0);
     const opsTarget = subset.reduce((acc, a) => acc + (a.opsTarget || 0), 0);
     const grossBillablesSum = subset.reduce((acc, a) => acc + (a.grossBillables || 0), 0);
-    const grossBillables = cohort === 'full-team' && periodRevenueAccrued != null
-      ? periodRevenueAccrued
-      : grossBillablesSum;
+    // "Total Billables" source. Full Team prefers the firm-wide sheet figures —
+    // Attorney Billables first (the authoritative billed amount), then Revenue
+    // Accrued — and otherwise falls back to rate × hours. Sub-cohorts always use
+    // rate × hours, since the sheet figures aren't broken out per person/cohort.
+    // periodAttorneyBillables / periodRevenueAccrued are non-null only for
+    // month-aligned ranges (a month in progress or completed months); custom or
+    // partial ranges leave them null, so those fall back to rate × hours.
+    const isFullTeam = cohort === 'full-team';
+    let grossBillables;
+    let billablesLabel;
+    let billablesSubtitle;
+    if (isFullTeam && periodAttorneyBillables != null) {
+      grossBillables = periodAttorneyBillables;
+      billablesLabel = 'Total Billables';
+      billablesSubtitle = 'Firm-wide';
+    } else if (isFullTeam && periodRevenueAccrued != null) {
+      grossBillables = periodRevenueAccrued;
+      billablesLabel = 'Revenue Accrued';
+      billablesSubtitle = 'Firm-wide';
+    } else {
+      grossBillables = grossBillablesSum;
+      billablesLabel = 'Total Billables';
+      billablesSubtitle = 'Rate × Hours';
+    }
 
     const utilizationValues = subset.map((a) => {
       const total = (a.billable || 0) + (a.ops || 0);
@@ -75,10 +96,12 @@ const OverviewView = ({
       billableTarget,
       opsTarget,
       grossBillables,
+      billablesLabel,
+      billablesSubtitle,
       utilization,
       attorneyCount: subset.length,
     };
-  }, [cohort, attorneyData, periodRevenueAccrued]);
+  }, [cohort, attorneyData, periodRevenueAccrued, periodAttorneyBillables]);
 
   const totalHours = cohortMetrics.billable + cohortMetrics.ops;
   const billablePercentage = totalHours > 0 ? Math.round((cohortMetrics.billable / totalHours) * 100) : 0;
@@ -179,13 +202,13 @@ const OverviewView = ({
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium">{showRevenueAccrued ? 'Revenue Accrued' : 'Total Billables'}</span>
+            <span className="text-gray-600 text-sm font-medium">{cohortMetrics.billablesLabel}</span>
             <DollarSign className="w-5 h-5 text-emerald-500" />
           </div>
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{formatCurrency(cohortMetrics.grossBillables)}</div>
           </div>
-          <div className="text-sm text-gray-600 text-center">{showRevenueAccrued ? 'Firm-wide' : 'Rate × Hours'}</div>
+          <div className="text-sm text-gray-600 text-center">{cohortMetrics.billablesSubtitle}</div>
         </div>
       </div>
 
