@@ -154,6 +154,41 @@ export const useAnalyticsData = ({
     return { startDate, endDate, currentMonthKey, now };
   }, [dateRange, customDateStart, customDateEnd, allBillableEntries, allOpsEntries]);
 
+  // Equivalent prior window for period-over-period deltas (e.g. last-month May
+  // → prior April). all-time has no meaningful prior period. Month ranges use
+  // whole previous calendar months; week/trailing/custom shift back by the
+  // current window's own length.
+  const priorDateRangeInfo = useMemo(() => {
+    const now = getPSTDate();
+
+    if (dateRange === 'all-time') {
+      return { startDate: null, endDate: null, hasPrior: false };
+    }
+
+    if (dateRange === 'current-month') {
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      const endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { startDate, endDate, hasPrior: true };
+    }
+
+    if (dateRange === 'last-month') {
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0);
+      const endDate = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59, 999);
+      return { startDate, endDate, hasPrior: true };
+    }
+
+    // Generic equal-length shift immediately before the current window
+    // (current-week, last-week, trailing-60, custom).
+    const { startDate: curStart, endDate: curEnd } = dateRangeInfo;
+    if (!curStart || !curEnd) {
+      return { startDate: null, endDate: null, hasPrior: false };
+    }
+    const durationMs = curEnd.getTime() - curStart.getTime();
+    const endDate = new Date(curStart.getTime() - 1);
+    const startDate = new Date(endDate.getTime() - durationMs);
+    return { startDate, endDate, hasPrior: true };
+  }, [dateRange, dateRangeInfo]);
+
   // Get list of all user names for global filter dropdown
   // Filter out hidden users from the UI display
   const allAttorneyNames = useMemo(() => {
@@ -195,6 +230,29 @@ export const useAnalyticsData = ({
 
     return entries;
   }, [allBillableEntries, dateRange, dateRangeInfo, globalAttorneyFilter, userMap]);
+
+  // Billable entries for the prior comparison window (same attorney filter as
+  // the current window) — powers the Active/Quiet period-over-period deltas.
+  const priorPeriodBillableEntries = useMemo(() => {
+    if (!allBillableEntries || !priorDateRangeInfo.hasPrior) return [];
+
+    const { startDate: rangeStart, endDate: rangeEnd } = priorDateRangeInfo;
+
+    let entries = allBillableEntries.filter(entry => {
+      const entryDate = getEntryDate(entry);
+      return entryDate >= rangeStart && entryDate <= rangeEnd;
+    });
+
+    // Filter by selected users (global filter) — mirror filteredBillableEntries.
+    if (globalAttorneyFilter.length > 0) {
+      entries = entries.filter(entry => {
+        const userName = userMap[entry.userId] || entry.userId;
+        return globalAttorneyFilter.includes(userName);
+      });
+    }
+
+    return entries;
+  }, [allBillableEntries, priorDateRangeInfo, globalAttorneyFilter, userMap]);
 
   // Filter ops entries based on date range and attorney filter
   const filteredOpsEntries = useMemo(() => {
@@ -1140,6 +1198,8 @@ export const useAnalyticsData = ({
     clientCounts,
     calculateUtilization,
     dateRangeInfo,
+    priorPeriodBillableEntries,
+    hasPriorPeriod: priorDateRangeInfo.hasPrior,
     totalGrossBillables,
     totalRevenueAccrued,
     periodRevenueAccrued,
