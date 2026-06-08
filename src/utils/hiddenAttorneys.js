@@ -19,6 +19,10 @@ export const HIDDEN_ATTORNEYS = [
     name: 'Martyna Skrodzka',
     hideBefore: new Date('2026-01-01T00:00:00'), // Hide before 2026
   },
+  {
+    name: 'Miika Weekes',
+    hideAfter: new Date('2024-12-31T23:59:59'), // Only active in 2024; hide from 2025 onward
+  },
 ];
 
 /**
