@@ -61,8 +61,9 @@ const ProjectedEarningsTable = () => {
     const currentYear = today.getFullYear();
     const currentMonth = today.getMonth() + 1;
 
-    // Only attorneys; respect hidden list.
-    const attorneys = users.filter((u) => (u.role || 'Attorney') === 'Attorney');
+    // Only active attorneys; respect hidden list. Inactive (departed) attorneys
+    // are excluded from forward-looking earnings projections.
+    const attorneys = users.filter((u) => (u.role || 'Attorney') === 'Attorney' && u.active !== false);
     const visibleNames = filterHiddenAttorneys(attorneys.map((u) => u.name || u.id));
     const visibleAttorneys = attorneys
       .filter((u) => visibleNames.includes(u.name || u.id))

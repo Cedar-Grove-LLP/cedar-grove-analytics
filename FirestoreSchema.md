@@ -94,6 +94,7 @@ The user profile document. Stores identity, role, billing rate, and performance 
   role: "Attorney",                        // string — "Attorney", "Legal Operations Associate", etc.
   email: "michael@cedargrove.law",         // string — login email (used for access control)
   employmentType: "FTE",                   // string — "FTE" (full-time) or "PTE" (part-time)
+  active: true,                            // boolean — false hides attorney unless timeframe overlaps their data (absent = active)
 
   // Billing rates (one entry per active month)
   rates: [
@@ -145,6 +146,15 @@ The `email` field on the user document is used for access control. When a non-ad
 - `"PTE"` — Part-time employee
 
 The employment type is set via the admin User Management page. New users default to `"PTE"`. Existing users without the field default to `"FTE"` at read time.
+
+### Active Status
+
+The `active` boolean marks whether an attorney is a current member of the firm. Set via the **Active** toggle in the admin User Management → Role Management tab (`/admin/user-management`). Users without the field default to `active: true` at read time.
+
+- **Active** (`true` / absent): always shown in dropdowns, attorney rows, Targets, and Projected Earnings.
+- **Inactive** (`false`): hidden from those surfaces **except** when the selected timeframe overlaps the attorney's actual billable/ops entries — visibility is auto-derived from entry dates, so no tenure start/end dates are stored. Inactive attorneys are always excluded from forward-looking Targets and Projected Earnings.
+
+This is layered on top of the legacy hardcoded `src/utils/hiddenAttorneys.js` date config (both are consulted). Aggregate firm totals continue to include hidden/inactive attorneys.
 
 ### Rate and Targets
 

@@ -14,7 +14,7 @@ const TargetsView = () => {
     const allNames = allUsers.map(u => u.name || u.id);
     const visibleNames = filterHiddenAttorneys(allNames);
     return allUsers
-      .filter(u => visibleNames.includes(u.name || u.id))
+      .filter(u => u.active !== false && visibleNames.includes(u.name || u.id))
       .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
   }, [allUsers]);
 

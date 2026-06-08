@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Save, Users, CheckCircle, AlertCircle } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, waitForAuth } from '@/firebase/config';
@@ -15,6 +15,7 @@ const buildEditsFromUsers = (users) => {
         email: u.email || '',
         role: u.role || 'Attorney',
         employmentType: u.employmentType || 'FTE',
+        active: u.active !== false,
         isDirty: false,
       };
     });
@@ -22,16 +23,25 @@ const buildEditsFromUsers = (users) => {
   return edits;
 };
 
-const RoleManagementTab = ({ users, refetch }) => {
-  const [roleEdits, setRoleEdits] = useState(() => buildEditsFromUsers(users));
+const RoleManagementTab = ({ users, allUsers, refetch }) => {
+  // Manage every user here (including inactive/hidden) so admins can toggle them
+  // back on. Fall back to the visible list if the full list wasn't provided.
+  const manageableUsers = useMemo(() => {
+    const source = (allUsers && allUsers.length > 0) ? allUsers : users;
+    return [...(source || [])].sort((a, b) =>
+      (a.name || a.id).localeCompare(b.name || b.id)
+    );
+  }, [allUsers, users]);
+
+  const [roleEdits, setRoleEdits] = useState(() => buildEditsFromUsers(manageableUsers));
   const [savingUser, setSavingUser] = useState(null);
   const [savingAll, setSavingAll] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
 
   // Re-sync edits when users change (e.g. after refetch)
   useEffect(() => {
-    setRoleEdits(buildEditsFromUsers(users));
-  }, [users]);
+    setRoleEdits(buildEditsFromUsers(manageableUsers));
+  }, [manageableUsers]);
 
   const handleChange = (userId, field, value) => {
     setRoleEdits(prev => ({
@@ -56,6 +66,7 @@ const RoleManagementTab = ({ users, refetch }) => {
         email: edits.email,
         role: edits.role,
         employmentType: edits.employmentType,
+        active: edits.active,
       });
 
       setRoleEdits(prev => ({
@@ -87,6 +98,7 @@ const RoleManagementTab = ({ users, refetch }) => {
           email: edits.email,
           role: edits.role,
           employmentType: edits.employmentType,
+          active: edits.active,
         });
       }
 
@@ -112,7 +124,7 @@ const RoleManagementTab = ({ users, refetch }) => {
 
   const hasDirtyEdits = Object.values(roleEdits).some(e => e.isDirty);
 
-  if (users.length === 0) {
+  if (manageableUsers.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center max-w-md">
@@ -135,7 +147,7 @@ const RoleManagementTab = ({ users, refetch }) => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <Users className="w-4 h-4" />
-          <span>{users.length} team member{users.length !== 1 ? 's' : ''}</span>
+          <span>{manageableUsers.length} team member{manageableUsers.length !== 1 ? 's' : ''}</span>
         </div>
         <button
           onClick={handleSaveAll}
@@ -163,13 +175,14 @@ const RoleManagementTab = ({ users, refetch }) => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employment Type</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {users.map((user) => {
-              const edits = roleEdits[user.id] || { email: user.email || '', role: user.role || 'Attorney', employmentType: user.employmentType || 'FTE', isDirty: false };
+            {manageableUsers.map((user) => {
+              const edits = roleEdits[user.id] || { email: user.email || '', role: user.role || 'Attorney', employmentType: user.employmentType || 'FTE', active: user.active !== false, isDirty: false };
               return (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -208,6 +221,18 @@ const RoleManagementTab = ({ users, refetch }) => {
                         <option key={type} value={type}>{type}</option>
                       ))}
                     </select>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={edits.active}
+                      onClick={() => handleChange(user.id, 'active', !edits.active)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${edits.active ? 'bg-green-500' : 'bg-gray-300'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${edits.active ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <span className="ml-2 text-xs text-gray-500 align-middle">{edits.active ? 'Active' : 'Inactive'}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {edits.isDirty ? (

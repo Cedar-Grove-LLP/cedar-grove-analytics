@@ -12,17 +12,14 @@
  */
 export const HIDDEN_ATTORNEYS = [
   {
-    name: 'Andrew Duble',
-    hideAfter: new Date('2025-12-31T23:59:59'), // Hide in 2026 and beyond
-  },
-  {
     name: 'Martyna Skrodzka',
     hideBefore: new Date('2026-01-01T00:00:00'), // Hide before 2026
   },
-  {
-    name: 'Miika Weekes',
-    hideAfter: new Date('2024-12-31T23:59:59'), // Only active in 2024; hide from 2025 onward
-  },
+  // NOTE: Andrew Duble and Miika Weekes are now governed by the `active` toggle
+  // (Admin → User Management → Role Management). Marking them inactive hides them
+  // from current/forward views while still surfacing them in any timeframe whose
+  // billable/ops entries overlap their tenure — superseding the as-of-today
+  // hideAfter behavior that this legacy list used to apply.
 ];
 
 /**

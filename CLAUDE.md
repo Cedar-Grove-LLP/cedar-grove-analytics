@@ -70,9 +70,16 @@ src/
 ## Firestore Data Model
 
 ```
-users/{userId}/         — { name, role, email, employmentType,
+users/{userId}/         — { name, role, email, employmentType, active,
                               rates:   [{ rate, month, year }],
                               targets: [{ month, year, billableHours, opsHours, totalHours, earnings }] }
+                           `active` (bool, default true when absent): toggled in the
+                           User Management → Role Management admin tab. Inactive
+                           attorneys are hidden from dropdowns/rows EXCEPT when the
+                           selected timeframe overlaps their actual billable/ops
+                           entries (auto-derived, no tenure dates), and are excluded
+                           from forward-looking Targets + Projected Earnings. Layered
+                           on top of the legacy hiddenAttorneys.js date config.
   billables/{monthDocId}  — { month, year, entries: [{ date, client, matter, hours,
                                                        earnings, billingCategory,
                                                        reimbursements, notes,

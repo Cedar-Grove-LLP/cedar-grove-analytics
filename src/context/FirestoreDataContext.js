@@ -70,6 +70,8 @@ export const FirestoreDataProvider = ({ children }) => {
           role: data.role || 'Attorney',
           email: data.email || '',
           employmentType: data.employmentType || 'FTE',
+          // Missing flag = active (back-compat for users created before the toggle existed)
+          active: data.active !== false,
         });
 
         // Build rates map from user profile rates[] array

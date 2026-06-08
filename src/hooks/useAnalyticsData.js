@@ -196,18 +196,46 @@ export const useAnalyticsData = ({
     return { startDate, endDate, hasPrior: true };
   }, [dateRange, dateRangeInfo]);
 
+  // Names of attorneys explicitly toggled inactive in the admin panel.
+  // Inactive attorneys are only surfaced when the selected range overlaps their data.
+  const inactiveAttorneyNames = useMemo(() => {
+    const names = new Set();
+    firebaseUsers.forEach(user => {
+      if (user.active === false) names.add(user.name || user.id);
+    });
+    return names;
+  }, [firebaseUsers]);
+
+  // Names that have at least one billable/ops entry inside the selected date
+  // range (global attorney filter intentionally ignored — this drives which
+  // inactive attorneys are eligible to appear at all for this timeframe).
+  const namesWithDataInRange = useMemo(() => {
+    const names = new Set();
+    const { startDate: rangeStart, endDate: rangeEnd } = dateRangeInfo;
+    const inRange = (entry) => {
+      if (dateRange === 'all-time' || !rangeStart) return true;
+      const d = getEntryDate(entry);
+      return d >= rangeStart && d <= rangeEnd;
+    };
+    (allBillableEntries || []).forEach(e => { if (inRange(e)) names.add(userMap[e.userId] || e.userId); });
+    (allOpsEntries || []).forEach(e => { if (inRange(e)) names.add(userMap[e.userId] || e.userId); });
+    return names;
+  }, [allBillableEntries, allOpsEntries, dateRange, dateRangeInfo, userMap]);
+
   // Get list of all user names for global filter dropdown
-  // Filter out hidden users from the UI display
+  // Filter out hidden users, and inactive users that have no data in range.
   const allAttorneyNames = useMemo(() => {
     const names = new Set();
     firebaseUsers.forEach(user => {
       names.add(user.name || user.id);
     });
 
-    // Filter out hidden attorneys from the dropdown
+    // Drop hidden attorneys, plus inactive attorneys with no data this timeframe
     const allNames = Array.from(names).sort();
-    return filterHiddenAttorneys(allNames);
-  }, [firebaseUsers]);
+    return filterHiddenAttorneys(allNames).filter(name =>
+      !inactiveAttorneyNames.has(name) || namesWithDataInRange.has(name)
+    );
+  }, [firebaseUsers, inactiveAttorneyNames, namesWithDataInRange]);
 
   // Filter billable entries based on date range and attorney filter
   const filteredBillableEntries = useMemo(() => {
@@ -495,12 +523,16 @@ export const useAnalyticsData = ({
     const allUserData = Object.values(userStats);
 
     const visibleUserData = allUserData.filter(user => {
+      // Inactive attorneys only show when the timeframe overlaps their data.
+      if (inactiveAttorneyNames.has(user.name) && !namesWithDataInRange.has(user.name)) {
+        return false;
+      }
       return shouldIncludeAttorneyData(user.name, startDate, endDate) &&
              !isAttorneyHidden(user.name);
     });
 
     return visibleUserData;
-  }, [filteredBillableEntries, filteredOpsEntries, userMap, getRate, dateRangeInfo, userTargets, getUserRole, userEmploymentTypeMap, userEmailMap, parsedTimeOff, getDefaultTarget, firebaseUsers, globalAttorneyFilter, dateRangeMonths]);
+  }, [filteredBillableEntries, filteredOpsEntries, userMap, getRate, dateRangeInfo, userTargets, getUserRole, userEmploymentTypeMap, userEmailMap, parsedTimeOff, getDefaultTarget, firebaseUsers, globalAttorneyFilter, dateRangeMonths, inactiveAttorneyNames, namesWithDataInRange]);
 
   // Create a separate dataset that includes hidden users for totals calculation
   const allAttorneyDataIncludingHidden = useMemo(() => {
