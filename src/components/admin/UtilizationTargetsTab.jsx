@@ -7,6 +7,7 @@ import { db, waitForAuth } from '@/firebase/config';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { getEntryDate, getPSTDate } from '@/utils/dateHelpers';
 import { parseTimeOff, getHolidaySet, getOooSetFor, proRateMonth } from '@/utils/timeOff';
+import { formatHours } from '@/utils/formatters';
 
 const MONTHS = [
   { idx: 0, short: 'Jan', long: 'January' },
@@ -56,25 +57,46 @@ const sumBillable = (userMatrix, monthList) =>
 const sumOps = (userMatrix, monthList) =>
   monthList.reduce((sum, m) => sum + (parseFloat(userMatrix?.[m.idx]?.ops) || 0), 0);
 
-// Round to one decimal for display (entries can be fractional, e.g. 93.5).
-const round1 = (n) => Math.round((Number(n) || 0) * 10) / 10;
-
-// Signed variance string: "+5", "-2", or "0".
-const fmtDelta = (n) => {
-  const r = round1(n);
-  return r > 0 ? `+${r}` : `${r}`;
+// Variance cell: signed text + color, both derived from the canonical hours
+// formatter (formatHours) so the sign, rounding, and color always agree with the
+// number shown. Green over target, red under, muted gray when it rounds to 0
+// (on target, or a sub-0.1h difference).
+const deltaCellValue = (n) => {
+  const s = formatHours(n);            // "0", "-2", "1.5", …
+  if (s === '0') return { text: '0', className: 'text-gray-400' };
+  if (s[0] === '-') return { text: s, className: 'text-red-600' };
+  return { text: `+${s}`, className: 'text-green-600' };
 };
 
-// Color the variance: green at/over target, red under, muted at zero.
-const deltaColor = (n) => {
-  const r = round1(n);
-  if (r > 0) return 'text-green-600';
-  if (r < 0) return 'text-red-600';
-  return 'text-gray-400';
-};
+const EMPTY_CELL = { text: '', className: '' };
 
 const EMPTY_FRACTIONS = Array(12).fill(0);
 const EMPTY_FUTURE = Array(12).fill(false);
+
+// One read-only metric row (Actual or Δ): a label cell, then per-month
+// client/ops[/total] cells, then the cumulative summary trio. Each cell is a
+// { text, className } pair so the caller owns the value and color. Shared by the
+// Actual and Δ rows so they aren't two near-identical copy-pasted <tr> blocks.
+const MetricRow = ({ label, visibleMonths, showMonthTotals, cell, summary }) => (
+  <tr className="bg-gray-50">
+    <td className="px-1 py-0.5 text-[10px] text-gray-500 text-right whitespace-nowrap">{label}</td>
+    {visibleMonths.map((m) => {
+      const [c, o, t] = cell(m.idx);
+      return (
+        <Fragment key={m.idx}>
+          <td className={`px-1 py-0.5 text-right text-xs border-l-2 border-cg-dark whitespace-nowrap ${c.className}`}>{c.text}</td>
+          <td className={`px-1 py-0.5 text-right text-xs whitespace-nowrap ${o.className}`}>{o.text}</td>
+          {showMonthTotals && (
+            <td className={`px-1 py-0.5 text-right text-xs whitespace-nowrap bg-gray-100 ${t.className}`}>{t.text}</td>
+          )}
+        </Fragment>
+      );
+    })}
+    <td className={`px-1 py-0.5 text-right text-xs border-l-2 border-cg-dark whitespace-nowrap ${summary[0].className}`}>{summary[0].text}</td>
+    <td className={`px-1 py-0.5 text-right text-xs whitespace-nowrap ${summary[1].className}`}>{summary[1].text}</td>
+    <td className={`px-1 py-0.5 text-right text-xs font-semibold whitespace-nowrap ${summary[2].className}`}>{summary[2].text}</td>
+  </tr>
+);
 
 const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibleMonths, summaryLabel, showMonthTotals }) => {
   const maxRow = users.length - 1;
@@ -235,8 +257,10 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
           let sumActOps = 0;
           let sumDClient = 0;
           let sumDOps = 0;
+          let hasElapsed = false;
           visibleMonths.forEach(m => {
             if (cap.future[m.idx]) return;
+            hasElapsed = true;
             const act = userActuals[m.idx] || { client: 0, ops: 0 };
             const cell = userMatrix[m.idx] || {};
             const frac = cap.fractions[m.idx];
@@ -245,6 +269,40 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
             sumDClient += act.client - (parseFloat(cell.client) || 0) * frac;
             sumDOps += act.ops - (parseFloat(cell.ops) || 0) * frac;
           });
+
+          const gray = 'text-gray-600';
+          // Actual row cells: logged hours (blank for future months).
+          const actualCell = (idx) => {
+            if (cap.future[idx]) return [EMPTY_CELL, EMPTY_CELL, EMPTY_CELL];
+            const act = userActuals[idx] || { client: 0, ops: 0 };
+            return [
+              { text: formatHours(act.client), className: gray },
+              { text: formatHours(act.ops), className: gray },
+              { text: formatHours(act.client + act.ops), className: gray },
+            ];
+          };
+          // Δ row cells: Actual minus the capacity-pro-rated Target (blank for future).
+          const deltaCell = (idx) => {
+            if (cap.future[idx]) return [EMPTY_CELL, EMPTY_CELL, EMPTY_CELL];
+            const act = userActuals[idx] || { client: 0, ops: 0 };
+            const cell = userMatrix[idx] || {};
+            const frac = cap.fractions[idx];
+            const dClient = act.client - (parseFloat(cell.client) || 0) * frac;
+            const dOps = act.ops - (parseFloat(cell.ops) || 0) * frac;
+            return [deltaCellValue(dClient), deltaCellValue(dOps), deltaCellValue(dClient + dOps)];
+          };
+          // Cumulative summary trios — blank when no month has elapsed (e.g. a
+          // fully-future year) so the summary matches the blank per-month cells.
+          const actualSummary = hasElapsed
+            ? [
+                { text: formatHours(sumActClient), className: gray },
+                { text: formatHours(sumActOps), className: gray },
+                { text: formatHours(sumActClient + sumActOps), className: 'text-gray-700' },
+              ]
+            : [EMPTY_CELL, EMPTY_CELL, EMPTY_CELL];
+          const deltaSummary = hasElapsed
+            ? [deltaCellValue(sumDClient), deltaCellValue(sumDOps), deltaCellValue(sumDClient + sumDOps)]
+            : [EMPTY_CELL, EMPTY_CELL, EMPTY_CELL];
 
           return (
             <Fragment key={u.id}>
@@ -307,75 +365,8 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
                 </td>
               </tr>
 
-              {/* Actual — logged hours, bucketed by entry date */}
-              <tr className="bg-gray-50">
-                <td className="px-1 py-0.5 text-[10px] text-gray-500 text-right whitespace-nowrap">Actual</td>
-                {visibleMonths.map((m) => {
-                  const isFuture = cap.future[m.idx];
-                  const act = userActuals[m.idx] || { client: 0, ops: 0 };
-                  return (
-                    <Fragment key={m.idx}>
-                      <td className="px-1 py-0.5 text-right text-xs text-gray-600 border-l-2 border-cg-dark whitespace-nowrap">
-                        {isFuture ? '' : round1(act.client)}
-                      </td>
-                      <td className="px-1 py-0.5 text-right text-xs text-gray-600 whitespace-nowrap">
-                        {isFuture ? '' : round1(act.ops)}
-                      </td>
-                      {showMonthTotals && (
-                        <td className="px-1 py-0.5 text-right text-xs text-gray-600 whitespace-nowrap bg-gray-100">
-                          {isFuture ? '' : round1(act.client + act.ops)}
-                        </td>
-                      )}
-                    </Fragment>
-                  );
-                })}
-                <td className="px-1 py-0.5 text-right text-xs text-gray-600 border-l-2 border-cg-dark whitespace-nowrap">
-                  {round1(sumActClient)}
-                </td>
-                <td className="px-1 py-0.5 text-right text-xs text-gray-600 whitespace-nowrap">
-                  {round1(sumActOps)}
-                </td>
-                <td className="px-1 py-0.5 text-right text-xs font-semibold text-gray-700 whitespace-nowrap">
-                  {round1(sumActClient + sumActOps)}
-                </td>
-              </tr>
-
-              {/* Δ — Actual minus the capacity-pro-rated Target (OOO/holiday adjusted) */}
-              <tr className="bg-gray-50">
-                <td className="px-1 py-0.5 text-[10px] text-gray-500 text-right whitespace-nowrap">Δ</td>
-                {visibleMonths.map((m) => {
-                  const isFuture = cap.future[m.idx];
-                  const act = userActuals[m.idx] || { client: 0, ops: 0 };
-                  const cell = userMatrix[m.idx] || {};
-                  const frac = cap.fractions[m.idx];
-                  const dClient = act.client - (parseFloat(cell.client) || 0) * frac;
-                  const dOps = act.ops - (parseFloat(cell.ops) || 0) * frac;
-                  return (
-                    <Fragment key={m.idx}>
-                      <td className={`px-1 py-0.5 text-right text-xs border-l-2 border-cg-dark whitespace-nowrap ${deltaColor(dClient)}`}>
-                        {isFuture ? '' : fmtDelta(dClient)}
-                      </td>
-                      <td className={`px-1 py-0.5 text-right text-xs whitespace-nowrap ${deltaColor(dOps)}`}>
-                        {isFuture ? '' : fmtDelta(dOps)}
-                      </td>
-                      {showMonthTotals && (
-                        <td className={`px-1 py-0.5 text-right text-xs whitespace-nowrap bg-gray-100 ${deltaColor(dClient + dOps)}`}>
-                          {isFuture ? '' : fmtDelta(dClient + dOps)}
-                        </td>
-                      )}
-                    </Fragment>
-                  );
-                })}
-                <td className={`px-1 py-0.5 text-right text-xs border-l-2 border-cg-dark whitespace-nowrap ${deltaColor(sumDClient)}`}>
-                  {fmtDelta(sumDClient)}
-                </td>
-                <td className={`px-1 py-0.5 text-right text-xs whitespace-nowrap ${deltaColor(sumDOps)}`}>
-                  {fmtDelta(sumDOps)}
-                </td>
-                <td className={`px-1 py-0.5 text-right text-xs font-semibold whitespace-nowrap ${deltaColor(sumDClient + sumDOps)}`}>
-                  {fmtDelta(sumDClient + sumDOps)}
-                </td>
-              </tr>
+              <MetricRow label="Actual" visibleMonths={visibleMonths} showMonthTotals={showMonthTotals} cell={actualCell} summary={actualSummary} />
+              <MetricRow label="Δ" visibleMonths={visibleMonths} showMonthTotals={showMonthTotals} cell={deltaCell} summary={deltaSummary} />
             </Fragment>
           );
         })}
