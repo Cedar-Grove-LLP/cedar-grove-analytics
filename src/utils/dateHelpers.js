@@ -231,24 +231,55 @@ export const getMonthBusinessDays = (year, month, asOfDate = null) => {
 };
 
 /**
+ * Sum the fractional WORKING days in [startDate, endDate]: each business day
+ * (Mon–Fri, non-federal-holiday) contributes 1 minus its out-of-office off-fraction,
+ * with firm holidays excluded entirely. A normal day = 1, a half-day OOO = 0.5,
+ * a full-day OOO = 0.
+ *
+ * @param {Set<string>} [holidaySet] - 'YYYY-MM-DD' firm holidays (excluded fully)
+ * @param {Map<string, number>} [oooMap] - 'YYYY-MM-DD' → off-fraction (1 = full, 0.5 = half)
+ */
+const sumWorkingDayFraction = (startDate, endDate, holidaySet = null, oooMap = null) => {
+  let sum = 0;
+  const current = new Date(startDate);
+  current.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+
+  while (current <= end) {
+    if (isBusinessDay(current)) {
+      const key = toDateKey(current);
+      if (!holidaySet || !holidaySet.has(key)) {
+        const off = oooMap ? (oooMap.get(key) || 0) : 0;
+        const working = 1 - off;
+        if (working > 0) sum += working;
+      }
+    }
+    current.setDate(current.getDate() + 1);
+  }
+
+  return sum;
+};
+
+/**
  * Capacity-model pro-rate fraction for a single month.
  *
  * Returns the fraction of a month's target an attorney is expected to hit over
- * the window [effectiveStart, effectiveEnd], reducing the target for the
- * attorney's own out-of-office (OOO) days while treating firm holidays as
- * already baked into the monthly target:
+ * the window [effectiveStart, effectiveEnd]. Out-of-office (OOO) is subtracted
+ * from BOTH the numerator and denominator — i.e. OOO does not lower the monthly
+ * target total, it compresses the same target onto the days actually worked
+ * ("compress, don't reduce"). Firm holidays are likewise excluded from both:
  *
- *   denominator = business days in the WHOLE month, excluding holidays only
- *                 (the capacity the monthly target assumes — OOO is NOT
- *                  subtracted here)
- *   numerator   = business days within [effectiveStart, effectiveEnd], excluding
- *                 holidays AND the attorney's OOO
+ *   denominator = fractional working days in the WHOLE month
+ *                 (each day = 1 − its OOO off-fraction; holidays excluded)
+ *   numerator   = fractional working days within [effectiveStart, effectiveEnd]
  *   fraction    = numerator / denominator   (0 when the month has no capacity)
  *
- * Because holidays appear in both numerator and denominator, a full clean month
- * yields exactly 1 (full target); holidays only depress intra-month pace. OOO is
- * subtracted from the numerator only, so it reduces the target for ANY period —
- * in-progress or completed. A month entirely covered by OOO yields 0.
+ * Because OOO and holidays appear in both, a full clean month yields exactly 1.
+ * A part-time / heavily-OOO attorney's target is spread only across the days they
+ * actually work (target ÷ working-day capacity), not the full calendar month.
+ * A half-day OOO counts as 0.5 of a working day; a month entirely covered by OOO
+ * yields 0 → utilization shows N/A.
  *
  * Note: isBusinessDay already excludes weekends and US federal holidays, so the
  * holidaySet only needs to carry additional (non-federal) firm holidays.
@@ -259,7 +290,7 @@ export const getMonthBusinessDays = (year, month, asOfDate = null) => {
  * @param {Date} effectiveEnd   - window end, clamped to the month/range
  *                                (e.g. "today" for the in-progress current month)
  * @param {Set<string>} [holidaySet] - 'YYYY-MM-DD' firm holidays
- * @param {Set<string>} [oooSet]     - 'YYYY-MM-DD' attorney out-of-office days
+ * @param {Map<string, number>} [oooMap] - 'YYYY-MM-DD' → off-fraction (1 = full, 0.5 = half)
  * @returns {{ fraction: number, baselineMonthDays: number, availableDays: number }}
  */
 export const getMonthProRateFraction = (
@@ -268,21 +299,16 @@ export const getMonthProRateFraction = (
   effectiveStart,
   effectiveEnd,
   holidaySet = null,
-  oooSet = null,
+  oooMap = null,
 ) => {
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0); // last day of month
 
-  // Denominator: full-month capacity (holidays excluded, OOO NOT excluded).
-  const baselineMonthDays = countBusinessDays(monthStart, monthEnd, holidaySet);
+  // Denominator: full-month working capacity (holidays AND OOO excluded).
+  const baselineMonthDays = sumWorkingDayFraction(monthStart, monthEnd, holidaySet, oooMap);
 
-  // Numerator: available days in the effective window (holidays AND OOO excluded).
-  let excludeForPeriod = holidaySet;
-  if (oooSet && oooSet.size > 0) {
-    excludeForPeriod = new Set(holidaySet || []);
-    oooSet.forEach((d) => excludeForPeriod.add(d));
-  }
-  const availableDays = countBusinessDays(effectiveStart, effectiveEnd, excludeForPeriod);
+  // Numerator: worked-capacity within the effective window (holidays AND OOO excluded).
+  const availableDays = sumWorkingDayFraction(effectiveStart, effectiveEnd, holidaySet, oooMap);
 
   const fraction = baselineMonthDays > 0 ? availableDays / baselineMonthDays : 0;
 

@@ -43,7 +43,7 @@ import {
 import {
   parseTimeOff,
   getHolidaySet,
-  getOooSetFor,
+  getOooMapFor,
   proRateMonth,
 } from '@/utils/timeOff';
 import { formatCurrency, formatHours, formatDate, formatTimeOffContext } from '@/utils/formatters';
@@ -235,7 +235,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
 
     // Firm holidays for the range + this attorney's out-of-office days.
     const rangeHolidaySet = getHolidaySet(parsedTimeOff, startDate, endDate);
-    const oooSet = getOooSetFor(parsedTimeOff, { name: attorneyName, email: attorneyEmail });
+    const oooMap = getOooMapFor(parsedTimeOff, { name: attorneyName, email: attorneyEmail });
 
     let totalBillableTarget = 0;
     let totalOpsTarget = 0;
@@ -254,7 +254,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
       // Capacity-model fraction — the attorney's OOO reduces the target for any
       // period (in-progress or completed); firm holidays only affect intra-month
       // pace (they cancel for a full month, leaving a full clean month at 1).
-      const pm = proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooSet);
+      const pm = proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooMap);
 
       totalBillableTarget += billableTarget * pm.fraction;
       totalOpsTarget += opsTarget * pm.fraction;

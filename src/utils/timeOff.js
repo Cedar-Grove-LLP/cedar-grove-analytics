@@ -33,6 +33,25 @@ const normalizeDateKey = (s) => {
   return d ? toDateKey(d) : null;
 };
 
+// Calendar OOO events are entered as all-day, so partial-day time off is only
+// signalled in the free-text title ("Half day", "2PM onwards", "AM only", …).
+// Parse that into an OFF fraction: how much of the working day the event removes
+// (1 = full day off, 0.5 = half). Anything unrecognized counts as a full day off.
+export const parseOooDayFraction = (title) => {
+  const t = (title || '').toLowerCase();
+  if (!t) return { offFraction: 1, partial: false, label: null };
+  if (/half[\s-]?day|halfday|1\/2\s*day|½/.test(t)) {
+    return { offFraction: 0.5, partial: true, label: 'Half day' };
+  }
+  if (/\bonwards?\b|\bfrom\s+\d|\bafter\s+\d|\bpm\s*only\b|\bafternoon\b|\bleav/.test(t)) {
+    return { offFraction: 0.5, partial: true, label: 'Partial (PM)' };
+  }
+  if (/\bam\s*only\b|\bmorning\b/.test(t)) {
+    return { offFraction: 0.5, partial: true, label: 'Partial (AM)' };
+  }
+  return { offFraction: 1, partial: false, label: null };
+};
+
 // Expand an inclusive [start, end] date-string range to 'YYYY-MM-DD' keys.
 const expandRange = (start, end) => {
   const keys = [];
@@ -57,12 +76,16 @@ const expandRange = (start, end) => {
  * Parse the raw `timeOff/all` Firestore doc into fast lookup structures.
  * Tolerant of a null/missing doc and missing fields (pre-rollout safe).
  *
+ * OOO is keyed person → (dateKey → off-fraction), where the off-fraction is how
+ * much of that working day the person is out (1 = full day, 0.5 = half). When two
+ * events touch the same day, the most-off one wins.
+ *
  * @param {object|null} timeOffDoc - { holidays: [{date, name}],
  *                                      outOfOffice: [{name, email, start, end, title}] }
  * @returns {{
  *   holidaySet: Set<string>,
- *   oooByEmail: Map<string, Set<string>>,
- *   oooByName: Map<string, Set<string>>,
+ *   oooByEmail: Map<string, Map<string, number>>,
+ *   oooByName: Map<string, Map<string, number>>,
  *   hasHolidays: boolean,
  * }}
  */
@@ -84,15 +107,19 @@ export const parseTimeOff = (timeOffDoc) => {
       if (!o) return;
       const keys = expandRange(o.start, o.end);
       if (keys.length === 0) return;
+      const { offFraction } = parseOooDayFraction(o.title);
 
       const addTo = (map, lookupKey) => {
         if (!lookupKey) return;
-        let set = map.get(lookupKey);
-        if (!set) {
-          set = new Set();
-          map.set(lookupKey, set);
+        let dayMap = map.get(lookupKey);
+        if (!dayMap) {
+          dayMap = new Map();
+          map.set(lookupKey, dayMap);
         }
-        keys.forEach((k) => set.add(k));
+        keys.forEach((k) => {
+          const prev = dayMap.get(k) || 0;
+          if (offFraction > prev) dayMap.set(k, offFraction); // overlapping events: most-off wins
+        });
       };
 
       addTo(oooByEmail, normalizeEmail(o.email));
@@ -128,18 +155,19 @@ export const getHolidaySet = (parsed, startDate, endDate) => {
 };
 
 /**
- * The OOO date-key set for a person, joined by email first (exact, normalized),
- * then by name (exact, normalized). Returns an empty Set when nothing matches.
+ * The OOO day-map for a person (dateKey → off-fraction), joined by email first
+ * (exact, normalized), then by name (exact, normalized). Returns an empty Map when
+ * nothing matches. A value of 1 = full day off, 0.5 = half day.
  *
  * There is no nickname resolution here — canonicalize the display name/email in
  * the sync (Apps Script) so the dashboard only does exact normalized matching.
  */
-export const getOooSetFor = (parsed, { name, email } = {}) => {
-  if (!parsed) return new Set();
+export const getOooMapFor = (parsed, { name, email } = {}) => {
+  if (!parsed) return new Map();
   const byEmail = email ? parsed.oooByEmail.get(normalizeEmail(email)) : null;
   if (byEmail) return byEmail;
   const byName = name ? parsed.oooByName.get(normalizeName(name)) : null;
-  return byName || new Set();
+  return byName || new Map();
 };
 
 /**
@@ -149,7 +177,9 @@ export const getOooSetFor = (parsed, { name, email } = {}) => {
  *
  * Optional precomputed sets avoid redundant work when called in a per-month loop:
  * pass the range-level holidaySet (so federal fallback isn't rebuilt each call)
- * and the person's oooSet.
+ * and the person's oooMap.
+ *
+ * oooBusinessDays is fractional — a half-day OOO contributes 0.5.
  *
  * @returns {{ oooBusinessDays: number, holidayBusinessDays: number }}
  */
@@ -159,14 +189,14 @@ export const countTimeOffInRange = (
   startDate,
   endDate,
   holidaySetOverride = null,
-  oooSetOverride = null,
+  oooMapOverride = null,
 ) => {
   let oooBusinessDays = 0;
   let holidayBusinessDays = 0;
   if (!startDate || !endDate) return { oooBusinessDays, holidayBusinessDays };
 
   const holidaySet = holidaySetOverride || getHolidaySet(parsed, startDate, endDate);
-  const oooSet = oooSetOverride || getOooSetFor(parsed, person || {});
+  const oooMap = oooMapOverride || getOooMapFor(parsed, person || {});
 
   const cur = new Date(startDate);
   cur.setHours(0, 0, 0, 0);
@@ -181,7 +211,10 @@ export const countTimeOffInRange = (
     if (day !== 0 && day !== 6) {
       const key = toDateKey(cur);
       if (holidaySet && holidaySet.has(key)) holidayBusinessDays++;
-      else if (oooSet && oooSet.has(key)) oooBusinessDays++;
+      else if (oooMap) {
+        const off = oooMap.get(key) || 0;
+        if (off > 0) oooBusinessDays += off;
+      }
     }
     cur.setDate(cur.getDate() + 1);
   }
@@ -205,10 +238,10 @@ export const countTimeOffInRange = (
  * @param {number} month - 1-indexed
  * @param {{startDate: Date|null, endDate: Date|null, currentMonthKey: string, now: Date}} range
  * @param {Set<string>} holidaySet
- * @param {Set<string>} oooSet
+ * @param {Map<string, number>} oooMap - dateKey → off-fraction (1 = full, 0.5 = half)
  * @returns {{ fraction:number, oooDays:number, holidayDays:number, effectiveStart:Date, effectiveEnd:Date }}
  */
-export const proRateMonth = (year, month, range, holidaySet, oooSet) => {
+export const proRateMonth = (year, month, range, holidaySet, oooMap) => {
   const { startDate, endDate, currentMonthKey, now } = range || {};
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
@@ -225,9 +258,9 @@ export const proRateMonth = (year, month, range, holidaySet, oooSet) => {
     effectiveEnd = monthEnd;
   }
 
-  const { fraction } = getMonthProRateFraction(year, month, effectiveStart, effectiveEnd, holidaySet, oooSet);
+  const { fraction } = getMonthProRateFraction(year, month, effectiveStart, effectiveEnd, holidaySet, oooMap);
   const { oooBusinessDays, holidayBusinessDays } =
-    countTimeOffInRange(null, null, effectiveStart, effectiveEnd, holidaySet, oooSet);
+    countTimeOffInRange(null, null, effectiveStart, effectiveEnd, holidaySet, oooMap);
 
   return { fraction, oooDays: oooBusinessDays, holidayDays: holidayBusinessDays, effectiveStart, effectiveEnd };
 };

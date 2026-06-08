@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Users, LogOut, ArrowLeft, Shield, FileText, DollarSign, Receipt, Briefcase, TrendingUp } from 'lucide-react';
+import { Users, LogOut, ArrowLeft, Shield, FileText, DollarSign, Receipt, Briefcase, TrendingUp, CalendarClock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const AdminDashboard = () => {
@@ -56,6 +56,13 @@ const AdminDashboard = () => {
       href: '/admin/matters',
       icon: Briefcase,
       color: 'bg-purple-500',
+    },
+    {
+      title: 'Time-Off Debug',
+      description: 'Inspect calendar OOO entries, attorney matching, and holidays',
+      href: '/admin/timeoff-debug',
+      icon: CalendarClock,
+      color: 'bg-rose-500',
     },
   ];
 

@@ -9,7 +9,7 @@ import {
 import {
   parseTimeOff,
   getHolidaySet,
-  getOooSetFor,
+  getOooMapFor,
   proRateMonth,
 } from '../utils/timeOff';
 import {
@@ -434,7 +434,7 @@ export const useAnalyticsData = ({
       const defaultTarget = getDefaultTarget(userName);
 
       // This attorney's out-of-office days (joined by email, then name).
-      const oooSet = getOooSetFor(parsedTimeOff, { name: userName, email: userEmailMap[userName] || '' });
+      const oooMap = getOooMapFor(parsedTimeOff, { name: userName, email: userEmailMap[userName] || '' });
 
       // Use date range months for target calculation so users with zero hours
       // still get proper pro-rated targets for the selected period
@@ -459,7 +459,7 @@ export const useAnalyticsData = ({
           // only affect intra-month pace), while the attorney's OOO reduces the
           // target for any period — in-progress or completed. A fully-OOO month
           // yields 0; a full clean month yields exactly 1 (unchanged behavior).
-          const pm = proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooSet);
+          const pm = proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooMap);
 
           totalBillableTarget += billableTarget * pm.fraction;
           totalOpsTarget += opsTarget * pm.fraction;
