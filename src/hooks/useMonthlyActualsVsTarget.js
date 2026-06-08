@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useFirestoreCache } from '@/context/FirestoreDataContext';
+import { useAllBillableEntries, useAllOpsEntries, useTimeOff } from '@/hooks/useFirestoreData';
 import { getEntryDate, getPSTDate } from '@/utils/dateHelpers';
 import { parseTimeOff, getHolidaySet, getOooSetFor, proRateMonth } from '@/utils/timeOff';
 
@@ -56,6 +56,8 @@ export const computeMonthlyCapacity = (users, parsedTimeOff, year, now) => {
   const holidaySet = getHolidaySet(parsedTimeOff, yearStart, yearEnd);
 
   // Attorney-independent: future flags + the fraction for someone with no OOO.
+  // Frozen because they're handed out by reference to every no-OOO user — the
+  // freeze turns the read-only contract into an enforced invariant.
   const future = [];
   const baseFractions = [];
   for (let mi = 0; mi < 12; mi++) {
@@ -63,6 +65,8 @@ export const computeMonthlyCapacity = (users, parsedTimeOff, year, now) => {
     future[mi] = isFuture;
     baseFractions[mi] = isFuture ? 0 : proRateMonth(year, mi + 1, range, holidaySet, EMPTY_OOO_SET).fraction;
   }
+  Object.freeze(future);
+  Object.freeze(baseFractions);
 
   const out = {};
   (users || []).forEach((u) => {
@@ -83,10 +87,13 @@ export const computeMonthlyCapacity = (users, parsedTimeOff, year, now) => {
 
 /**
  * Shared source of truth for the per-attorney, per-month "actual hours vs.
- * capacity-pro-rated target" data over a single calendar `year`. Reads entries,
- * time-off, and users from the Firestore cache and returns memoized:
+ * capacity-pro-rated target" data over a single calendar `year`. Reads entries
+ * and time-off from the Firestore cache; the caller passes the `users` cohort
+ * to compute capacity for, so a view can scope it to the rows it actually
+ * renders (e.g. with hidden attorneys already filtered out). Returns memoized:
  *   - actuals:  per userId → monthIdx → { client, ops } logged hours
  *   - capacity: per userId → { fractions[12], future[12] }
+ *   - loading:  whether the underlying entry collections are still loading
  * The caller combines these with its own target source (e.g. the editable
  * targets grid) to compute the variance.
  *
@@ -95,8 +102,10 @@ export const computeMonthlyCapacity = (users, parsedTimeOff, year, now) => {
  * they keep their own range-based aggregation and are not consumers of this
  * full-year hook.
  */
-export const useMonthlyActualsVsTarget = (year) => {
-  const { allBillableEntries, allOpsEntries, timeOff, users } = useFirestoreCache();
+export const useMonthlyActualsVsTarget = (year, users) => {
+  const { data: allBillableEntries, loading: billableLoading } = useAllBillableEntries();
+  const { data: allOpsEntries, loading: opsLoading } = useAllOpsEntries();
+  const { data: timeOff } = useTimeOff();
 
   const actuals = useMemo(
     () => bucketMonthlyHoursByUser(allBillableEntries, allOpsEntries, year),
@@ -105,12 +114,14 @@ export const useMonthlyActualsVsTarget = (year) => {
 
   const parsedTimeOff = useMemo(() => parseTimeOff(timeOff), [timeOff]);
 
+  // Capacity is the costly part (per-attorney month scans), so it's scoped to
+  // the `users` the caller will actually render — not the full cache roster.
   const capacity = useMemo(
     () => computeMonthlyCapacity(users, parsedTimeOff, year, getPSTDate()),
     [users, parsedTimeOff, year]
   );
 
-  return { actuals, capacity };
+  return { actuals, capacity, loading: billableLoading || opsLoading };
 };
 
 export default useMonthlyActualsVsTarget;

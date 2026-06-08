@@ -522,7 +522,7 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
 
   // Per-attorney, per-month actuals + capacity-pro-rated fractions for the
   // selected year. Shared hook so this isn't hand-rolled inline (see #1/#6).
-  const { actuals, capacity } = useMonthlyActualsVsTarget(selectedYear);
+  const { actuals, capacity } = useMonthlyActualsVsTarget(selectedYear, users);
 
   if (loading || usersLoading) {
     return (
