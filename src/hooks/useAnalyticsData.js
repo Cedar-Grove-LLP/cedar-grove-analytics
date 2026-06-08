@@ -154,6 +154,48 @@ export const useAnalyticsData = ({
     return { startDate, endDate, currentMonthKey, now };
   }, [dateRange, customDateStart, customDateEnd, allBillableEntries, allOpsEntries]);
 
+  // Equivalent prior window for period-over-period deltas (e.g. last-month May
+  // → prior April). all-time has no meaningful prior period.
+  const priorDateRangeInfo = useMemo(() => {
+    const now = getPSTDate();
+    const { startDate: curStart, endDate: curEnd } = dateRangeInfo;
+
+    if (dateRange === 'all-time' || !curStart || !curEnd) {
+      return { startDate: null, endDate: null, hasPrior: false };
+    }
+
+    // Completed calendar month → the whole previous calendar month.
+    if (dateRange === 'last-month') {
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0);
+      const endDate = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59, 999);
+      return { startDate, endDate, hasPrior: true };
+    }
+
+    // In-progress periods are partial (period start → now), so the prior window
+    // must cover the SAME elapsed span aligned to the start of the previous
+    // period — otherwise an 8-day month-to-date would compare against a full
+    // ~30-day month and the delta would be systematically negative.
+    const elapsedMs = curEnd.getTime() - curStart.getTime();
+    if (dateRange === 'current-month') {
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      const endDate = new Date(startDate.getTime() + elapsedMs);
+      return { startDate, endDate, hasPrior: true };
+    }
+    if (dateRange === 'current-week') {
+      const startDate = new Date(
+        curStart.getFullYear(), curStart.getMonth(), curStart.getDate() - 7, 0, 0, 0, 0
+      );
+      const endDate = new Date(startDate.getTime() + elapsedMs);
+      return { startDate, endDate, hasPrior: true };
+    }
+
+    // Fixed-length / already-complete windows (last-week, trailing-60, custom)
+    // → the equal-length window immediately before the current one.
+    const endDate = new Date(curStart.getTime() - 1);
+    const startDate = new Date(endDate.getTime() - elapsedMs);
+    return { startDate, endDate, hasPrior: true };
+  }, [dateRange, dateRangeInfo]);
+
   // Get list of all user names for global filter dropdown
   // Filter out hidden users from the UI display
   const allAttorneyNames = useMemo(() => {
@@ -195,6 +237,29 @@ export const useAnalyticsData = ({
 
     return entries;
   }, [allBillableEntries, dateRange, dateRangeInfo, globalAttorneyFilter, userMap]);
+
+  // Billable entries for the prior comparison window (same attorney filter as
+  // the current window) — powers the Active/Quiet period-over-period deltas.
+  const priorPeriodBillableEntries = useMemo(() => {
+    if (!allBillableEntries || !priorDateRangeInfo.hasPrior) return [];
+
+    const { startDate: rangeStart, endDate: rangeEnd } = priorDateRangeInfo;
+
+    let entries = allBillableEntries.filter(entry => {
+      const entryDate = getEntryDate(entry);
+      return entryDate >= rangeStart && entryDate <= rangeEnd;
+    });
+
+    // Filter by selected users (global filter) — mirror filteredBillableEntries.
+    if (globalAttorneyFilter.length > 0) {
+      entries = entries.filter(entry => {
+        const userName = userMap[entry.userId] || entry.userId;
+        return globalAttorneyFilter.includes(userName);
+      });
+    }
+
+    return entries;
+  }, [allBillableEntries, priorDateRangeInfo, globalAttorneyFilter, userMap]);
 
   // Filter ops entries based on date range and attorney filter
   const filteredOpsEntries = useMemo(() => {
@@ -1140,6 +1205,8 @@ export const useAnalyticsData = ({
     clientCounts,
     calculateUtilization,
     dateRangeInfo,
+    priorPeriodBillableEntries,
+    hasPriorPeriod: priorDateRangeInfo.hasPrior,
     totalGrossBillables,
     totalRevenueAccrued,
     periodRevenueAccrued,

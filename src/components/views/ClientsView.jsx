@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
-import { DateRangeIndicator } from '../shared';
+import { DateRangeIndicator, ClientStatCard } from '../shared';
 import { ClientsTable } from '../tables';
 import { ClientHoursChart, ServiceBreadthChart } from '../charts';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
@@ -10,13 +10,27 @@ import { useUsers } from '@/hooks/useFirestoreData';
 import { getEntryDate } from '@/utils/dateHelpers';
 import { RATING_RANK } from '@/utils/clientRating';
 
+// Sum billable hours per client name across a set of entries (used to decide
+// which clients were "active" in a given window).
+const sumHoursByClient = (entries) => {
+  const map = new Map();
+  (entries || []).forEach(entry => {
+    const hours = entry.billableHours || 0;
+    if (hours <= 0) return;
+    const name = entry.client || 'Unknown';
+    map.set(name, (map.get(name) || 0) + hours);
+  });
+  return map;
+};
+
 const ClientsView = ({
   dateRangeLabel,
   globalAttorneyFilter,
   allAttorneyNames,
   clientData,
-  clientCounts,
   filteredBillableEntries,
+  priorPeriodBillableEntries,
+  hasPriorPeriod,
 }) => {
   const [clientSearch, setClientSearch] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'totalHours', direction: 'desc' });
@@ -146,9 +160,11 @@ const ClientsView = ({
       filtered = filtered.filter(client => !isBillableClient(client));
     }
 
-    // Filter by ideal-client fit rating (untagged clients are excluded when a
-    // specific rating is selected)
-    if (ratingFilter !== 'all') {
+    // Filter by ideal-client fit rating. The TBD bucket also absorbs untagged
+    // clients, matching the "TBD · sample" KPI card (tbd + no-data).
+    if (ratingFilter === 'tbd') {
+      filtered = filtered.filter(client => !client.idealRating || client.idealRating === 'tbd');
+    } else if (ratingFilter !== 'all') {
       filtered = filtered.filter(client => client.idealRating === ratingFilter);
     }
 
@@ -201,6 +217,35 @@ const ClientsView = ({
   const activeCount = clientsWithBillables.filter(isBillableClient).length;
   const inactiveCount = clientsWithBillables.filter(c => !isBillableClient(c)).length;
 
+  // ---- KPI summary (Status + Ideal-fit) ---------------------------------
+  const bookTotal = clientsWithBillables.length;
+
+  // Clients active in the prior comparison window, measured over the *current*
+  // roster (no historical roster exists). bookTotal is constant across both
+  // windows, so the Quiet delta is exactly the mirror of the Active delta.
+  // Null (delta hidden) for all-time, and when the prior window holds no
+  // billable data at all (e.g. the earliest period) — comparing against an
+  // empty window would render a spurious "+N vs prior period".
+  const priorActiveCount = useMemo(() => {
+    if (!hasPriorPeriod || !priorPeriodBillableEntries?.length) return null;
+    const priorHours = sumHoursByClient(priorPeriodBillableEntries);
+    return clientsWithBillables.filter(c => (priorHours.get(c.name) || 0) > 0).length;
+  }, [hasPriorPeriod, priorPeriodBillableEntries, clientsWithBillables]);
+
+  const activeDelta = priorActiveCount === null ? null : activeCount - priorActiveCount;
+  const quietDelta = activeDelta === null ? null : -activeDelta;
+
+  // Ideal-client fit over the whole book; untagged clients fall into TBD so the
+  // three buckets always sum to bookTotal.
+  const idealCount = clientsWithBillables.filter(c => c.idealRating === 'ideal').length;
+  const nonIdealCount = clientsWithBillables.filter(c => c.idealRating === 'non-ideal').length;
+  const tbdCount = bookTotal - idealCount - nonIdealCount;
+
+  const pct = (n) => (bookTotal > 0 ? Math.round((n / bookTotal) * 100) : 0);
+
+  const isAttorneyFiltered = globalAttorneyFilter?.length > 0 &&
+    globalAttorneyFilter?.length < allAttorneyNames?.length;
+
   if (ratesLoading) {
     return (
       <div className="space-y-6">
@@ -220,90 +265,132 @@ const ClientsView = ({
 
   return (
     <div className="space-y-6">
-      <DateRangeIndicator
-        dateRangeLabel={dateRangeLabel}
-        entryCount={clientData?.length || 0}
-        globalAttorneyFilter={globalAttorneyFilter}
-        allAttorneyNames={allAttorneyNames}
-      />
+      {/* Reporting header */}
+      <div>
+        <p className="text-base text-cg-dark">
+          Showing data for{' '}
+          <span className="font-semibold text-cg-green">{dateRangeLabel}</span>
+        </p>
+        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+          <span className="w-2 h-2 rounded-full bg-cg-green inline-block" />
+          Totals update with the selected time range · deltas vs. prior period
+          {isAttorneyFiltered && (
+            <span className="text-cg-dark">
+              · Filtered to{' '}
+              {globalAttorneyFilter.length === 1
+                ? globalAttorneyFilter[0]
+                : `${globalAttorneyFilter.length} attorneys`}
+            </span>
+          )}
+        </p>
+      </div>
 
-      {/* Client Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-gray-600 text-sm">Active Clients</span>
-              <div className="text-3xl font-bold text-green-600 mt-2">{activeCount}</div>
-            </div>
-            <div className="text-gray-300 text-4xl font-light mx-4">/</div>
-            <div>
-              <span className="text-gray-600 text-sm">Quiet Clients</span>
-              <div className="text-3xl font-bold text-amber-600 mt-2">{inactiveCount}</div>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-gray-400 text-xs">
-                Total: {clientCounts.total} clients (Active + Quiet status)
-              </div>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {[
-                  { key: 'all', label: 'All' },
-                  { key: 'billable', label: 'Active' },
-                  { key: 'non-billable', label: 'Quiet' },
-                ].map(opt => (
-                  <button
-                    key={opt.key}
-                    onClick={() => setClientFilter(opt.key)}
-                    className={`px-3 py-1 text-xs font-medium transition-colors ${
-                      clientFilter === opt.key
-                        ? 'bg-gray-900 text-white'
-                        : 'bg-white text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="text-gray-400 text-xs">
-                Ideal-client fit
-              </div>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {[
-                  { key: 'all', label: 'All' },
-                  { key: 'ideal', label: 'Ideal' },
-                  { key: 'non-ideal', label: 'Non-Ideal' },
-                  { key: 'tbd', label: 'TBD' },
-                ].map(opt => (
-                  <button
-                    key={opt.key}
-                    onClick={() => setRatingFilter(opt.key)}
-                    className={`px-3 py-1 text-xs font-medium transition-colors ${
-                      ratingFilter === opt.key
-                        ? 'bg-gray-900 text-white'
-                        : 'bg-white text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+      {/* Status: Active vs Quiet */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          Status · {bookTotal} total clients
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <ClientStatCard
+            label="Active clients"
+            value={activeCount}
+            accent="green"
+            percent={pct(activeCount)}
+            percentLabel="of book"
+            delta={activeDelta}
+          />
+          <ClientStatCard
+            label="Quiet clients"
+            value={inactiveCount}
+            accent="amber"
+            percent={pct(inactiveCount)}
+            percentLabel="of book"
+            delta={quietDelta}
+          />
         </div>
+      </div>
 
-        <div className="bg-white p-6 rounded-lg shadow flex items-center">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search clients..."
-              value={clientSearch}
-              onChange={(e) => setClientSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+      {/* Ideal-client fit */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          Ideal-client fit
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <ClientStatCard
+            label="Ideal"
+            value={idealCount}
+            accent="green"
+            percent={pct(idealCount)}
+            percentLabel="· sample"
+          />
+          <ClientStatCard
+            label="Non-Ideal"
+            value={nonIdealCount}
+            accent="red"
+            percent={pct(nonIdealCount)}
+            percentLabel="· sample"
+          />
+          <ClientStatCard
+            label="TBD"
+            value={tbdCount}
+            accent="blue"
+            percent={pct(tbdCount)}
+            percentLabel="· sample"
+          />
+        </div>
+      </div>
+
+      {/* Search + filters */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full lg:max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search clients..."
+            value={clientSearch}
+            onChange={(e) => setClientSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cg-green focus:border-transparent"
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'billable', label: 'Active' },
+              { key: 'non-billable', label: 'Quiet' },
+            ].map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => setClientFilter(opt.key)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  clientFilter === opt.key
+                    ? 'bg-cg-green text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'ideal', label: 'Ideal' },
+              { key: 'non-ideal', label: 'Non-Ideal' },
+              { key: 'tbd', label: 'TBD' },
+            ].map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => setRatingFilter(opt.key)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  ratingFilter === opt.key
+                    ? 'bg-cg-green text-white'
+                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
