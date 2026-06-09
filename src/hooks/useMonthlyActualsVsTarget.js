@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useAllBillableEntries, useAllOpsEntries, useTimeOff } from '@/hooks/useFirestoreData';
 import { getEntryDate, getPSTDate } from '@/utils/dateHelpers';
-import { parseTimeOff, getHolidaySet, getOooSetFor, proRateMonth } from '@/utils/timeOff';
+import { parseTimeOff, getHolidaySet, getOooMapFor, proRateMonth } from '@/utils/timeOff';
 
-const EMPTY_OOO_SET = new Set();
+const EMPTY_OOO_MAP = new Map();
 
 /**
  * Bucket billable + ops entries into per-user, per-month hour sums for one
@@ -63,22 +63,22 @@ export const computeMonthlyCapacity = (users, parsedTimeOff, year, now) => {
   for (let mi = 0; mi < 12; mi++) {
     const isFuture = new Date(year, mi, 1).getTime() > now.getTime();
     future[mi] = isFuture;
-    baseFractions[mi] = isFuture ? 0 : proRateMonth(year, mi + 1, range, holidaySet, EMPTY_OOO_SET).fraction;
+    baseFractions[mi] = isFuture ? 0 : proRateMonth(year, mi + 1, range, holidaySet, EMPTY_OOO_MAP).fraction;
   }
   Object.freeze(future);
   Object.freeze(baseFractions);
 
   const out = {};
   (users || []).forEach((u) => {
-    const oooSet = getOooSetFor(parsedTimeOff, { name: u.name || u.id, email: u.email || '' });
-    if (!oooSet || oooSet.size === 0) {
+    const oooMap = getOooMapFor(parsedTimeOff, { name: u.name || u.id, email: u.email || '' });
+    if (!oooMap || oooMap.size === 0) {
       // No OOO → identical to the shared base (read-only, safe to share).
       out[u.id] = { fractions: baseFractions, future };
       return;
     }
     const fractions = [];
     for (let mi = 0; mi < 12; mi++) {
-      fractions[mi] = future[mi] ? 0 : proRateMonth(year, mi + 1, range, holidaySet, oooSet).fraction;
+      fractions[mi] = future[mi] ? 0 : proRateMonth(year, mi + 1, range, holidaySet, oooMap).fraction;
     }
     out[u.id] = { fractions, future };
   });
