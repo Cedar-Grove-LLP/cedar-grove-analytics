@@ -410,16 +410,24 @@ const CalendarTab = ({
   colorByName,
 }) => {
   const { year, month } = viewDate;
-  const firstDay = new Date(year, month, 1);
-  const startWeekday = firstDay.getDay(); // 0=Sun
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const todayKey = toKey(new Date());
 
-  // Build a flat list of cells (leading blanks + days), padded to full weeks.
+  // Build a flat list of cells (leading blanks + weekdays only), padded to
+  // full Mon–Fri weeks. Weekends are non-working days and are not shown.
+  const weekdayDays = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, month, d).getDay();
+    if (dow === 0 || dow === 6) continue; // skip Sat/Sun
+    weekdayDays.push(d);
+  }
   const cells = [];
-  for (let i = 0; i < startWeekday; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
+  if (weekdayDays.length) {
+    const firstDow = new Date(year, month, weekdayDays[0]).getDay(); // 1=Mon..5=Fri
+    for (let i = 0; i < firstDow - 1; i++) cells.push(null);
+  }
+  cells.push(...weekdayDays);
+  while (cells.length % 5 !== 0) cells.push(null);
 
   const goPrev = () => {
     const m = month - 1;
@@ -498,14 +506,14 @@ const CalendarTab = ({
 
       {/* Calendar grid */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-gray-200">
-          {WEEKDAYS.map((w) => (
+        <div className="grid grid-cols-5 border-b border-gray-200">
+          {WEEKDAYS.slice(1, 6).map((w) => (
             <div key={w} className="px-2 py-2 text-xs font-medium text-gray-500 text-center">
               {w}
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-7">
+        <div className="grid grid-cols-5">
           {cells.map((day, i) => {
             if (day === null) {
               return <div key={`b-${i}`} className="min-h-[96px] border-b border-r border-gray-100 bg-gray-50/40" />;
@@ -513,14 +521,10 @@ const CalendarTab = ({
             const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const cell = dayMap.get(key);
             const isToday = key === todayKey;
-            const dow = new Date(year, month, day).getDay();
-            const isWeekend = dow === 0 || dow === 6;
             return (
               <div
                 key={key}
-                className={`min-h-[96px] border-b border-r border-gray-100 p-1.5 ${
-                  isWeekend ? 'bg-gray-50/60' : 'bg-white'
-                }`}
+                className="min-h-[96px] border-b border-r border-gray-100 p-1.5 bg-white"
               >
                 <div className="flex items-center justify-between mb-1">
                   <span
