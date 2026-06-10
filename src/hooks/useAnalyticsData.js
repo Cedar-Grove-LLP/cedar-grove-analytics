@@ -34,7 +34,7 @@ export const useAnalyticsData = ({
   const { data: allDownloadEvents, loading: downloadsLoading } = useAllDownloadEvents();
   const { data: monthlyMetrics } = useMonthlyMetrics();
   const { data: timeOff } = useTimeOff();
-  const { getRate, loading: ratesLoading } = useAttorneyRates();
+  const { getRate, getRateInfo, loading: ratesLoading } = useAttorneyRates();
   const { allTargets: userTargets } = useFirestoreCache();
 
   // Parse OOO + holidays once per data load (memoized on the raw doc).
@@ -1179,6 +1179,47 @@ export const useAnalyticsData = ({
     return total;
   }, [filteredBillableEntries, userMap, getRate]);
 
+  // Attorneys with billable hours in the active range but no stored rate for
+  // those months (no exact match and no prior month to fall back to). These
+  // hours contribute $0 to every rate × hours figure, so the Overview surfaces
+  // them as an explicit warning instead of silently understating totals.
+  const missingRateWarnings = useMemo(() => {
+    const verdicts = new Map(); // `${userName}|${monthKey}` -> found boolean
+    const byUser = new Map();   // userName -> { monthKeys: Set, hours: number }
+
+    filteredBillableEntries.forEach(entry => {
+      const billableHours = entry.billableHours || 0;
+      if (billableHours <= 0) return;
+
+      const entryDate = getEntryDate(entry);
+      if (!entryDate) return;
+
+      const userName = userMap[entry.userId] || entry.userId;
+      const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
+      const verdictKey = `${userName}|${monthKey}`;
+
+      if (!verdicts.has(verdictKey)) {
+        verdicts.set(verdictKey, getRateInfo(userName, entryDate).found);
+      }
+      if (verdicts.get(verdictKey)) return;
+
+      if (!byUser.has(userName)) {
+        byUser.set(userName, { monthKeys: new Set(), hours: 0 });
+      }
+      const record = byUser.get(userName);
+      record.monthKeys.add(monthKey);
+      record.hours += billableHours;
+    });
+
+    return [...byUser.entries()]
+      .map(([userName, record]) => ({
+        userName,
+        monthKeys: [...record.monthKeys].sort(),
+        hours: record.hours,
+      }))
+      .sort((a, b) => a.userName.localeCompare(b.userName));
+  }, [filteredBillableEntries, userMap, getRateInfo]);
+
   // Calculate totals - use allAttorneyDataIncludingHidden for accurate totals
   const totals = useMemo(() => {
     const totalBillable = allAttorneyDataIncludingHidden.reduce((acc, att) => acc + att.billable, 0);
@@ -1243,6 +1284,7 @@ export const useAnalyticsData = ({
     totalRevenueAccrued,
     periodRevenueAccrued,
     periodAttorneyBillables,
+    missingRateWarnings,
     ...totals,
   };
 };

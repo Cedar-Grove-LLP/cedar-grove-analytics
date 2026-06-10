@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from 'react';
-import { Activity, Clock, Users, DollarSign } from 'lucide-react';
+import { Activity, Clock, Users, DollarSign, AlertTriangle } from 'lucide-react';
 import { formatCurrency, formatHours, formatTimeOffContext } from '../../utils/formatters';
+import { filterByCohort, deriveTransactionTotals } from '../../utils/cohortFilter.mjs';
 import { DateRangeIndicator } from '../shared';
 import { TopTransactionsChart, BillableVsOpsChart } from '../charts';
 
@@ -20,22 +21,6 @@ const COHORT_LABELS = {
   'full-team': 'full team',
 };
 
-const isLawyer = (member) => (member.role || 'Attorney') === 'Attorney';
-
-const filterByCohort = (members, cohort) => {
-  switch (cohort) {
-    case 'fte-lawyers':
-      return members.filter((m) => isLawyer(m) && m.employmentType === 'FTE');
-    case 'pte-lawyers':
-      return members.filter((m) => isLawyer(m) && m.employmentType === 'PTE');
-    case 'lawyers':
-      return members.filter(isLawyer);
-    case 'full-team':
-    default:
-      return members;
-  }
-};
-
 const OverviewView = ({
   dateRangeLabel,
   filteredEntriesCount,
@@ -45,11 +30,27 @@ const OverviewView = ({
   periodAttorneyBillables = null,
   attorneyData,
   transactionData,
+  missingRateWarnings = [],
+  isAdmin = false,
 }) => {
   const [cohort, setCohort] = useState('lawyers');
 
+  const cohortAttorneyData = useMemo(
+    () => filterByCohort(attorneyData || [], cohort),
+    [attorneyData, cohort]
+  );
+
+  // Cohort-scoped transaction totals for the chart. Full Team keeps the
+  // original transactionData (which includes Adjustment categories and the
+  // transaction attorney filter); sub-cohorts aggregate each member's
+  // per-category hours, which exclude Adjustments by design.
+  const cohortTransactionData = useMemo(
+    () => (cohort === 'full-team' ? transactionData : deriveTransactionTotals(cohortAttorneyData)),
+    [cohort, transactionData, cohortAttorneyData]
+  );
+
   const cohortMetrics = useMemo(() => {
-    const subset = filterByCohort(attorneyData || [], cohort);
+    const subset = cohortAttorneyData;
 
     const billable = subset.reduce((acc, a) => acc + (a.billable || 0), 0);
     const ops = subset.reduce((acc, a) => acc + (a.ops || 0), 0);
@@ -107,7 +108,7 @@ const OverviewView = ({
       holidayDays,
       attorneyCount: subset.length,
     };
-  }, [cohort, attorneyData, periodRevenueAccrued, periodAttorneyBillables]);
+  }, [cohort, cohortAttorneyData, periodRevenueAccrued, periodAttorneyBillables]);
 
   // Tooltip explaining the OOO/holiday adjustment behind the pace figures.
   const paceAdjustmentTitle = (cohortMetrics.oooDays > 0 || cohortMetrics.holidayDays > 0)
@@ -158,6 +159,29 @@ const OverviewView = ({
           ))}
         </div>
       </div>
+
+      {/* Missing billing rates make rate × hours figures silently understate —
+          surface them to admins instead (same amber styling as dataWarnings). */}
+      {isAdmin && missingRateWarnings.length > 0 && (
+        <div className="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+          <div className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600" />
+            <span>
+              {missingRateWarnings.length} attorney{missingRateWarnings.length === 1 ? ' has' : 's have'} no
+              billing rate for months in this range — Total Billables is understated.
+            </span>
+          </div>
+          <ul className="mt-2 ml-7 text-sm space-y-0.5">
+            {missingRateWarnings.map((warning) => (
+              <li key={warning.userName}>
+                <span className="font-medium">{warning.userName}</span>
+                {': '}{warning.monthKeys.join(', ')}
+                {` (${formatHours(warning.hours)}h unbilled at $0)`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* KPI Cards - keeping original colors */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -230,14 +254,14 @@ const OverviewView = ({
       </div>
 
       {/* Billable vs Ops Time by Attorney */}
-      <BillableVsOpsChart 
-        data={attorneyData}
+      <BillableVsOpsChart
+        data={cohortAttorneyData}
         title={`Billable vs Ops Time by Attorney - ${dateRangeLabel}`}
       />
 
       {/* Top Transactions */}
-      <TopTransactionsChart 
-        data={transactionData} 
+      <TopTransactionsChart
+        data={cohortTransactionData}
         title={`Top Transaction Types by Time - ${dateRangeLabel}`}
       />
     </div>

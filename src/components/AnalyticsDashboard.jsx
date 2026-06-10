@@ -192,6 +192,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
     hasPriorPeriod,
     periodRevenueAccrued,
     periodAttorneyBillables,
+    missingRateWarnings,
   } = useAnalyticsData({
     dateRange,
     customDateStart,
@@ -349,6 +350,8 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             periodAttorneyBillables={periodAttorneyBillables}
             attorneyData={attorneyData}
             transactionData={transactionData}
+            missingRateWarnings={missingRateWarnings}
+            isAdmin={isAdmin}
           />
         )}
 
