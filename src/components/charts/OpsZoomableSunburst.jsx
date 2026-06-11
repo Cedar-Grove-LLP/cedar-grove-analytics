@@ -4,6 +4,9 @@ import { useRef, useEffect, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { formatHours } from '../../utils/formatters';
 import { CHART_COLORS, GRAY } from '@/utils/colors';
+import { getSourceNote } from '@/utils/calcDefinitions.mjs';
+
+const SOURCE_NOTE = getSourceNote('opsHours');
 
 const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercentage = 5 }) => {
   const svgRef = useRef(null);
@@ -172,7 +175,7 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
         const pathStr = ancestors.slice(1).join(" → ");
         const hours = formatHours(d.value);
         const percentage = d.parent ? Math.round((d.value / d.parent.value) * 100) : 100;
-        return `${pathStr}\n${hours}h (${percentage}% of ${d.parent?.data.name || 'total'})`;
+        return `${pathStr}\n${hours}h (${percentage}% of ${d.parent?.data.name || 'total'})\n${SOURCE_NOTE}`;
       });
 
     // Click handler for zoom

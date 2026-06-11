@@ -16,7 +16,8 @@ import {
   isAttorneyHidden,
   shouldIncludeAttorneyData,
   filterHiddenAttorneys,
-} from '../utils/hiddenAttorneys';
+} from '../utils/hiddenAttorneys.mjs';
+import { monthKeyFromDate } from '../utils/rateLookup.mjs';
 import { getClientRating } from '../utils/clientRating';
 
 export const useAnalyticsData = ({
@@ -34,7 +35,7 @@ export const useAnalyticsData = ({
   const { data: allDownloadEvents, loading: downloadsLoading } = useAllDownloadEvents();
   const { data: monthlyMetrics } = useMonthlyMetrics();
   const { data: timeOff } = useTimeOff();
-  const { getRate, loading: ratesLoading } = useAttorneyRates();
+  const { getRate, getRateInfo, loading: ratesLoading } = useAttorneyRates();
   const { allTargets: userTargets } = useFirestoreCache();
 
   // Parse OOO + holidays once per data load (memoized on the raw doc).
@@ -673,6 +674,42 @@ export const useAnalyticsData = ({
     }).sort((a, b) => b.totalHours - a.totalHours);
   }, [filteredBillableEntries, transactionAttorneyFilter, userMap]);
 
+  // Per-member transaction breakdown for the Overview's cohort-scoped chart.
+  // Built from the same entries as transactionData (hidden/inactive attorneys
+  // included per the aggregate-totals convention, transaction attorney filter
+  // honored, Adjustment categories included), so totals derived from any
+  // cohort subset compose back to transactionData's per-category totals.
+  const transactionMemberData = useMemo(() => {
+    const byUser = new Map();
+
+    const entriesToProcess = transactionAttorneyFilter === 'all'
+      ? filteredBillableEntries
+      : filteredBillableEntries.filter(entry => {
+          const userName = userMap[entry.userId] || entry.userId;
+          return userName === transactionAttorneyFilter;
+        });
+
+    entriesToProcess.forEach(entry => {
+      const billableHours = entry.billableHours || 0;
+      if (billableHours <= 0) return;
+      const userName = userMap[entry.userId] || entry.userId;
+      const category = entry.billingCategory || 'Other';
+
+      if (!byUser.has(userName)) {
+        byUser.set(userName, {
+          name: userName,
+          role: getUserRole(userName),
+          employmentType: userEmploymentTypeMap[userName] || 'FTE',
+          transactions: {},
+        });
+      }
+      const member = byUser.get(userName);
+      member.transactions[category] = (member.transactions[category] || 0) + billableHours;
+    });
+
+    return [...byUser.values()];
+  }, [filteredBillableEntries, transactionAttorneyFilter, userMap, getUserRole, userEmploymentTypeMap]);
+
   // Process matter data (from billable entries only, grouped by matter name)
   const matterData = useMemo(() => {
     const matterStats = {};
@@ -1164,20 +1201,56 @@ export const useAnalyticsData = ({
   const periodRevenueAccrued = useMemo(() => computePeriodMetric('revenueAccrued'), [computePeriodMetric]);
   const periodAttorneyBillables = useMemo(() => computePeriodMetric('attorneyBillables'), [computePeriodMetric]);
 
-  // Calculate total gross billables (rate * hours) - includes all entries (hidden users too)
-  const totalGrossBillables = useMemo(() => {
+  // One pass over the in-range billable entries computes both the gross
+  // billables total (rate × hours — includes hidden users) AND the
+  // missing-rate warnings: attorneys whose hours bill at $0 because no
+  // usable rate covers those months (no exact match, and no prior month
+  // holding a nonzero rate to fall back to). Surfaced as an explicit warning
+  // instead of silently understating every rate × hours figure.
+  const grossBillablesInfo = useMemo(() => {
+    const rateInfoCache = new Map(); // `${userName}|${monthKey}` -> { rate, found }
+    const byUser = new Map();        // userName -> { monthKeys: Set, hours: number }
     let total = 0;
+
     filteredBillableEntries.forEach(entry => {
       const billableHours = entry.billableHours || 0;
-      if (billableHours > 0) {
-        const entryDate = getEntryDate(entry);
-        const userName = userMap[entry.userId] || entry.userId;
-        const rate = getRate(userName, entryDate);
-        total += rate * billableHours;
+      if (billableHours <= 0) return;
+
+      const entryDate = getEntryDate(entry);
+      const userName = userMap[entry.userId] || entry.userId;
+      const monthKey = monthKeyFromDate(entryDate);
+      if (!monthKey) return;
+
+      const cacheKey = `${userName}|${monthKey}`;
+      let info = rateInfoCache.get(cacheKey);
+      if (!info) {
+        info = getRateInfo(userName, entryDate);
+        rateInfoCache.set(cacheKey, info);
       }
+
+      total += info.rate * billableHours;
+      if (info.found) return;
+
+      if (!byUser.has(userName)) {
+        byUser.set(userName, { monthKeys: new Set(), hours: 0 });
+      }
+      const record = byUser.get(userName);
+      record.monthKeys.add(monthKey);
+      record.hours += billableHours;
     });
-    return total;
-  }, [filteredBillableEntries, userMap, getRate]);
+
+    const warnings = [...byUser.entries()]
+      .map(([userName, record]) => ({
+        userName,
+        monthKeys: [...record.monthKeys].sort(),
+        hours: record.hours,
+      }))
+      .sort((a, b) => a.userName.localeCompare(b.userName));
+
+    return { totalGrossBillables: total, missingRateWarnings: warnings };
+  }, [filteredBillableEntries, userMap, getRateInfo]);
+
+  const { totalGrossBillables, missingRateWarnings } = grossBillablesInfo;
 
   // Calculate totals - use allAttorneyDataIncludingHidden for accurate totals
   const totals = useMemo(() => {
@@ -1229,6 +1302,7 @@ export const useAnalyticsData = ({
     filteredOpsEntries,
     attorneyData,
     transactionData,
+    transactionMemberData,
     matterData,
     downloadData,
     attorneyDownloadData,
@@ -1243,6 +1317,7 @@ export const useAnalyticsData = ({
     totalRevenueAccrued,
     periodRevenueAccrued,
     periodAttorneyBillables,
+    missingRateWarnings,
     ...totals,
   };
 };

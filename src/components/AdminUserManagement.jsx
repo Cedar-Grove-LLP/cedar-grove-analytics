@@ -7,7 +7,7 @@ import { ArrowLeft, LogOut, Users, UserPlus, Shield } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useUsers } from '@/hooks/useFirestoreData';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
-import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys';
+import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys.mjs';
 import RoleManagementTab from '@/components/admin/RoleManagementTab';
 import AddUserTab from '@/components/admin/AddUserTab';
 import ManageAdminsTab from '@/components/admin/ManageAdminsTab';

@@ -1,25 +1,27 @@
 "use client";
 
 import { useState, useMemo } from 'react';
-import { 
-  FileText, 
-  Calendar, 
-  Building2, 
+import {
+  FileText,
+  Calendar,
+  Building2,
   DollarSign,
   Clock,
   User,
-  Download
+  Download,
+  AlertTriangle
 } from 'lucide-react';
 import { useAllBillableEntries, useUsers } from '@/hooks/useFirestoreData';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { getEntryDate } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours, formatDate } from '@/utils/formatters';
+import { CalcTooltip } from '../shared';
 import MonthlyAttorneyBillables from './MonthlyAttorneyBillables';
 
 const BillingSummariesView = () => {
   const { data: allEntries, loading: entriesLoading, error: entriesError } = useAllBillableEntries();
   const { users: firebaseUsers } = useUsers();
-  const { getRate, rates, loading: ratesLoading } = useAttorneyRates();
+  const { getRateInfo, rates, loading: ratesLoading } = useAttorneyRates();
 
   // Build userId -> display name map
   const userMap = useMemo(() => {
@@ -96,13 +98,15 @@ const BillingSummariesView = () => {
         const attorneyName = userMap[entry.userId] || entry.userId;
         const billableHours = entry.billableHours || 0;
         
-        // Get the rate for this attorney and month
-        const rate = getRate(attorneyName, entryDate);
-        
+        // Rate for this attorney and month; found:false means these hours
+        // bill at $0 (no usable rate) and must be flagged, not hidden.
+        const { rate, found: rateFound } = getRateInfo(attorneyName, entryDate);
+
         return {
           ...entry,
           attorneyName,
           rate,
+          rateMissing: !rateFound && billableHours > 0,
           billableHours,
           grossBillables: rate * billableHours,
           date: entryDate,
@@ -111,7 +115,21 @@ const BillingSummariesView = () => {
         };
       })
       .sort((a, b) => a.date - b.date);
-  }, [allEntries, selectedMonth, selectedClient, getRate, userMap]);
+  }, [allEntries, selectedMonth, selectedClient, getRateInfo, userMap]);
+
+  // Attorneys in the rendered selection whose hours bill at $0 because no
+  // usable rate covers the month — mirrors the Overview's admin banner so
+  // invoice prep never relies on a silently understated Amount column.
+  const missingRateAttorneys = useMemo(() => {
+    const byName = new Map();
+    filteredEntries.forEach(entry => {
+      if (!entry.rateMissing) return;
+      byName.set(entry.attorneyName, (byName.get(entry.attorneyName) || 0) + entry.billableHours);
+    });
+    return [...byName.entries()]
+      .map(([name, hours]) => ({ name, hours }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredEntries]);
 
   // Calculate totals
   const totals = useMemo(() => {
@@ -252,6 +270,22 @@ const BillingSummariesView = () => {
       {/* Results */}
       {selectedMonth && selectedClient && (
         <>
+          {/* Rows below bill at $0 when no usable rate covers the month —
+              flag it where invoices are prepared (same styling as the
+              Overview banner). */}
+          {missingRateAttorneys.length > 0 && (
+            <div className="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+              <div className="flex items-center gap-2 font-medium">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600" />
+                <span>
+                  No billing rate covers {formatMonthDisplay(selectedMonth)} for{' '}
+                  {missingRateAttorneys.map((a) => `${a.name} (${formatHours(a.hours)}h)`).join(', ')} —
+                  their Amounts below read $0 and the totals are understated.
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white p-4 rounded-lg shadow">
@@ -264,7 +298,10 @@ const BillingSummariesView = () => {
 
             <div className="bg-white p-4 rounded-lg shadow">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-cg-dark text-sm font-medium">Total Hours</span>
+                <span className="text-cg-dark text-sm font-medium inline-flex items-center gap-1">
+                  Total Hours
+                  <CalcTooltip calcKey="billableHours" position="bottom" />
+                </span>
                 <Clock className="w-5 h-5 text-purple-500" />
               </div>
               <div className="text-2xl font-bold text-cg-black">{formatHours(totals.hours)}h</div>
@@ -272,7 +309,10 @@ const BillingSummariesView = () => {
 
             <div className="bg-white p-4 rounded-lg shadow">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-cg-dark text-sm font-medium">Total Billables</span>
+                <span className="text-cg-dark text-sm font-medium inline-flex items-center gap-1">
+                  Total Billables
+                  <CalcTooltip calcKey="grossBillables" position="bottom" />
+                </span>
                 <DollarSign className="w-5 h-5 text-green-500" />
               </div>
               <div className="text-2xl font-bold text-green-600">{formatCurrency(totals.grossBillables)}</div>
@@ -316,13 +356,22 @@ const BillingSummariesView = () => {
                         Attorney
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Rate
+                        <span className="inline-flex items-center gap-1">
+                          Rate
+                          <CalcTooltip calcKey="billingRate" position="bottom" />
+                        </span>
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Hours
+                        <span className="inline-flex items-center gap-1">
+                          Hours
+                          <CalcTooltip calcKey="billableHours" position="bottom" align="right" />
+                        </span>
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Amount
+                        <span className="inline-flex items-center gap-1">
+                          Amount
+                          <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+                        </span>
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Category

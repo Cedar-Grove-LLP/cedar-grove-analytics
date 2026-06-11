@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
 import { formatCurrency, formatHours } from '../../utils/formatters';
 import { getUtilizationBgColor } from '@/utils/statusStyles';
+import { CalcTooltip } from '../shared';
 
 const AttorneysTable = ({
   attorneys,
@@ -39,31 +40,46 @@ const AttorneysTable = ({
               onClick={() => onSort('billable')}
               className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
             >
-              Billable {getSortIndicator('billable')}
+              <span className="inline-flex items-center gap-1">
+                Billable {getSortIndicator('billable')}
+                <CalcTooltip calcKey="billableHours" position="bottom" />
+              </span>
             </th>
             <th 
               onClick={() => onSort('ops')}
               className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
             >
-              Ops {getSortIndicator('ops')}
+              <span className="inline-flex items-center gap-1">
+                Ops {getSortIndicator('ops')}
+                <CalcTooltip calcKey="opsHours" position="bottom" />
+              </span>
             </th>
             <th 
               onClick={() => onSort('total')}
               className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
             >
-              Total {getSortIndicator('total')}
+              <span className="inline-flex items-center gap-1">
+                Total {getSortIndicator('total')}
+                <CalcTooltip calcKey="totalHours" position="bottom" />
+              </span>
             </th>
             <th 
               onClick={() => onSort('earnings')}
               className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
             >
-              Earnings {getSortIndicator('earnings')}
+              <span className="inline-flex items-center gap-1">
+                Earnings {getSortIndicator('earnings')}
+                <CalcTooltip calcKey="earnings" position="bottom" />
+              </span>
             </th>
             <th 
               onClick={() => onSort('utilization')}
               className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
             >
-              Util. {getSortIndicator('utilization')}
+              <span className="inline-flex items-center gap-1">
+                Util. {getSortIndicator('utilization')}
+                <CalcTooltip calcKey="utilizationPct" position="bottom" />
+              </span>
             </th>
             <th className="w-[30%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
               Top Transactions

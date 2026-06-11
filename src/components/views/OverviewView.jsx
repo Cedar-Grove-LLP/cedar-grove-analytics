@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from 'react';
-import { Activity, Clock, Users, DollarSign } from 'lucide-react';
+import { Activity, Clock, Users, DollarSign, AlertTriangle } from 'lucide-react';
 import { formatCurrency, formatHours, formatTimeOffContext } from '../../utils/formatters';
-import { DateRangeIndicator } from '../shared';
+import { filterByCohort, deriveTransactionTotals } from '../../utils/cohortFilter.mjs';
+import { DateRangeIndicator, CalcTooltip } from '../shared';
 import { TopTransactionsChart, BillableVsOpsChart } from '../charts';
 
 const COHORT_OPTIONS = [
@@ -20,21 +21,17 @@ const COHORT_LABELS = {
   'full-team': 'full team',
 };
 
-const isLawyer = (member) => (member.role || 'Attorney') === 'Attorney';
-
-const filterByCohort = (members, cohort) => {
-  switch (cohort) {
-    case 'fte-lawyers':
-      return members.filter((m) => isLawyer(m) && m.employmentType === 'FTE');
-    case 'pte-lawyers':
-      return members.filter((m) => isLawyer(m) && m.employmentType === 'PTE');
-    case 'lawyers':
-      return members.filter(isLawyer);
-    case 'full-team':
-    default:
-      return members;
-  }
-};
+// Header row shared by the five inline KPI cards below (kept local — these
+// cards predate the shared KPICard and keep their own colors/layout).
+const KpiTitle = ({ label, calcKey, icon }) => (
+  <div className="flex items-center justify-between mb-1">
+    <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
+      {label}
+      <CalcTooltip calcKey={calcKey} position="bottom" />
+    </span>
+    {icon}
+  </div>
+);
 
 const OverviewView = ({
   dateRangeLabel,
@@ -44,12 +41,29 @@ const OverviewView = ({
   periodRevenueAccrued = null,
   periodAttorneyBillables = null,
   attorneyData,
-  transactionData,
+  transactionMemberData,
+  missingRateWarnings = [],
+  isAdmin = false,
 }) => {
   const [cohort, setCohort] = useState('lawyers');
 
+  const cohortAttorneyData = useMemo(
+    () => filterByCohort(attorneyData || [], cohort),
+    [attorneyData, cohort]
+  );
+
+  // Cohort-scoped transaction totals for the chart. Every cohort (full-team
+  // included) derives from the same per-member dataset, which keeps hidden
+  // attorneys in the aggregates, honors the transaction attorney filter, and
+  // includes Adjustment categories — so cohort charts compose to the
+  // full-team totals.
+  const cohortTransactionData = useMemo(
+    () => deriveTransactionTotals(filterByCohort(transactionMemberData || [], cohort)),
+    [transactionMemberData, cohort]
+  );
+
   const cohortMetrics = useMemo(() => {
-    const subset = filterByCohort(attorneyData || [], cohort);
+    const subset = cohortAttorneyData;
 
     const billable = subset.reduce((acc, a) => acc + (a.billable || 0), 0);
     const ops = subset.reduce((acc, a) => acc + (a.ops || 0), 0);
@@ -71,18 +85,22 @@ const OverviewView = ({
     let grossBillables;
     let billablesLabel;
     let billablesSubtitle;
+    let billablesCalcKey;
     if (isFullTeam && periodAttorneyBillables != null) {
       grossBillables = periodAttorneyBillables;
       billablesLabel = 'Total Billables';
       billablesSubtitle = 'Firm-wide';
+      billablesCalcKey = 'totalBillablesAttorney';
     } else if (isFullTeam && periodRevenueAccrued != null) {
       grossBillables = periodRevenueAccrued;
       billablesLabel = 'Revenue Accrued';
       billablesSubtitle = 'Firm-wide';
+      billablesCalcKey = 'totalBillablesRevenueAccrued';
     } else {
       grossBillables = grossBillablesSum;
       billablesLabel = 'Total Billables';
       billablesSubtitle = 'Rate × Hours';
+      billablesCalcKey = 'totalBillablesRateTimesHours';
     }
 
     // Exclude members with no target this period (fully out of office) so their
@@ -102,12 +120,13 @@ const OverviewView = ({
       grossBillables,
       billablesLabel,
       billablesSubtitle,
+      billablesCalcKey,
       utilization,
       oooDays,
       holidayDays,
       attorneyCount: subset.length,
     };
-  }, [cohort, attorneyData, periodRevenueAccrued, periodAttorneyBillables]);
+  }, [cohort, cohortAttorneyData, periodRevenueAccrued, periodAttorneyBillables]);
 
   // Tooltip explaining the OOO/holiday adjustment behind the pace figures.
   const paceAdjustmentTitle = (cohortMetrics.oooDays > 0 || cohortMetrics.holidayDays > 0)
@@ -159,13 +178,39 @@ const OverviewView = ({
         </div>
       </div>
 
+      {/* Missing billing rates make rate × hours figures silently understate —
+          surface them to admins instead (same amber styling as dataWarnings). */}
+      {isAdmin && missingRateWarnings.length > 0 && (
+        <div className="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+          <div className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600" />
+            <span>
+              {missingRateWarnings.length} attorney{missingRateWarnings.length === 1 ? ' has' : 's have'} no
+              billing rate for months in this range —{' '}
+              {cohortMetrics.billablesCalcKey === 'totalBillablesRateTimesHours'
+                // Only the rate × hours figure is understated; the firm-wide
+                // sheet figures shown for month-aligned Full Team ranges are
+                // synced literals and unaffected.
+                ? 'Total Billables is understated.'
+                : 'rate × hours figures (sub-cohorts, custom ranges, detail pages) bill those hours at $0.'}
+            </span>
+          </div>
+          <ul className="mt-2 ml-7 text-sm space-y-0.5">
+            {missingRateWarnings.map((warning) => (
+              <li key={warning.userName}>
+                <span className="font-medium">{warning.userName}</span>
+                {': '}{warning.monthKeys.join(', ')}
+                {` (${formatHours(warning.hours)}h unbilled at $0)`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* KPI Cards - keeping original colors */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium">Avg Utilization</span>
-            <Activity className="w-5 h-5 text-blue-500" />
-          </div>
+          <KpiTitle label="Avg Utilization" calcKey="utilizationPct" icon={<Activity className="w-5 h-5 text-blue-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{cohortMetrics.utilization}%</div>
           </div>
@@ -175,10 +220,7 @@ const OverviewView = ({
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium">Time Split</span>
-            <Clock className="w-5 h-5 text-purple-500" />
-          </div>
+          <KpiTitle label="Time Split" calcKey="timeSplitPct" icon={<Clock className="w-5 h-5 text-purple-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-baseline gap-1.5">
               <div className="text-3xl font-bold text-gray-600">{billablePercentage}%</div>
@@ -190,38 +232,35 @@ const OverviewView = ({
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium">Total Billable</span>
-            <Clock className="w-5 h-5 text-green-500" />
-          </div>
+          <KpiTitle label="Total Billable" calcKey="billableHours" icon={<Clock className="w-5 h-5 text-green-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{formatHours(cohortMetrics.billable)}h</div>
           </div>
-          <div
-            className={`text-sm text-gray-600 text-center${paceAdjustmentTitle ? ' underline decoration-dotted decoration-gray-300 cursor-help' : ''}`}
-            title={paceAdjustmentTitle}
-          >{billableProgress}% current pace</div>
+          <div className="text-sm text-gray-600 text-center">
+            <CalcTooltip calcKey="pacePct" dynamic={{ context: paceAdjustmentTitle }} variant="underline">
+              {billableProgress}% current pace
+            </CalcTooltip>
+          </div>
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium">Total Ops</span>
-            <Users className="w-5 h-5 text-orange-500" />
-          </div>
+          <KpiTitle label="Total Ops" calcKey="opsHours" icon={<Users className="w-5 h-5 text-orange-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{formatHours(cohortMetrics.ops)}h</div>
           </div>
-          <div
-            className={`text-sm text-gray-600 text-center${paceAdjustmentTitle ? ' underline decoration-dotted decoration-gray-300 cursor-help' : ''}`}
-            title={paceAdjustmentTitle}
-          >{opsProgress}% current pace</div>
+          <div className="text-sm text-gray-600 text-center">
+            <CalcTooltip calcKey="pacePct" dynamic={{ context: paceAdjustmentTitle }} variant="underline">
+              {opsProgress}% current pace
+            </CalcTooltip>
+          </div>
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium">{cohortMetrics.billablesLabel}</span>
-            <DollarSign className="w-5 h-5 text-emerald-500" />
-          </div>
+          <KpiTitle
+            label={cohortMetrics.billablesLabel}
+            calcKey={cohortMetrics.billablesCalcKey}
+            icon={<DollarSign className="w-5 h-5 text-emerald-500" />}
+          />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{formatCurrency(cohortMetrics.grossBillables)}</div>
           </div>
@@ -230,14 +269,14 @@ const OverviewView = ({
       </div>
 
       {/* Billable vs Ops Time by Attorney */}
-      <BillableVsOpsChart 
-        data={attorneyData}
+      <BillableVsOpsChart
+        data={cohortAttorneyData}
         title={`Billable vs Ops Time by Attorney - ${dateRangeLabel}`}
       />
 
       {/* Top Transactions */}
-      <TopTransactionsChart 
-        data={transactionData} 
+      <TopTransactionsChart
+        data={cohortTransactionData}
         title={`Top Transaction Types by Time - ${dateRangeLabel}`}
       />
     </div>

@@ -6,6 +6,7 @@ import { formatCurrency, formatHours } from '../../utils/formatters';
 import { getStatusBadge } from '@/utils/statusStyles';
 import { getClientRatingBadge, RATING_LABEL } from '@/utils/clientRating';
 import { ClientRowTooltip } from '../tooltips';
+import { CalcTooltip } from '../shared';
 
 const ClientsTable = ({
   clients,
@@ -40,7 +41,10 @@ const ClientsTable = ({
               onClick={() => onSort('status')}
               className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
-              Status {getSortIndicator('status')}
+              <span className="inline-flex items-center gap-1">
+                Status {getSortIndicator('status')}
+                <CalcTooltip calcKey="activeClients" position="bottom" />
+              </span>
             </th>
             <th
               onClick={() => onSort('idealRating')}
@@ -52,13 +56,19 @@ const ClientsTable = ({
               onClick={() => onSort('billableHours')}
               className="w-[16%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
-              Billable Hours {getSortIndicator('billableHours')}
+              <span className="inline-flex items-center gap-1">
+                Billable Hours {getSortIndicator('billableHours')}
+                <CalcTooltip calcKey="billableHours" position="bottom" />
+              </span>
             </th>
             <th
               onClick={() => onSort('grossBillables')}
               className="w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
-              Billables {getSortIndicator('grossBillables')}
+              <span className="inline-flex items-center gap-1">
+                Billables {getSortIndicator('grossBillables')}
+                <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+              </span>
             </th>
             <th
               onClick={() => onSort('lastActivity')}

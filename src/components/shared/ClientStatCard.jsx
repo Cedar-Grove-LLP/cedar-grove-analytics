@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowUp, ArrowDown } from 'lucide-react';
+import CalcTooltip from './CalcTooltip';
 
 // Accent palette keyed to the app's semantic color tokens (globals.css). Use
 // full, static class strings only — Tailwind's JIT cannot see class names that
@@ -44,6 +45,7 @@ function DeltaBadge({ value }) {
  * @param {number}  props.percent      0-100, drives the bar width and caption
  * @param {string}  props.percentLabel e.g. "of book" | "· sample"
  * @param {?number} props.delta        signed delta vs. prior period; null hides it
+ * @param {?object} props.info         calculation tooltip: { calcKey, dynamic? }
  */
 const ClientStatCard = ({
   label,
@@ -52,19 +54,25 @@ const ClientStatCard = ({
   percent = 0,
   percentLabel = '',
   delta = null,
+  info = null,
 }) => {
   const a = ACCENT[accent] || ACCENT.green;
   const width = Math.min(Math.max(percent || 0, 0), 100);
   const displayPct = Math.round(width);
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div className={`h-1.5 ${a.bg}`} />
+    // No overflow-hidden here — it would clip the calc tooltip popover; the
+    // accent bar carries its own top rounding instead.
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className={`h-1.5 rounded-t-lg ${a.bg}`} />
       <div className="p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${a.bg}`} />
-            <span className="text-sm font-medium text-cg-dark">{label}</span>
+            <span className="text-sm font-medium text-cg-dark inline-flex items-center gap-1">
+              {label}
+              {info && <CalcTooltip {...info} variant="icon" position="bottom" align="left" />}
+            </span>
           </div>
           <DeltaBadge value={delta} />
         </div>

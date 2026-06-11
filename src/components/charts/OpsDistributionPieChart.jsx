@@ -2,6 +2,29 @@
 
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { CHART_COLORS, LABEL_LINE_COLOR, TOOLTIP_BORDER } from '@/utils/colors';
+import { getSourceNote } from '@/utils/calcDefinitions.mjs';
+import { SourceNote } from '../tooltips';
+
+const SOURCE_NOTE = getSourceNote('opsHours');
+
+// Inline tooltip mirroring the previous native formatter ("name : valueh",
+// item text in the slice color) plus the muted source/provenance line.
+const OpsPieTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div
+        className="bg-white p-3 shadow-lg"
+        style={{ borderRadius: '8px', border: `1px solid ${TOOLTIP_BORDER}` }}
+      >
+        <p className="text-sm" style={{ color: payload[0].payload?.fill || payload[0].color }}>
+          {payload[0].name} : {payload[0].value}h
+        </p>
+        <SourceNote sourceNote={SOURCE_NOTE} />
+      </div>
+    );
+  }
+  return null;
+};
 
 const OpsDistributionPieChart = ({ data, title = "Ops Time Distribution" }) => {
   // Custom label for pie chart - only show for slices >= 5%
@@ -47,10 +70,7 @@ const OpsDistributionPieChart = ({ data, title = "Ops Time Distribution" }) => {
               <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
             ))}
           </Pie>
-          <Tooltip 
-            formatter={(value, name) => [`${value}h`, name]}
-            contentStyle={{ borderRadius: '8px', border: `1px solid ${TOOLTIP_BORDER}` }}
-          />
+          <Tooltip content={<OpsPieTooltip />} />
           <Legend 
             layout="horizontal" 
             align="center" 

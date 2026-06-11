@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { DateRangeIndicator } from '../shared';
+import { DateRangeIndicator, CalcTooltip } from '../shared';
 import { DownloadsTable } from '../tables';
 import { TopDownloadsChart } from '../charts';
 
@@ -187,7 +187,11 @@ const DownloadsView = ({
           <div className="bg-white rounded-lg shadow px-6 py-4">
             <h3 className="text-lg font-semibold text-gray-900">{selectedFolderData?.folderName}</h3>
             <div className="flex gap-6 mt-1 text-sm text-gray-500">
-              <span>{selectedFolderData?.downloads} downloads</span>
+              <span>
+                <CalcTooltip calcKey="downloads" variant="underline" position="bottom">
+                  {selectedFolderData?.downloads} downloads
+                </CalcTooltip>
+              </span>
               <span>{selectedFolderData?.uniqueFiles} files</span>
               <span>{selectedFolderData?.uniqueUsers} users</span>
             </div>
@@ -226,7 +230,12 @@ const DownloadsView = ({
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Per Attorney</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    <span className="inline-flex items-center gap-1">
+                      Per Attorney
+                      <CalcTooltip calcKey="downloads" position="bottom" />
+                    </span>
+                  </h3>
                   <p className="text-xs text-gray-500">Who downloaded what, broken down by folder</p>
                 </div>
                 <div className="flex items-center gap-2 text-sm">

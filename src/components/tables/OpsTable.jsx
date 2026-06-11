@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { OpsRowTooltip } from '../tooltips';
+import { CalcTooltip } from '../shared';
 
 const OpsTable = ({ 
   opsData, 
@@ -31,13 +32,19 @@ const OpsTable = ({
               onClick={() => onSort('hours')}
               className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-24"
             >
-              Hours {getSortIndicator('hours')}
+              <span className="inline-flex items-center gap-1">
+                Hours {getSortIndicator('hours')}
+                <CalcTooltip calcKey="opsHours" position="bottom" align="right" />
+              </span>
             </th>
             <th 
               onClick={() => onSort('percentage')}
               className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-20"
             >
-              % {getSortIndicator('percentage')}
+              <span className="inline-flex items-center gap-1">
+                % {getSortIndicator('percentage')}
+                <CalcTooltip calcKey="pctOfTotalOps" position="bottom" align="right" />
+              </span>
             </th>
           </tr>
         </thead>

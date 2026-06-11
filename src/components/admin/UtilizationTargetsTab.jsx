@@ -6,6 +6,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, waitForAuth } from '@/firebase/config';
 import { formatHours } from '@/utils/formatters';
 import { useMonthlyActualsVsTarget } from '@/hooks/useMonthlyActualsVsTarget';
+import { CalcTooltip } from '@/components/shared';
 
 const MONTHS = [
   { idx: 0, short: 'Jan', long: 'January' },
@@ -309,7 +310,12 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
                 <td rowSpan={3} className="px-2 py-0.5 font-medium text-gray-900 whitespace-nowrap border-r-2 border-cg-dark text-sm align-middle">
                   {u.name || u.id}
                 </td>
-                <td className="px-1 py-0.5 text-[10px] text-gray-500 text-right whitespace-nowrap">Target</td>
+                <td className="px-1 py-0.5 text-[10px] text-gray-500 text-right whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1">
+                    Target
+                    <CalcTooltip calcKey="targetHours" position="bottom" />
+                  </span>
+                </td>
                 {visibleMonths.map((m, colIdx) => {
                   const cell = userMatrix[m.idx] || { client: '', ops: '' };
                   const clientCol = colIdx * 2;
@@ -364,7 +370,18 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
               </tr>
 
               <MetricRow label="Actual" visibleMonths={visibleMonths} showMonthTotals={showMonthTotals} cell={actualCell} summary={actualSummary} />
-              <MetricRow label="Δ" visibleMonths={visibleMonths} showMonthTotals={showMonthTotals} cell={deltaCell} summary={deltaSummary} />
+              <MetricRow
+                label={(
+                  <span className="inline-flex items-center gap-1">
+                    Δ
+                    <CalcTooltip calcKey="targetVariance" position="bottom" />
+                  </span>
+                )}
+                visibleMonths={visibleMonths}
+                showMonthTotals={showMonthTotals}
+                cell={deltaCell}
+                summary={deltaSummary}
+              />
             </Fragment>
           );
         })}

@@ -4,7 +4,8 @@ import { useMemo } from 'react';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { getEntryDate } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours } from '@/utils/formatters';
-import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys';
+import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys.mjs';
+import { CalcTooltip } from '@/components/shared';
 
 const MAX_RANK = 19;
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -196,13 +197,43 @@ const ProjectedEarningsTable = () => {
           <thead className="bg-cg-green text-white">
             <tr>
               <th className="px-3 py-2 text-left font-semibold">Attorney</th>
-              <th className="px-3 py-2 text-right font-semibold">Current Rate</th>
+              <th className="px-3 py-2 text-right font-semibold">
+                <span className="inline-flex items-center gap-1">
+                  Current Rate
+                  <CalcTooltip calcKey="billingRate" position="bottom" />
+                </span>
+              </th>
               <th className="px-3 py-2 text-center font-semibold">Level (Now → EOY)</th>
-              <th className="px-3 py-2 text-right font-semibold">YTD Hours</th>
-              <th className="px-3 py-2 text-right font-semibold">YTD Earnings</th>
-              <th className="px-3 py-2 text-right font-semibold">Projected Hours</th>
-              <th className="px-3 py-2 text-right font-semibold">Projected Earnings</th>
-              <th className="px-3 py-2 text-right font-semibold">Predicted Total</th>
+              <th className="px-3 py-2 text-right font-semibold">
+                <span className="inline-flex items-center gap-1">
+                  YTD Hours
+                  <CalcTooltip calcKey="billableHours" position="bottom" />
+                </span>
+              </th>
+              <th className="px-3 py-2 text-right font-semibold">
+                <span className="inline-flex items-center gap-1">
+                  YTD Earnings
+                  <CalcTooltip calcKey="earnings" position="bottom" />
+                </span>
+              </th>
+              <th className="px-3 py-2 text-right font-semibold">
+                <span className="inline-flex items-center gap-1">
+                  Projected Hours
+                  <CalcTooltip calcKey="projectedHours" position="bottom" />
+                </span>
+              </th>
+              <th className="px-3 py-2 text-right font-semibold">
+                <span className="inline-flex items-center gap-1">
+                  Projected Earnings
+                  <CalcTooltip calcKey="projectedEarnings" position="bottom" align="right" />
+                </span>
+              </th>
+              <th className="px-3 py-2 text-right font-semibold">
+                <span className="inline-flex items-center gap-1">
+                  Predicted Total
+                  <CalcTooltip calcKey="predictedTotal" position="bottom" align="right" />
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">

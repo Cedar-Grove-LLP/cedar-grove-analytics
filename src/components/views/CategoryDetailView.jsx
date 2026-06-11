@@ -8,7 +8,7 @@ import { useAllBillableEntries, useUsers } from '@/hooks/useFirestoreData';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { getEntryDate, getPSTDate, getDateRangeLabel } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours } from '@/utils/formatters';
-import { DateRangeDropdown } from '@/components/shared';
+import { DateRangeDropdown, CalcTooltip } from '@/components/shared';
 import { MatterRowTooltip } from '@/components/tooltips';
 
 const CategoryDetailView = ({ categoryName }) => {
@@ -266,7 +266,10 @@ const CategoryDetailView = ({ categoryName }) => {
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">{categoryName}</h1>
                   <p className="text-sm text-gray-500">
-                    {matterBreakdown.length} matter{matterBreakdown.length !== 1 ? 's' : ''} &middot; {formatHours(totalHours)}h total
+                    {matterBreakdown.length} matter{matterBreakdown.length !== 1 ? 's' : ''} &middot;{' '}
+                    <CalcTooltip calcKey="billableHours" variant="underline" position="bottom">
+                      {formatHours(totalHours)}h total
+                    </CalcTooltip>
                   </p>
                 </div>
               </div>
@@ -310,7 +313,10 @@ const CategoryDetailView = ({ categoryName }) => {
                       onClick={() => handleSort('avgHours')}
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
-                      Avg Hours{getSortIndicator('avgHours')}
+                      <span className="inline-flex items-center gap-1">
+                        Avg Hours{getSortIndicator('avgHours')}
+                        <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
+                      </span>
                     </th>
                     <th
                       onClick={() => handleSort('count')}
@@ -322,19 +328,28 @@ const CategoryDetailView = ({ categoryName }) => {
                       onClick={() => handleSort('totalHours')}
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
-                      Total Hours{getSortIndicator('totalHours')}
+                      <span className="inline-flex items-center gap-1">
+                        Total Hours{getSortIndicator('totalHours')}
+                        <CalcTooltip calcKey="billableHours" position="bottom" />
+                      </span>
                     </th>
                     <th
                       onClick={() => handleSort('grossBillables')}
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
-                      Total Earnings{getSortIndicator('grossBillables')}
+                      <span className="inline-flex items-center gap-1">
+                        Total Earnings{getSortIndicator('grossBillables')}
+                        <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+                      </span>
                     </th>
                     <th
                       onClick={() => handleSort('percentage')}
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
-                      % of Total{getSortIndicator('percentage')}
+                      <span className="inline-flex items-center gap-1">
+                        % of Total{getSortIndicator('percentage')}
+                        <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
+                      </span>
                     </th>
                   </tr>
                 </thead>

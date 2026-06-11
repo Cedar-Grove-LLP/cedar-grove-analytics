@@ -3,6 +3,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from '../tooltips';
 import { CHART } from '@/utils/colors';
+import { getSourceNote } from '@/utils/calcDefinitions.mjs';
 
 const TopTransactionsChart = ({ data, title = "Top Transaction Types by Time" }) => {
   return (
@@ -13,7 +14,7 @@ const TopTransactionsChart = ({ data, title = "Top Transaction Types by Time" })
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="type" angle={-15} textAnchor="end" height={80} />
           <YAxis />
-          <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<CustomTooltip sourceNote={getSourceNote('billableHours')} />} />
           <Legend />
           <Bar dataKey="totalHours" fill={CHART.ops} name="Total Hours" />
         </BarChart>

@@ -39,7 +39,7 @@ import { DATE_RANGE_OPTIONS } from '@/utils/constants';
 import { CHART_COLORS, CHART, GRAY, LABEL_LINE_COLOR, TOOLTIP_BORDER } from '@/utils/colors';
 import { getStatusBadge } from '@/utils/statusStyles';
 import { getClientRating, getClientRatingBadge, RATING_LABEL } from '@/utils/clientRating';
-import { DateRangeDropdown } from '@/components/shared';
+import { DateRangeDropdown, CalcTooltip } from '@/components/shared';
 
 // Custom tooltip for charts - defined outside component to prevent re-creation on render
 const CustomChartTooltip = ({ active, payload, label }) => {
@@ -576,7 +576,10 @@ const ClientDetailView = ({ clientName }) => {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600 text-sm font-medium">Billable Hours</span>
+              <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
+                Billable Hours
+                <CalcTooltip calcKey="billableHours" position="bottom" />
+              </span>
               <Clock className="w-5 h-5 text-blue-500" />
             </div>
             <div className="text-2xl font-bold text-gray-900">{formatHours(clientStats.billableHours)}h</div>
@@ -587,7 +590,10 @@ const ClientDetailView = ({ clientName }) => {
 
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600 text-sm font-medium">Gross Billables</span>
+              <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
+                Gross Billables
+                <CalcTooltip calcKey="grossBillables" position="bottom" />
+              </span>
               <DollarSign className="w-5 h-5 text-green-500" />
             </div>
             <div className="text-2xl font-bold text-green-600">{formatCurrency(clientStats.grossBillables)}</div>
@@ -605,7 +611,10 @@ const ClientDetailView = ({ clientName }) => {
 
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600 text-sm font-medium">Avg Hours/Txn</span>
+              <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
+                Avg Hours/Txn
+                <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
+              </span>
               <TrendingUp className="w-5 h-5 text-orange-500" />
             </div>
             <div className="text-2xl font-bold text-gray-900">{formatHours(clientStats.avgHoursPerTransaction)}h</div>
@@ -735,9 +744,24 @@ const ClientDetailView = ({ clientName }) => {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Count</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Hours</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Gross Billables</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">%</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        <span className="inline-flex items-center gap-1">
+                          Hours
+                          <CalcTooltip calcKey="billableHours" position="bottom" />
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        <span className="inline-flex items-center gap-1">
+                          Gross Billables
+                          <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        <span className="inline-flex items-center gap-1">
+                          %
+                          <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
+                        </span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -769,9 +793,24 @@ const ClientDetailView = ({ clientName }) => {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attorney</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Billable Hours</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Gross Billables</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">% of Total</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Billable Hours
+                        <CalcTooltip calcKey="billableHours" position="bottom" />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Gross Billables
+                        <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        % of Total
+                        <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -818,8 +857,18 @@ const ClientDetailView = ({ clientName }) => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attorney</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Hours</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Gross Billables</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Hours
+                        <CalcTooltip calcKey="billableHours" position="bottom" align="right" />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Gross Billables
+                        <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+                      </span>
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
                   </tr>
                 </thead>

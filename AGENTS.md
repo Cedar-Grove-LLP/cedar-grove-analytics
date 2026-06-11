@@ -55,7 +55,7 @@ src/
     ├── constants.js        # Colors, date range options, periods
     ├── dateHelpers.js      # Business day math, US holidays
     ├── formatters.js       # Currency and number formatting
-    ├── hiddenAttorneys.js  # Attorneys hidden from UI after a date
+    ├── hiddenAttorneys.mjs  # Attorneys hidden from UI after a date
     └── roles.js            # Role overrides for non-attorney staff
 ```
 
@@ -116,7 +116,7 @@ Legacy field names (`hours`, `secondaryHours`) are normalized to `billableHours`
 - **Date filtering:** All-time, current month, trailing 60 days, or custom range. Filters applied in `useAnalyticsData`.
 - **Attorney filtering:** Global filter dropdown affects all views; some views have additional local filters.
 - **Target pro-rating:** Utilization targets are pro-rated by business days elapsed in the current period, accounting for US federal holidays.
-- **Hidden attorneys:** Configured in `hiddenAttorneys.js` with date thresholds. Hidden from UI but included in aggregate totals.
+- **Hidden attorneys:** Configured in `hiddenAttorneys.mjs` with date thresholds. Hidden from UI but included in aggregate totals.
 - **Role overrides:** `roles.js` maps non-attorney staff to custom display roles.
 
 ## Environment Variables

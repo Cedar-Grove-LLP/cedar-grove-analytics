@@ -4,6 +4,12 @@ import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { PerBarTooltip } from '../tooltips';
 import { CHART } from '@/utils/colors';
+import { getSourceNote } from '@/utils/calcDefinitions.mjs';
+
+const SOURCE_NOTES = {
+  billable: getSourceNote('billableHours'),
+  ops: getSourceNote('opsHours'),
+};
 
 const BillableVsOpsChart = ({ data, title = "Billable vs Ops Time by Attorney" }) => {
   const [hoveredBarKey, setHoveredBarKey] = useState(null);
@@ -24,7 +30,12 @@ const BillableVsOpsChart = ({ data, title = "Billable vs Ops Time by Attorney" }
           <XAxis dataKey="name" angle={-15} textAnchor="end" height={100} />
           <YAxis />
           <Tooltip 
-            content={<PerBarTooltip hoveredDataKey={hoveredBarKey} />}
+            content={
+              <PerBarTooltip
+                hoveredDataKey={hoveredBarKey}
+                sourceNote={SOURCE_NOTES[hoveredBarKey] || getSourceNote('totalHours')}
+              />
+            }
             cursor={{ fill: 'rgba(0,0,0,0.05)' }}
           />
           <Legend />

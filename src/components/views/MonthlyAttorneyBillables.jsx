@@ -6,6 +6,7 @@ import { useMonthlyMetrics } from '@/hooks/useFirestoreData';
 import { getMonthNumber } from '@/utils/dateHelpers';
 import { formatCurrency } from '@/utils/formatters';
 import { hasAttorneyBillables } from '@/utils/billingSummary';
+import { CalcTooltip } from '../shared';
 
 // Firm-wide Attorney Billables by month, pulled directly from the source
 // sheet (monthlyMetrics/all). Self-contained: its own month selector,
@@ -101,7 +102,10 @@ const MonthlyAttorneyBillables = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="text-sm font-medium text-cg-dark">Attorney Billables</div>
+              <div className="text-sm font-medium text-cg-dark inline-flex items-center gap-1">
+                Attorney Billables
+                <CalcTooltip calcKey="totalBillablesAttorney" position="bottom" />
+              </div>
               <div className="text-xs text-gray-500">{periodLabel}</div>
             </div>
             <div className="text-3xl font-bold text-cg-green tabular-nums">

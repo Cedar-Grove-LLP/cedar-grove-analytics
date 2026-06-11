@@ -298,6 +298,7 @@ const ClientsView = ({
             percent={pct(activeCount)}
             percentLabel="of book"
             delta={activeDelta}
+            info={{ calcKey: 'activeClients' }}
           />
           <ClientStatCard
             label="Quiet clients"
@@ -306,6 +307,7 @@ const ClientsView = ({
             percent={pct(inactiveCount)}
             percentLabel="of book"
             delta={quietDelta}
+            info={{ calcKey: 'quietClients' }}
           />
         </div>
       </div>
@@ -322,6 +324,7 @@ const ClientsView = ({
             accent="green"
             percent={pct(idealCount)}
             percentLabel="· sample"
+            info={{ calcKey: 'pctOfBookClients' }}
           />
           <ClientStatCard
             label="Non-Ideal"
@@ -329,6 +332,7 @@ const ClientsView = ({
             accent="red"
             percent={pct(nonIdealCount)}
             percentLabel="· sample"
+            info={{ calcKey: 'pctOfBookClients' }}
           />
           <ClientStatCard
             label="TBD"
@@ -336,6 +340,7 @@ const ClientsView = ({
             accent="blue"
             percent={pct(tbdCount)}
             percentLabel="· sample"
+            info={{ calcKey: 'pctOfBookClients' }}
           />
         </div>
       </div>

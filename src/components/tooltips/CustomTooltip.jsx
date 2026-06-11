@@ -1,7 +1,10 @@
 import { formatCurrency, formatHours } from '../../utils/formatters';
+import SourceNote from './SourceNote';
 
-// Custom tooltip formatter for charts - shows only the hovered item
-const CustomTooltip = ({ active, payload, label }) => {
+// Custom tooltip formatter for charts - shows only the hovered item.
+// `sourceNote` (see utils/calcDefinitions.mjs getSourceNote) appends one muted
+// line stating the formula/provenance of the plotted value.
+const CustomTooltip = ({ active, payload, label, sourceNote }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
@@ -11,6 +14,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             {entry.name}: {entry.name.toLowerCase().includes('earning') ? formatCurrency(entry.value) : `${formatHours(entry.value)}h`}
           </p>
         ))}
+        <SourceNote sourceNote={sourceNote} />
       </div>
     );
   }

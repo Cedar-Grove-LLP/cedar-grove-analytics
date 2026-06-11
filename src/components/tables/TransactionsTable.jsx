@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { formatCurrency, formatHours } from '../../utils/formatters';
 import { TransactionRowTooltip } from '../tooltips';
+import { CalcTooltip } from '../shared';
 
 const TransactionsTable = ({
   transactions,
@@ -34,7 +35,10 @@ const TransactionsTable = ({
               onClick={() => onSort('avgHours')}
               className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
-              Avg Hours {getSortIndicator('avgHours')}
+              <span className="inline-flex items-center gap-1">
+                Avg Hours {getSortIndicator('avgHours')}
+                <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
+              </span>
             </th>
             <th
               onClick={() => onSort('count')}
@@ -46,19 +50,28 @@ const TransactionsTable = ({
               onClick={() => onSort('totalHours')}
               className="w-[14%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
-              Total Hours {getSortIndicator('totalHours')}
+              <span className="inline-flex items-center gap-1">
+                Total Hours {getSortIndicator('totalHours')}
+                <CalcTooltip calcKey="billableHours" position="bottom" />
+              </span>
             </th>
             <th
               onClick={() => onSort('totalEarnings')}
               className="w-[18%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
-              Total Earnings {getSortIndicator('totalEarnings')}
+              <span className="inline-flex items-center gap-1">
+                Total Earnings {getSortIndicator('totalEarnings')}
+                <CalcTooltip calcKey="earnings" position="bottom" align="right" />
+              </span>
             </th>
             <th
               onClick={() => onSort('percentage')}
               className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
-              % of Total {getSortIndicator('percentage')}
+              <span className="inline-flex items-center gap-1">
+                % of Total {getSortIndicator('percentage')}
+                <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
+              </span>
             </th>
           </tr>
         </thead>

@@ -2,31 +2,7 @@
 
 import { useMemo, useCallback } from 'react';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
-
-/**
- * Given a rates map ({ monthKey -> { rate } }) and a target monthKey,
- * returns the rate for that month. If no exact match, falls back to
- * the most recent prior month's rate.
- */
-function findRate(ratesMap, monthKey) {
-  if (!ratesMap) return 0;
-
-  const exactRate = ratesMap[monthKey]?.rate;
-  if (exactRate) return exactRate;
-
-  // Find the most recent month key before the requested one
-  const sortedKeys = Object.keys(ratesMap).sort();
-  let fallbackKey = null;
-  for (const key of sortedKeys) {
-    if (key < monthKey) {
-      fallbackKey = key;
-    } else {
-      break;
-    }
-  }
-
-  return fallbackKey ? (ratesMap[fallbackKey]?.rate || 0) : 0;
-}
+import { findRate, findRateInfo, monthKeyFromDate } from '@/utils/rateLookup.mjs';
 
 /**
  * Hook to get all user billing rates from the shared cache.
@@ -49,30 +25,23 @@ export function useAttorneyRates() {
       return 0;
     }
 
-    let dateObj;
-
-    // Handle Firestore Timestamp
-    if (date && typeof date === 'object' && date.seconds) {
-      dateObj = new Date(date.seconds * 1000);
-    } else if (date instanceof Date) {
-      dateObj = date;
-    } else if (typeof date === 'string') {
-      dateObj = new Date(date);
-    } else if (date && typeof date === 'object' && date.toDate) {
-      dateObj = date.toDate();
-    } else {
+    const monthKey = monthKeyFromDate(date);
+    if (!monthKey) {
       return 0;
     }
-
-    if (isNaN(dateObj.getTime())) {
-      return 0;
-    }
-
-    const year = dateObj.getFullYear();
-    const month = dateObj.getMonth() + 1;
-    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
 
     return findRate(allRates[userName], monthKey);
+  }, [allRates]);
+
+  // Like getRate, but reports whether a rate actually existed for the
+  // requested month (exact or backward fallback) so callers can warn on
+  // gaps instead of treating a missing rate as a silent $0.
+  const getRateInfo = useCallback((userName, date) => {
+    const requestedMonthKey = monthKeyFromDate(date);
+    if (!userName || !allRates[userName] || !requestedMonthKey) {
+      return { rate: 0, found: false, sourceMonthKey: null, requestedMonthKey };
+    }
+    return findRateInfo(allRates[userName], requestedMonthKey);
   }, [allRates]);
 
   const calculateGrossBillables = useCallback((entry) => {
@@ -102,6 +71,7 @@ export function useAttorneyRates() {
     loading,
     error,
     getRate,
+    getRateInfo,
     calculateGrossBillables,
   };
 }
@@ -118,27 +88,10 @@ export function useAttorneyRatesByName(userName) {
   }, [allRates, userName]);
 
   const getRate = useCallback((date) => {
-    let dateObj;
-
-    if (date && typeof date === 'object' && date.seconds) {
-      dateObj = new Date(date.seconds * 1000);
-    } else if (date instanceof Date) {
-      dateObj = date;
-    } else if (typeof date === 'string') {
-      dateObj = new Date(date);
-    } else if (date && typeof date === 'object' && date.toDate) {
-      dateObj = date.toDate();
-    } else {
+    const monthKey = monthKeyFromDate(date);
+    if (!monthKey) {
       return 0;
     }
-
-    if (isNaN(dateObj.getTime())) {
-      return 0;
-    }
-
-    const year = dateObj.getFullYear();
-    const month = dateObj.getMonth() + 1;
-    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
 
     return findRate(rates, monthKey);
   }, [rates]);

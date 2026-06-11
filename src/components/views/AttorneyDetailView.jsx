@@ -49,7 +49,7 @@ import {
 import { formatCurrency, formatHours, formatDate, formatTimeOffContext } from '@/utils/formatters';
 import { CHART_COLORS, CHART, GRAY, LABEL_LINE_COLOR } from '@/utils/colors';
 import { getUtilizationColor, getUtilizationBgColor, getProgressBarColor } from '@/utils/statusStyles';
-import { DateRangeDropdown } from '@/components/shared';
+import { DateRangeDropdown, CalcTooltip } from '@/components/shared';
 
 // Custom tooltip for charts - defined outside component to prevent re-creation on render
 const CustomChartTooltip = ({ active, payload, label }) => {
@@ -515,6 +515,11 @@ const AttorneyDetailView = ({ attorneyName }) => {
 
   const dateRangeLabel = getDateRangeLabel(dateRange, customDateStart, customDateEnd);
 
+  // OOO/holiday context for the target tooltips (mirrors the visible note).
+  const targetAdjustmentContext = (calculatedTargets.oooDays > 0 || calculatedTargets.holidayDays > 0)
+    ? `Targets reflect ${formatTimeOffContext(calculatedTargets.oooDays, calculatedTargets.holidayDays)} this period`
+    : undefined;
+
 
   if (loading) {
     return (
@@ -651,9 +656,14 @@ const AttorneyDetailView = ({ attorneyName }) => {
               <div className={`text-4xl font-bold ${attorneyStats.utilization === null ? 'text-gray-400' : getUtilizationColor(attorneyStats.utilization)}`}>
                 {attorneyStats.utilization === null ? '-' : attorneyStats.utilization}%
               </div>
-              <div className="text-sm text-gray-500 mt-1">Overall Utilization</div>
+              <div className="text-sm text-gray-500 mt-1 inline-flex items-center gap-1">
+                Overall Utilization
+                <CalcTooltip calcKey="utilizationPct" position="bottom" />
+              </div>
               <div className="text-xs text-gray-400 mt-1">
-                {formatHours(attorneyStats.totalHours)}h / {formatHours(calculatedTargets.totalTarget)}h target
+                <CalcTooltip calcKey="proRatedTarget" dynamic={{ context: targetAdjustmentContext }} variant="underline">
+                  {formatHours(attorneyStats.totalHours)}h / {formatHours(calculatedTargets.totalTarget)}h target
+                </CalcTooltip>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                 <div
@@ -668,9 +678,14 @@ const AttorneyDetailView = ({ attorneyName }) => {
               <div className={`text-4xl font-bold ${attorneyStats.billableUtilization === null ? 'text-gray-400' : getUtilizationColor(attorneyStats.billableUtilization)}`}>
                 {attorneyStats.billableUtilization === null ? '-' : attorneyStats.billableUtilization}%
               </div>
-              <div className="text-sm text-gray-500 mt-1">Billable Utilization</div>
+              <div className="text-sm text-gray-500 mt-1 inline-flex items-center gap-1">
+                Billable Utilization
+                <CalcTooltip calcKey="utilizationPct" position="bottom" />
+              </div>
               <div className="text-xs text-gray-400 mt-1">
-                {formatHours(attorneyStats.billableHours)}h / {formatHours(calculatedTargets.billableTarget)}h target
+                <CalcTooltip calcKey="proRatedTarget" dynamic={{ context: targetAdjustmentContext }} variant="underline">
+                  {formatHours(attorneyStats.billableHours)}h / {formatHours(calculatedTargets.billableTarget)}h target
+                </CalcTooltip>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                 <div
@@ -685,9 +700,14 @@ const AttorneyDetailView = ({ attorneyName }) => {
               <div className={`text-4xl font-bold ${attorneyStats.opsUtilization === null ? 'text-gray-400' : getUtilizationColor(attorneyStats.opsUtilization)}`}>
                 {attorneyStats.opsUtilization === null ? '-' : attorneyStats.opsUtilization}%
               </div>
-              <div className="text-sm text-gray-500 mt-1">Ops Utilization</div>
+              <div className="text-sm text-gray-500 mt-1 inline-flex items-center gap-1">
+                Ops Utilization
+                <CalcTooltip calcKey="utilizationPct" position="bottom" />
+              </div>
               <div className="text-xs text-gray-400 mt-1">
-                {formatHours(attorneyStats.opsHours)}h / {formatHours(calculatedTargets.opsTarget)}h target
+                <CalcTooltip calcKey="proRatedTarget" dynamic={{ context: targetAdjustmentContext }} variant="underline">
+                  {formatHours(attorneyStats.opsHours)}h / {formatHours(calculatedTargets.opsTarget)}h target
+                </CalcTooltip>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                 <div
@@ -703,7 +723,10 @@ const AttorneyDetailView = ({ attorneyName }) => {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600 text-sm font-medium">Total Hours</span>
+              <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
+                Total Hours
+                <CalcTooltip calcKey="totalHours" position="bottom" />
+              </span>
               <Clock className="w-5 h-5 text-blue-500" />
             </div>
             <div className="text-2xl font-bold text-gray-900">{formatHours(attorneyStats.totalHours)}h</div>
@@ -714,7 +737,10 @@ const AttorneyDetailView = ({ attorneyName }) => {
 
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600 text-sm font-medium">Earnings</span>
+              <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
+                Earnings
+                <CalcTooltip calcKey="earnings" position="bottom" />
+              </span>
               <DollarSign className="w-5 h-5 text-green-500" />
             </div>
             <div className="text-2xl font-bold text-green-600">{formatCurrency(attorneyStats.totalEarnings)}</div>
@@ -732,7 +758,10 @@ const AttorneyDetailView = ({ attorneyName }) => {
 
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600 text-sm font-medium">Avg Hours/Matter</span>
+              <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
+                Avg Hours/Matter
+                <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
+              </span>
               <TrendingUp className="w-5 h-5 text-orange-500" />
             </div>
             <div className="text-2xl font-bold text-gray-900">{formatHours(attorneyStats.avgHoursPerMatter)}h</div>
@@ -902,9 +931,24 @@ const AttorneyDetailView = ({ attorneyName }) => {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Hours</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Earnings</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">% of Total</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Hours
+                        <CalcTooltip calcKey="billableHours" position="bottom" />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Earnings
+                        <CalcTooltip calcKey="earnings" position="bottom" align="right" />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        % of Total
+                        <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -951,9 +995,24 @@ const AttorneyDetailView = ({ attorneyName }) => {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Count</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Hours</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Earnings</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">% of Billable</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Hours
+                        <CalcTooltip calcKey="billableHours" position="bottom" />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Earnings
+                        <CalcTooltip calcKey="earnings" position="bottom" align="right" />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        % of Billable
+                        <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
+                      </span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1000,9 +1059,24 @@ const AttorneyDetailView = ({ attorneyName }) => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Billable</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ops</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Earnings</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Billable
+                        <CalcTooltip calcKey="billableHours" position="bottom" />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Ops
+                        <CalcTooltip calcKey="opsHours" position="bottom" align="right" />
+                      </span>
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <span className="inline-flex items-center gap-1">
+                        Earnings
+                        <CalcTooltip calcKey="entryEarnings" position="bottom" align="right" />
+                      </span>
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
                   </tr>
                 </thead>
