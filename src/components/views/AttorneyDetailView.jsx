@@ -946,7 +946,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         % of Total
-                        <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
+                        <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
                       </span>
                     </th>
                   </tr>
@@ -1010,7 +1010,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         % of Billable
-                        <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
+                        <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
                       </span>
                     </th>
                   </tr>

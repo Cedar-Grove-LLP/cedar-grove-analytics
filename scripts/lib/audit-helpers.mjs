@@ -12,7 +12,7 @@
  *  - summarizeMonthDoc        mirrors FirestoreDataContext sheetTotals checks (round2)
  */
 
-import { findRateInfo } from '../../src/utils/rateLookup.mjs';
+import { findRateInfo, monthKeyFromDate } from '../../src/utils/rateLookup.mjs';
 
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -153,7 +153,9 @@ export function windowStats({ billableDocs = [], opsDocs = [] }, ratesMap, windo
       if (hours <= 0) return;
 
       billableHours += hours;
-      const monthKey = monthKeyOf(date.getFullYear(), date.getMonth() + 1);
+      // Same formatter the app's rate lookup uses — the keys MUST match
+      // findRateInfo's expectations or the audit diverges from app behavior.
+      const monthKey = monthKeyFromDate(date);
       monthKeysWithHours.add(monthKey);
 
       const info = findRateInfo(ratesMap || {}, monthKey);

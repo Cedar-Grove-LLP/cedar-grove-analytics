@@ -759,7 +759,7 @@ const ClientDetailView = ({ clientName }) => {
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         <span className="inline-flex items-center gap-1">
                           %
-                          <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
+                          <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
                         </span>
                       </th>
                     </tr>
@@ -808,7 +808,7 @@ const ClientDetailView = ({ clientName }) => {
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         % of Total
-                        <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
+                        <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
                       </span>
                     </th>
                   </tr>

@@ -181,6 +181,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
     filteredOpsEntries,
     attorneyData,
     transactionData,
+    transactionMemberData,
     matterData,
     downloadData,
     attorneyDownloadData,
@@ -349,7 +350,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             periodRevenueAccrued={periodRevenueAccrued}
             periodAttorneyBillables={periodAttorneyBillables}
             attorneyData={attorneyData}
-            transactionData={transactionData}
+            transactionMemberData={transactionMemberData}
             missingRateWarnings={missingRateWarnings}
             isAdmin={isAdmin}
           />

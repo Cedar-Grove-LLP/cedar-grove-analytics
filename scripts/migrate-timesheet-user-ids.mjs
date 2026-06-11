@@ -28,7 +28,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { parseArgs } from 'node:util';
+import { parseArgs, isDeepStrictEqual } from 'node:util';
 import { loadEnvFile } from './lib/env.mjs';
 import { getDb } from './lib/firestore.mjs';
 import { summarizeMonthDoc } from './lib/audit-helpers.mjs';
@@ -92,10 +92,11 @@ for (const [source, target] of Object.entries(mapping)) {
 }
 if (invalid) process.exit(1);
 
-// Roughly compare two month docs ignoring volatile sync metadata.
+// Compare two month docs ignoring volatile sync metadata. Deep equality —
+// not JSON.stringify — so field insertion order can't fake a conflict.
 const sameDocData = (a, b) => {
   const strip = ({ syncedAt, lastSyncedAt, ...rest }) => rest;
-  return JSON.stringify(strip(a)) === JSON.stringify(strip(b));
+  return isDeepStrictEqual(strip(a), strip(b));
 };
 
 // ----------------------------------------------------------- plan + execute
@@ -162,20 +163,25 @@ for (const [source, target] of Object.entries(mapping)) {
       totals.deleted += 1;
       await commitIfFull();
     }
-    // Delete the source parent doc only when it's a stub and everything under
-    // it was migrated this run.
+    // Flush ALL pending deletes before counting — the shared batch may hold
+    // deletes queued above (or commit mid-loop at the 400-op boundary), and
+    // a count taken against a partially-applied state could wrongly delete
+    // the parent doc while conflicted month docs still exist beneath it.
+    await commitIfFull(true);
+    // Delete the source parent doc only when it's a stub and nothing remains
+    // under it (conflicted/unmigrated docs keep the parent alive).
     if (sourceUserDoc.exists && sourceIsStub) {
       const remaining = await Promise.all(
         TIMESHEET_COLLECTIONS.map((t) => sourceUserRef.collection(t).count().get())
       );
       const remainingDocs = remaining.reduce((acc, r) => acc + r.data().count, 0);
-      if (remainingDocs === copiedDocRefs.length) {
+      if (remainingDocs === 0) {
         pendingBatch.delete(sourceUserRef);
         pendingOps += 1;
         console.log(`  users/${source} stub doc: will delete`);
         await commitIfFull();
       } else {
-        console.log(`  users/${source} stub doc: kept (${remainingDocs - copiedDocRefs.length} unmigrated docs remain)`);
+        console.log(`  users/${source} stub doc: kept (${remainingDocs} unmigrated docs remain)`);
       }
     }
   }

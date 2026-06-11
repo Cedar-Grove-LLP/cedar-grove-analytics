@@ -71,7 +71,9 @@ test('getCalcTooltipLines orders label, formula, inputs, source, notes, dynamic 
 test('admin-entered values say explicitly they are not synced from sheets', () => {
   const rate = getCalcTooltipLines('billingRate');
   assert.ok(rate.some((l) => l.includes('not synced from Google Sheets')));
-  assert.ok(rate.some((l) => l.includes("take-home rate and is NOT this billing rate")));
+  assert.ok(rate.some((l) => l.includes('is NOT this billing rate')));
+  // The cell coordinates must come from formatSheetRef, not hand-typed prose.
+  assert.ok(rate.some((l) => l.includes('(B2 in current layout / B4 in legacy layout)')));
 });
 
 test('getSourceNote returns one compact newline-free line for every key', () => {

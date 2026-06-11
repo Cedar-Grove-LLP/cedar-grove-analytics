@@ -16,7 +16,7 @@
  *
  * What it reports:
  *   1. Every users/{id} doc: role, employmentType (flagging the missing→FTE
- *      read default), active flag, legacy hiddenAttorneys.js status, and
+ *      read default), active flag, legacy hiddenAttorneys.mjs status, and
  *      rates[] coverage (count, earliest/latest month).
  *   2. Per user: billables/ops/eightThreeB month docs — entry counts, summed
  *      hours, sheetTotals mismatches (same round-to-2 rule as the app).
@@ -48,11 +48,7 @@ import {
   formatTable,
 } from './lib/audit-helpers.mjs';
 
-// Mirror of src/utils/hiddenAttorneys.js HIDDEN_ATTORNEYS (that file is not
-// importable from Node — package.json has no "type":"module"). Keep in sync.
-const HIDDEN_ATTORNEYS = [
-  { name: 'Martyna Skrodzka', hideBefore: new Date('2026-01-01T00:00:00') },
-];
+import { HIDDEN_ATTORNEYS } from '../src/utils/hiddenAttorneys.mjs';
 
 const hiddenStatus = (name) => {
   const config = HIDDEN_ATTORNEYS.find((a) => a.name === name);
@@ -127,10 +123,12 @@ heading('Per-user month docs (billables / ops / eightThreeB)');
 const userReports = [];
 for (const user of users) {
   const docsByType = {};
-  for (const type of TIMESHEET_COLLECTIONS) {
-    const snap = await db.collection('users').doc(user.id).collection(type).get();
-    docsByType[type] = snap.docs.map((d) => ({ docId: d.id, data: d.data() }));
-  }
+  const snaps = await Promise.all(
+    TIMESHEET_COLLECTIONS.map((type) => db.collection('users').doc(user.id).collection(type).get())
+  );
+  TIMESHEET_COLLECTIONS.forEach((type, i) => {
+    docsByType[type] = snaps[i].docs.map((d) => ({ docId: d.id, data: d.data() }));
+  });
 
   const summaries = TIMESHEET_COLLECTIONS.flatMap((type) =>
     docsByType[type].map(({ docId, data }) => summarizeMonthDoc(type, docId, data))
@@ -171,13 +169,16 @@ const parentIdsByCollection = {};
 const unexpectedPaths = [];
 for (const name of [...TIMESHEET_COLLECTIONS, 'entries']) {
   const parents = new Map();
-  const snap = await db.collectionGroup(name).get();
+  // select() with no fields: we only need refs/paths, not the (potentially
+  // huge) entries[] payloads this loop would otherwise re-download.
+  const snap = await db.collectionGroup(name).select().get();
   snap.docs.forEach((doc) => {
-    const parentDoc = doc.ref.parent.parent;
-    // Only users/{id}/<coll>/{doc} paths are attributable to a user; report
-    // anything else verbatim rather than guessing.
-    if (parentDoc && doc.ref.path === `users/${parentDoc.id}/${name}/${doc.id}`) {
-      parents.set(parentDoc.id, (parents.get(parentDoc.id) || 0) + 1);
+    // Attribute by path root so depth doesn't matter: users/{id}/<coll>/{doc}
+    // AND the legacy users/{id}/<coll>/{month}/entries/{e} layout both belong
+    // to segment 1. Anything not rooted at users/ is reported verbatim.
+    const segments = doc.ref.path.split('/');
+    if (segments[0] === 'users' && segments.length >= 4) {
+      parents.set(segments[1], (parents.get(segments[1]) || 0) + 1);
     } else {
       unexpectedPaths.push(doc.ref.path);
     }
@@ -214,11 +215,12 @@ const attorneysSnap = await db.collection('attorneys').get();
 console.log(`attorneys/ (deprecated): ${attorneysSnap.size} docs` +
   (attorneysSnap.size ? ` — ${attorneysSnap.docs.map((d) => d.id).join(', ')}` : ''));
 
-const legacyRatesUsers = [];
-for (const user of users) {
-  const subcollections = await db.collection('users').doc(user.id).listCollections();
-  if (subcollections.some((c) => c.id === 'rates')) legacyRatesUsers.push(user.id);
-}
+const allSubcollections = await Promise.all(
+  users.map((user) => db.collection('users').doc(user.id).listCollections())
+);
+const legacyRatesUsers = users
+  .filter((_, i) => allSubcollections[i].some((c) => c.id === 'rates'))
+  .map((u) => u.id);
 console.log(`users/{id}/rates legacy subcollections: ` +
   (legacyRatesUsers.length ? legacyRatesUsers.join(', ') : 'none'));
 

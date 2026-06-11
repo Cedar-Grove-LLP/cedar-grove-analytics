@@ -43,6 +43,11 @@ export function monthKeyFromDate(date) {
  * rate reports found: false (and rate 0) so callers can surface the gap
  * instead of silently billing at $0.
  *
+ * `found` means "a usable (nonzero) rate was resolved": a fallback entry
+ * that exists but holds rate 0/undefined still bills these hours at $0, so
+ * it reports found: false — otherwise the missing-rate warning would stay
+ * silent for exactly the silent-$0 case it exists to expose.
+ *
  * Returns { rate, found, sourceMonthKey, requestedMonthKey }.
  */
 export function findRateInfo(ratesMap, monthKey) {
@@ -65,9 +70,10 @@ export function findRateInfo(ratesMap, monthKey) {
     }
   }
 
-  if (!fallbackKey) return miss;
+  const fallbackRate = fallbackKey ? (ratesMap[fallbackKey]?.rate || 0) : 0;
+  if (!fallbackRate) return miss;
   return {
-    rate: ratesMap[fallbackKey]?.rate || 0,
+    rate: fallbackRate,
     found: true,
     sourceMonthKey: fallbackKey,
     requestedMonthKey: monthKey,

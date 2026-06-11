@@ -3,6 +3,9 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from '../tooltips';
 import { CHART } from '@/utils/colors';
+import { getSourceNote } from '@/utils/calcDefinitions.mjs';
+
+const SOURCE_NOTE = getSourceNote('serviceBreadth');
 
 const ServiceBreadthChart = ({ data, title = "Service Breadth (Unique Transaction Types)" }) => {
   const clientsWithTransactions = data.filter(c => c.uniqueTransactions > 0).slice(0, 10);
@@ -15,7 +18,7 @@ const ServiceBreadthChart = ({ data, title = "Service Breadth (Unique Transactio
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="name" angle={-15} textAnchor="end" height={100} />
           <YAxis />
-          <Tooltip content={<CustomTooltip sourceNote="count of distinct billing categories per client — computed by the dashboard" />} />
+          <Tooltip content={<CustomTooltip sourceNote={SOURCE_NOTE} />} />
           <Bar dataKey="uniqueTransactions" fill={CHART.ops} name="Unique Transaction Types" />
         </BarChart>
       </ResponsiveContainer>

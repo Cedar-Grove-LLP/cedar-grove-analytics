@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
-import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys';
+import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys.mjs';
 import UtilizationTargetsTab from '@/components/admin/UtilizationTargetsTab';
 import ProjectedEarningsTable from '@/components/admin/ProjectedEarningsTable';
 

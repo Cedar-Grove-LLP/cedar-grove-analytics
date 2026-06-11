@@ -3,6 +3,9 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CHART } from '@/utils/colors';
 import { getSourceNote } from '@/utils/calcDefinitions.mjs';
+import { SourceNote } from '../tooltips';
+
+const SOURCE_NOTE = getSourceNote('downloads');
 
 const DownloadTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -10,9 +13,7 @@ const DownloadTooltip = ({ active, payload, label }) => {
       <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
         <p className="font-medium text-gray-900 mb-1 text-sm max-w-[300px] break-words">{label}</p>
         <p className="text-sm text-blue-600">{payload[0].value} downloads</p>
-        <p className="mt-1.5 pt-1.5 border-t border-gray-100 text-[11px] text-gray-400 max-w-[280px]">
-          {getSourceNote('downloads')}
-        </p>
+        <SourceNote sourceNote={SOURCE_NOTE} />
       </div>
     );
   }

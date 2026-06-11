@@ -21,6 +21,18 @@ const COHORT_LABELS = {
   'full-team': 'full team',
 };
 
+// Header row shared by the five inline KPI cards below (kept local — these
+// cards predate the shared KPICard and keep their own colors/layout).
+const KpiTitle = ({ label, calcKey, icon }) => (
+  <div className="flex items-center justify-between mb-1">
+    <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
+      {label}
+      <CalcTooltip calcKey={calcKey} position="bottom" />
+    </span>
+    {icon}
+  </div>
+);
+
 const OverviewView = ({
   dateRangeLabel,
   filteredEntriesCount,
@@ -29,7 +41,7 @@ const OverviewView = ({
   periodRevenueAccrued = null,
   periodAttorneyBillables = null,
   attorneyData,
-  transactionData,
+  transactionMemberData,
   missingRateWarnings = [],
   isAdmin = false,
 }) => {
@@ -40,13 +52,14 @@ const OverviewView = ({
     [attorneyData, cohort]
   );
 
-  // Cohort-scoped transaction totals for the chart. Full Team keeps the
-  // original transactionData (which includes Adjustment categories and the
-  // transaction attorney filter); sub-cohorts aggregate each member's
-  // per-category hours, which exclude Adjustments by design.
+  // Cohort-scoped transaction totals for the chart. Every cohort (full-team
+  // included) derives from the same per-member dataset, which keeps hidden
+  // attorneys in the aggregates, honors the transaction attorney filter, and
+  // includes Adjustment categories — so cohort charts compose to the
+  // full-team totals.
   const cohortTransactionData = useMemo(
-    () => (cohort === 'full-team' ? transactionData : deriveTransactionTotals(cohortAttorneyData)),
-    [cohort, transactionData, cohortAttorneyData]
+    () => deriveTransactionTotals(filterByCohort(transactionMemberData || [], cohort)),
+    [transactionMemberData, cohort]
   );
 
   const cohortMetrics = useMemo(() => {
@@ -173,7 +186,13 @@ const OverviewView = ({
             <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600" />
             <span>
               {missingRateWarnings.length} attorney{missingRateWarnings.length === 1 ? ' has' : 's have'} no
-              billing rate for months in this range — Total Billables is understated.
+              billing rate for months in this range —{' '}
+              {cohortMetrics.billablesCalcKey === 'totalBillablesRateTimesHours'
+                // Only the rate × hours figure is understated; the firm-wide
+                // sheet figures shown for month-aligned Full Team ranges are
+                // synced literals and unaffected.
+                ? 'Total Billables is understated.'
+                : 'rate × hours figures (sub-cohorts, custom ranges, detail pages) bill those hours at $0.'}
             </span>
           </div>
           <ul className="mt-2 ml-7 text-sm space-y-0.5">
@@ -191,13 +210,7 @@ const OverviewView = ({
       {/* KPI Cards - keeping original colors */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
-              Avg Utilization
-              <CalcTooltip calcKey="utilizationPct" position="bottom" />
-            </span>
-            <Activity className="w-5 h-5 text-blue-500" />
-          </div>
+          <KpiTitle label="Avg Utilization" calcKey="utilizationPct" icon={<Activity className="w-5 h-5 text-blue-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{cohortMetrics.utilization}%</div>
           </div>
@@ -207,13 +220,7 @@ const OverviewView = ({
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
-              Time Split
-              <CalcTooltip calcKey="timeSplitPct" position="bottom" />
-            </span>
-            <Clock className="w-5 h-5 text-purple-500" />
-          </div>
+          <KpiTitle label="Time Split" calcKey="timeSplitPct" icon={<Clock className="w-5 h-5 text-purple-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-baseline gap-1.5">
               <div className="text-3xl font-bold text-gray-600">{billablePercentage}%</div>
@@ -225,13 +232,7 @@ const OverviewView = ({
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
-              Total Billable
-              <CalcTooltip calcKey="billableHours" position="bottom" />
-            </span>
-            <Clock className="w-5 h-5 text-green-500" />
-          </div>
+          <KpiTitle label="Total Billable" calcKey="billableHours" icon={<Clock className="w-5 h-5 text-green-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{formatHours(cohortMetrics.billable)}h</div>
           </div>
@@ -243,13 +244,7 @@ const OverviewView = ({
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
-              Total Ops
-              <CalcTooltip calcKey="opsHours" position="bottom" />
-            </span>
-            <Users className="w-5 h-5 text-orange-500" />
-          </div>
+          <KpiTitle label="Total Ops" calcKey="opsHours" icon={<Users className="w-5 h-5 text-orange-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{formatHours(cohortMetrics.ops)}h</div>
           </div>
@@ -261,13 +256,11 @@ const OverviewView = ({
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
-              {cohortMetrics.billablesLabel}
-              <CalcTooltip calcKey={cohortMetrics.billablesCalcKey} position="bottom" />
-            </span>
-            <DollarSign className="w-5 h-5 text-emerald-500" />
-          </div>
+          <KpiTitle
+            label={cohortMetrics.billablesLabel}
+            calcKey={cohortMetrics.billablesCalcKey}
+            icon={<DollarSign className="w-5 h-5 text-emerald-500" />}
+          />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{formatCurrency(cohortMetrics.grossBillables)}</div>
           </div>

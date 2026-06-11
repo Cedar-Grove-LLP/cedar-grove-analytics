@@ -57,7 +57,7 @@ src/
     ├── constants.js        # Colors, date range options, periods
     ├── dateHelpers.js      # Business day math, US holidays
     ├── formatters.js       # Currency and number formatting
-    ├── hiddenAttorneys.js  # Attorneys hidden from UI after a date
+    ├── hiddenAttorneys.mjs # Attorneys hidden from UI after a date (pure, Node-importable)
     ├── rateLookup.mjs      # Pure billing-rate lookup (backward fallback, tested)
     └── roles.js            # Role overrides for non-attorney staff
 ```
@@ -82,7 +82,7 @@ users/{userId}/         — { name, role, email, employmentType, active,
                            selected timeframe overlaps their actual billable/ops
                            entries (auto-derived, no tenure dates), and are excluded
                            from forward-looking Targets + Projected Earnings. Layered
-                           on top of the legacy hiddenAttorneys.js date config.
+                           on top of the legacy hiddenAttorneys.mjs date config.
   billables/{monthDocId}  — { month, year, entries: [{ date, client, matter, hours,
                                                        earnings, billingCategory,
                                                        reimbursements, notes,
@@ -174,7 +174,7 @@ Legacy field names (`hours`, `secondaryHours`) are normalized to `billableHours`
 - **Date filtering:** All-time, current month, trailing 60 days, or custom range. Filters applied in `useAnalyticsData`.
 - **Attorney filtering:** Global filter dropdown affects all views; some views have additional local filters.
 - **Target pro-rating:** Utilization targets are pro-rated per month via a capacity model (`getMonthProRateFraction` in `dateHelpers.js`) using **fractional working days**: each business day contributes `1 − its OOO off-fraction` (normal = 1, half-day OOO = 0.5, full-day OOO = 0), with firm holidays excluded entirely. Denominator = fractional working days in the whole month; numerator = fractional working days in the effective window. OOO and holidays are excluded from **both**, so the policy is **compress, don't reduce**: OOO does not lower an attorney's monthly target total — it spreads the same target across only the days they actually work (`target ÷ working-day capacity`). A full clean month yields exactly 1; a part-time/heavily-OOO attorney paces against their real capacity, not the full calendar month; a fully-OOO period yields 0 → utilization shows N/A. **Partial days:** the calendar enters all OOO as all-day events, so half-day time off is detected by parsing the event title (`parseOooDayFraction` in `utils/timeOff.js`: "Half day", "2PM onwards", "AM only", …) → 0.5 off. OOO/holidays are sourced from `timeOff/all`, falling back to US federal holidays when unsynced. Use the **Time-Off Debug** admin page (`/admin/timeoff-debug`) to inspect per-attorney OOO matching, half-day parsing, and unclassified entries.
-- **Hidden attorneys:** Configured in `hiddenAttorneys.js` with date thresholds. Hidden from UI but included in aggregate totals.
+- **Hidden attorneys:** Configured in `hiddenAttorneys.mjs` with date thresholds. Hidden from UI but included in aggregate totals.
 - **Role overrides:** `roles.js` maps non-attorney staff to custom display roles.
 - **Earnings predictions:** Use `rateCard/all` only for forward projections. Derive an attorney's current rank by exact-matching their latest stored `billableRate` against `rateCard.levels[].clientRate`. For each projected month, bump rank by 1 at every Q2 (Apr 1) and Q4 (Oct 1) boundary, capped at rank 19. If the current rate has no exact match, warn and project a flat `currentRate` for the full horizon (no rank bumps).
 
@@ -193,7 +193,7 @@ Set in `.env.local` (gitignored).
 
 ## Testing
 
-No test framework is configured. There are no test files.
+`npm test` runs Node's built-in test runner (`node --test tests/*.test.mjs`) — no test framework dependency. Tests cover the pure `.mjs` modules only (rate lookup, cohort filter, calc-definitions registry + call-site key coverage, audit script helpers); React components and hooks are not unit-tested (they import the Firebase client SDK at module load). Run the suite whenever touching `src/utils/*.mjs`, `scripts/`, or registry keys.
 
 ## Deployment
 

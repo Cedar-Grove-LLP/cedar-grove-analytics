@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { getEntryDate } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours } from '@/utils/formatters';
-import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys';
+import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys.mjs';
 import { CalcTooltip } from '@/components/shared';
 
 const MAX_RANK = 19;
@@ -219,7 +219,7 @@ const ProjectedEarningsTable = () => {
               <th className="px-3 py-2 text-right font-semibold">
                 <span className="inline-flex items-center gap-1">
                   Projected Hours
-                  <CalcTooltip calcKey="projectedEarnings" position="bottom" />
+                  <CalcTooltip calcKey="projectedHours" position="bottom" />
                 </span>
               </th>
               <th className="px-3 py-2 text-right font-semibold">
@@ -231,7 +231,7 @@ const ProjectedEarningsTable = () => {
               <th className="px-3 py-2 text-right font-semibold">
                 <span className="inline-flex items-center gap-1">
                   Predicted Total
-                  <CalcTooltip calcKey="projectedEarnings" position="bottom" align="right" />
+                  <CalcTooltip calcKey="predictedTotal" position="bottom" align="right" />
                 </span>
               </th>
             </tr>

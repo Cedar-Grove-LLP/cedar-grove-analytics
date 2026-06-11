@@ -43,6 +43,15 @@ export function formatSheetRef(ref) {
   return `${base} (${cells})`;
 }
 
+// Pre-rendered refs reused inside notes — coordinates must flow through
+// formatSheetRef so each cell reference has exactly one validated source.
+const BILLABLE_EARNINGS_SUMMARY_REF = formatSheetRef({
+  workbook: 'invoices', label: 'Billable Earnings', scope: 'summary cell', currentCell: 'B3', legacyCell: 'B2',
+});
+const SHEET_RATE_CELL_REF = formatSheetRef({
+  workbook: 'invoices', label: 'Rate', scope: 'summary cell', currentCell: 'B2', legacyCell: 'B4',
+});
+
 const SHORT_SOURCE = {
   [SOURCE.COMPUTED]: 'computed by the dashboard',
   [SOURCE.SHEET_LITERAL]: 'synced as-is from Google Sheets',
@@ -83,7 +92,7 @@ export const CALC_DEFINITIONS = Object.freeze({
     sheetRef: { workbook: 'invoices', label: 'Billables Earnings', scope: 'column', currentCell: 'D12 down', legacyCell: 'D10 down' },
     notes: [
       'Not recomputed as rate × hours — differences vs Gross Billables are expected.',
-      "Sheet summary: 'Billable Earnings' cell (B3 in current layout / B2 in legacy layout).",
+      `Sheet summary: ${BILLABLE_EARNINGS_SUMMARY_REF}.`,
     ],
   },
   entryEarnings: {
@@ -180,6 +189,18 @@ export const CALC_DEFINITIONS = Object.freeze({
     source: SOURCE.COMPUTED,
     notes: ['If the current rate has no exact rate-card match, the current rate is projected flat with no rank bumps.'],
   },
+  projectedHours: {
+    label: 'Projected Hours',
+    formula: 'Σ over remaining months: target hours − actual hours this month (never below 0)',
+    inputs: ['monthly billable targets (admin-entered)', 'current-month actual hours'],
+    source: SOURCE.COMPUTED,
+  },
+  predictedTotal: {
+    label: 'Predicted Total',
+    formula: 'YTD earnings + projected earnings for the remaining months',
+    inputs: ['YTD actual earnings', 'projected earnings (rate card model)'],
+    source: SOURCE.COMPUTED,
+  },
   activeClients: {
     label: 'Active Clients',
     formula: 'count of clients with billable hours in the selected range',
@@ -192,10 +213,10 @@ export const CALC_DEFINITIONS = Object.freeze({
     inputs: ['billable entries per client', 'date range', 'total client book'],
     source: SOURCE.COMPUTED,
   },
-  clientPeriodDelta: {
-    label: 'Period Delta',
-    formula: 'active clients this period − active clients in the prior period of equal length',
-    inputs: ['current-period entries', 'prior-period entries'],
+  shareOfTotalHours: {
+    label: '% of Total',
+    formula: "this row's billable hours ÷ total billable hours in view × 100",
+    inputs: ['per-row summed hours', 'view-wide total hours'],
     source: SOURCE.COMPUTED,
   },
   targetVariance: {
@@ -215,34 +236,25 @@ export const CALC_DEFINITIONS = Object.freeze({
     formula: "the attorney's stored rate for the entry month, falling back to the most recent prior month",
     inputs: ['admin User Management rates'],
     source: SOURCE.ADMIN_ENTERED,
-    notes: ["The sheet's 'Rate' cell (B2 in current layout / B4 in legacy layout) is the take-home rate and is NOT this billing rate."],
+    notes: [`The sheet's take-home Rate cell — ${SHEET_RATE_CELL_REF} — is NOT this billing rate.`],
   },
-  reimbursements: {
-    label: 'Reimbursements',
-    formula: 'Σ per-row reimbursement values, as synced',
-    inputs: ['per-row reimbursements'],
-    source: SOURCE.SHEET_LITERAL,
-    sheetRef: { workbook: 'invoices', label: 'Reimbursements', scope: 'column', currentCell: 'T down', legacyCell: 'G down' },
+  serviceBreadth: {
+    label: 'Service Breadth',
+    formula: 'count of distinct billing categories per client in the selected range',
+    inputs: ['per-client billable entries', 'billing categories'],
+    source: SOURCE.COMPUTED,
   },
-  flatFee83b: {
-    label: '83(b) Flat Fees',
-    formula: 'Σ per-row 83(b) flat fees, as synced',
-    inputs: ['per-row flat fees'],
-    source: SOURCE.SHEET_LITERAL,
-    sheetRef: { workbook: 'invoices', label: 'Flat Fee', scope: 'column', currentCell: 'Q down', legacyCell: 'Q down' },
+  uniqueFiles: {
+    label: 'Unique Files',
+    formula: 'count of distinct files downloaded in the selected range',
+    inputs: ['Drive activity events'],
+    source: SOURCE.DRIVE,
   },
-  timeOffDays: {
-    label: 'Time Off / Holidays',
-    formula: 'out-of-office days (full or half) and firm holidays in the period',
-    inputs: ['firm calendar OOO events', 'firm holidays'],
-    source: SOURCE.CALENDAR,
-    notes: ['Falls back to US federal holidays (and no OOO) until the calendar sync is populated.'],
-  },
-  mercuryTransactionVolume: {
-    label: 'Bank Transactions',
-    formula: 'transaction amounts and counts as synced from the bank',
-    inputs: ['Mercury transaction records'],
-    source: SOURCE.MERCURY,
+  uniqueUsers: {
+    label: 'Unique Users',
+    formula: 'count of distinct users who downloaded in the selected range',
+    inputs: ['Drive activity events'],
+    source: SOURCE.DRIVE,
   },
   downloads: {
     label: 'Downloads',
@@ -289,5 +301,5 @@ export function getCalcTooltipLines(key, dynamic = {}) {
 export function getSourceNote(key) {
   const def = CALC_DEFINITIONS[key];
   if (!def) return '';
-  return def.sourceNote || `${def.formula} — ${SHORT_SOURCE[def.source] || def.source}`;
+  return `${def.formula} — ${SHORT_SOURCE[def.source] || def.source}`;
 }

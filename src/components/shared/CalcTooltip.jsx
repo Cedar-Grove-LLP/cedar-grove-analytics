@@ -54,6 +54,9 @@ const CalcTooltip = ({
       className={`relative inline-flex items-center group align-middle ${className}`}
       tabIndex={0}
       aria-describedby={id}
+      // Triggers often sit inside sortable <th onClick> headers — inspecting
+      // a tooltip must not bubble into a sort toggle.
+      onClick={(e) => e.stopPropagation()}
     >
       {variant === 'underline' ? (
         <span className="underline decoration-dotted decoration-gray-300 cursor-help">

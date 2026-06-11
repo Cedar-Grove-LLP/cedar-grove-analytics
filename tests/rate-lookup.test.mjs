@@ -44,6 +44,18 @@ test('explicit rate 0 falls through to backward fallback (legacy truthy-check be
   assert.equal(findRate(map, '2026-02'), 250);
 });
 
+test('a fallback entry holding rate 0/undefined reports found:false, not a silent $0', () => {
+  // Hours billed against these maps yield $0 — the warning must fire.
+  const zeroRate = { '2026-01': { rate: 0 } };
+  assert.deepEqual(findRateInfo(zeroRate, '2026-03'), {
+    rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: '2026-03',
+  });
+  const malformed = { '2026-01': {} };
+  assert.equal(findRateInfo(malformed, '2026-03').found, false);
+  // findRate (billing math) is unchanged: still 0 either way.
+  assert.equal(findRate(zeroRate, '2026-03'), 0);
+});
+
 test('null/empty rates map misses', () => {
   assert.equal(findRateInfo(null, '2026-01').found, false);
   assert.equal(findRateInfo({}, '2026-01').found, false);

@@ -20,12 +20,11 @@ export const filterByCohort = (members, cohort) => {
 };
 
 /**
- * Aggregate a cohort subset's per-attorney transactions ({ category: hours })
- * into the [{ type, totalHours }] shape TopTransactionsChart renders,
- * sorted by hours descending. attorneyData[].transactions excludes
- * Adjustment categories (see useAnalyticsData), so cohort-scoped charts
- * won't show Adjustment bars — the full-team view keeps the original
- * transactionData and is unaffected.
+ * Aggregate a member subset's per-attorney transactions ({ category: hours })
+ * into the [{ type, totalHours }] shape TopTransactionsChart renders, sorted
+ * by hours descending. Category semantics (e.g. whether Adjustments appear)
+ * follow whatever the caller's member dataset includes — the Overview feeds
+ * it transactionMemberData, which mirrors transactionData's inclusions.
  */
 export const deriveTransactionTotals = (attorneySubset) => {
   const totals = {};

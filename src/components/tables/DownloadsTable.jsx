@@ -53,27 +53,13 @@ const DownloadsTable = ({
               >
                 <span className="inline-flex items-center gap-1">
                   Files {getSortIndicator('uniqueFiles')}
-                  <CalcTooltip
-                    position="bottom"
-                    lines={[
-                      'Unique Files',
-                      '= count of distinct files downloaded in the selected range',
-                      'Source: synced from Google Drive activity',
-                    ]}
-                  />
+                  <CalcTooltip calcKey="uniqueFiles" position="bottom" />
                 </span>
               </th>
               <th className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <span className="inline-flex items-center gap-1">
                   Users
-                  <CalcTooltip
-                    position="bottom"
-                    lines={[
-                      'Unique Users',
-                      '= count of distinct users who downloaded in the selected range',
-                      'Source: synced from Google Drive activity',
-                    ]}
-                  />
+                  <CalcTooltip calcKey="uniqueUsers" position="bottom" />
                 </span>
               </th>
               <th
