@@ -131,18 +131,16 @@ const ClientsTable = ({
                   {(client.billableHours || client.totalHours || 0) > 0 ? 'Active' : 'Quiet'}
                 </span>
               </td>
+              {/* paymentStatus is always set by ClientsView's merge — every
+                  client gets a tag, so no empty state is needed here */}
               <td className="px-6 py-4 whitespace-nowrap text-sm">
-                {client.paymentStatus ? (
-                  <span
-                    title={client.holdFlag ? HOLD_FLAG_MESSAGE : undefined}
-                    className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusBadge(client.paymentStatus)}`}
-                  >
-                    {PAYMENT_STATUS_LABEL[client.paymentStatus]}
-                    {client.holdFlag && <Ban className="w-3 h-3" />}
-                  </span>
-                ) : (
-                  <span className="text-gray-300">—</span>
-                )}
+                <span
+                  title={client.holdFlag ? HOLD_FLAG_MESSAGE : undefined}
+                  className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusBadge(client.paymentStatus)}`}
+                >
+                  {PAYMENT_STATUS_LABEL[client.paymentStatus]}
+                  {client.holdFlag && <Ban className="w-3 h-3" />}
+                </span>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {client.avgPaymentDays !== null && client.avgPaymentDays !== undefined

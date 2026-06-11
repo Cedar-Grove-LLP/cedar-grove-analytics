@@ -6,13 +6,12 @@ import { DateRangeIndicator, ClientStatCard } from '../shared';
 import { ClientsTable } from '../tables';
 import { ClientHoursChart, ServiceBreadthChart } from '../charts';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
-import { useUsers, useClients, useInvoices } from '@/hooks/useFirestoreData';
+import { useUsers, usePaymentStatusIndex } from '@/hooks/useFirestoreData';
 import { getEntryDate } from '@/utils/dateHelpers';
 import {
   PAYMENT_STATUS,
   PAYMENT_STATUS_RANK,
   HOLD_FLAG_MESSAGE,
-  buildPaymentStatusIndex,
   getClientPaymentStatus,
 } from '@/utils/paymentStatus.mjs';
 
@@ -44,16 +43,10 @@ const ClientsView = ({
   const [paymentFilter, setPaymentFilter] = useState('all'); // 'all' | 'on-target' | 'warning' | 'hold'
   const { getRate, loading: ratesLoading } = useAttorneyRates();
   const { users: firebaseUsers } = useUsers();
-  const { clients: rawClients } = useClients();
-  const { invoices } = useInvoices();
-
   // Payment Status tags, auto-calculated from the synced invoice rows
   // (`invoices/all`, source of truth: the Payment Status sheet tab) plus each
   // client's payment terms. Recomputed whenever the synced data refreshes.
-  const paymentIndex = useMemo(
-    () => buildPaymentStatusIndex(invoices, rawClients),
-    [invoices, rawClients]
-  );
+  const { index: paymentIndex } = usePaymentStatusIndex();
 
   // Build userId -> display name map
   const userMap = useMemo(() => {

@@ -8,22 +8,10 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
+import { parseInvoiceDate } from '@/utils/paymentStatus.mjs';
 
 const DAY_MS = 86400000;
 const THRESHOLDS = [15, 30, 60, 90];
-
-// Mirrors parseDateSent in AdminInvoices.jsx — supports M/D, M/D/YYYY,
-// Firestore Timestamp objects, and verbose Date.toString() output.
-function parseDate(val, fallbackYear) {
-  if (!val) return null;
-  if (typeof val === 'object' && val.seconds) return new Date(val.seconds * 1000);
-  const str = String(val).trim();
-  const parts = str.split('/');
-  if (parts.length === 3) return new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
-  if (parts.length === 2 && fallbackYear) return new Date(fallbackYear, parseInt(parts[0]) - 1, parseInt(parts[1]));
-  const d = new Date(str);
-  return isNaN(d.getTime()) ? null : d;
-}
 
 const formatPct = (v) => (v == null ? '—' : `${(v * 100).toFixed(1)}%`);
 const formatDays = (v) => (v == null ? '—' : `${v.toFixed(1)} days`);
@@ -52,8 +40,8 @@ const AdminBillingKPIs = () => {
 
   const normalized = useMemo(() => {
     return invoices.map((inv) => {
-      const sent = parseDate(inv.dateSent, inv.year);
-      const received = parseDate(inv.dateReceived, inv.year);
+      const sent = parseInvoiceDate(inv.dateSent, inv.year);
+      const received = parseInvoiceDate(inv.dateReceived, inv.year);
       const isPaid = inv.status === 'Paid';
       const daysToPay =
         sent && received ? Math.max(0, Math.round((received.getTime() - sent.getTime()) / DAY_MS)) : null;

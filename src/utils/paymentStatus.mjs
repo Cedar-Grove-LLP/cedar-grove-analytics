@@ -197,7 +197,12 @@ function monthEndPoints(invoices, today) {
  */
 export function computeClientPaymentStatus(invoices, opts = {}) {
   const today = opts.today || new Date();
-  const paymentTerms = Number(opts.paymentTerms) > 0 ? Number(opts.paymentTerms) : DEFAULT_PAYMENT_TERMS;
+  const terms = Number(opts.paymentTerms);
+  // null/undefined/NaN/negative terms fall back to the default; an explicit 0
+  // (due on receipt) is honored.
+  const paymentTerms = opts.paymentTerms != null && Number.isFinite(terms) && terms >= 0
+    ? terms
+    : DEFAULT_PAYMENT_TERMS;
   const normalized = (invoices || []).map(normalizeInvoice).filter((i) => i.sent);
 
   let state = null;
@@ -249,7 +254,11 @@ export function computeClientPaymentStatus(invoices, opts = {}) {
   };
 }
 
-const normalizeName = (name) => String(name || '').trim().toLowerCase();
+// Join key between invoice `client` strings and client-record `clientName`s.
+// Both come from org sheets that are edited by hand, so punctuation/spacing
+// drift ("Acme Inc" vs "Acme, Inc.") is realistic — a strict-equality miss
+// would silently read as On Target. Compare on lowercase alphanumerics only.
+const normalizeName = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 /** Neutral result for clients with no invoice history. */
 export const NO_INVOICE_STATUS = Object.freeze({
@@ -275,7 +284,7 @@ export function buildPaymentStatusIndex(invoiceEntries, clients = [], today = ne
   const termsByClient = new Map();
   (clients || []).forEach((c) => {
     const key = normalizeName(c.clientName ?? c.name);
-    if (key && c.paymentTerms) termsByClient.set(key, c.paymentTerms);
+    if (key && c.paymentTerms != null) termsByClient.set(key, c.paymentTerms);
   });
 
   const invoicesByClient = new Map();

@@ -10,6 +10,7 @@ import { db, auth } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge, getMatchTypeBadge } from '@/utils/statusStyles';
+import { parseInvoiceDate } from '@/utils/paymentStatus.mjs';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -22,40 +23,9 @@ const STATUS_FILTER_OPTIONS = [
   { key: 'outstanding', label: 'Outstanding' },
 ];
 
-/**
- * Parse a date value into a Date object.
- * Handles multiple formats:
- *  - "2/3"           → M/D (needs year fallback)
- *  - "1/6/2026"      → M/D/YYYY
- *  - Verbose Date.toString() from Google Sheets, e.g.
- *    "Wed Feb 05 2025 00:00:00 GMT-0800 (Pacific Standard Time)"
- *  - Firestore Timestamps with { seconds, nanoseconds }
- */
-function parseDateSent(dateSent, year) {
-  if (!dateSent) return null;
-
-  // Firestore Timestamp object
-  if (typeof dateSent === 'object' && dateSent.seconds) {
-    return new Date(dateSent.seconds * 1000);
-  }
-
-  const str = String(dateSent).trim();
-
-  // Try M/D or M/D/YYYY format
-  const parts = str.split('/');
-  if (parts.length === 3) {
-    return new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
-  }
-  if (parts.length === 2 && year) {
-    return new Date(year, parseInt(parts[0]) - 1, parseInt(parts[1]));
-  }
-
-  // Fallback: try native Date parsing (handles verbose toString() output)
-  const d = new Date(str);
-  if (!isNaN(d.getTime())) return d;
-
-  return null;
-}
+// Invoice date parsing (M/D, M/D/YYYY, Firestore Timestamps, verbose
+// Date.toString()) is shared with the Payment Status tag engine.
+const parseDateSent = parseInvoiceDate;
 
 /** Format a transaction date (ISO 8601) to a short display string. */
 function formatTxnDate(dateStr) {

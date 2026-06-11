@@ -32,7 +32,7 @@ import {
   Legend, 
   ResponsiveContainer 
 } from 'recharts';
-import { useAllBillableEntries, useClients, useUsers, useInvoices } from '@/hooks/useFirestoreData';
+import { useAllBillableEntries, useClients, useUsers, usePaymentStatusIndex } from '@/hooks/useFirestoreData';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { getEntryDate, getPSTDate, getDateRangeLabel } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours, formatDate } from '@/utils/formatters';
@@ -42,7 +42,6 @@ import { getStatusBadge } from '@/utils/statusStyles';
 import {
   PAYMENT_STATUS_LABEL,
   HOLD_FLAG_MESSAGE,
-  buildPaymentStatusIndex,
   getClientPaymentStatus,
   getPaymentStatusBadge,
 } from '@/utils/paymentStatus.mjs';
@@ -124,11 +123,11 @@ const ClientDetailView = ({ clientName }) => {
 
   // Payment status (On Target / Warning / Hold) — auto-calculated from the
   // synced invoice rows + this client's payment terms (utils/paymentStatus.mjs)
-  const { invoices } = useInvoices();
-  const paymentStatus = useMemo(() => {
-    const index = buildPaymentStatusIndex(invoices, clientMetadata ? [clientMetadata] : []);
-    return getClientPaymentStatus(index, clientName);
-  }, [invoices, clientMetadata, clientName]);
+  const { index: paymentIndex } = usePaymentStatusIndex();
+  const paymentStatus = useMemo(
+    () => getClientPaymentStatus(paymentIndex, clientName),
+    [paymentIndex, clientName]
+  );
 
   // Calculate date range boundaries
   const dateRangeInfo = useMemo(() => {
@@ -513,13 +512,17 @@ const ClientDetailView = ({ clientName }) => {
                         {displayStatus}
                       </span>
                     )}
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
-                      getPaymentStatusBadge(paymentStatus.status)
-                    }`}>
-                      {PAYMENT_STATUS_LABEL[paymentStatus.status]}
-                      <CalcTooltip calcKey="paymentStatusTag" position="bottom" />
-                    </span>
-                    {paymentStatus.holdFlag && (
+                    {/* Only tag clients that exist in the book — an unknown
+                        name would otherwise read as a misleading "On Target" */}
+                    {clientMetadata && (
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                        getPaymentStatusBadge(paymentStatus.status)
+                      }`}>
+                        {PAYMENT_STATUS_LABEL[paymentStatus.status]}
+                        <CalcTooltip calcKey="paymentStatusTag" position="bottom" />
+                      </span>
+                    )}
+                    {clientMetadata && paymentStatus.holdFlag && (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold text-status-danger">
                         <Ban className="w-3.5 h-3.5" />
                         {HOLD_FLAG_MESSAGE}

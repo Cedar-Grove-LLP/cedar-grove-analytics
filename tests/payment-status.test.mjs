@@ -138,6 +138,18 @@ test('client payment terms move the overdue boundary (15 vs 30)', () => {
   assert.equal(DEFAULT_PAYMENT_TERMS, 30);
 });
 
+test('explicit 0-day terms (due on receipt) are honored, not treated as missing', () => {
+  // Sent May 7, unpaid, ~35 days outstanding on Jun 11: due-on-receipt terms
+  // make it 30+ days overdue → Hold; the default net 30 would say ~5 days
+  // overdue → Warning. null/undefined still fall back to the default.
+  const rows = [inv('5/7/2026')];
+  const today = at('2026-06-11T12:00:00');
+  assert.equal(computeClientPaymentStatus(rows, { today, paymentTerms: 0 }).status, HOLD);
+  assert.equal(computeClientPaymentStatus(rows, { today, paymentTerms: null }).status, WARNING);
+  const index = buildPaymentStatusIndex(rows, [{ clientName: 'Acme, Inc.', paymentTerms: 0 }], today);
+  assert.equal(getClientPaymentStatus(index, 'Acme, Inc.').status, HOLD);
+});
+
 // ------------------------------------------------- Hold-exit hysteresis
 
 // 20 fast invoices in 2025, then two Jan-2026 invoices that both go overdue
@@ -195,6 +207,16 @@ test('buildPaymentStatusIndex groups by client, normalizes names, applies terms'
   assert.equal(getClientPaymentStatus(index, 'acme, inc.').status, ON_TARGET);
   assert.equal(getClientPaymentStatus(index, 'SlowPay LLC').status, HOLD); // net 15 → 30+ days overdue
   assert.equal(getClientPaymentStatus(index, 'Unknown Co'), NO_INVOICE_STATUS);
+});
+
+test('name matching survives punctuation/spacing drift between the two sheets', () => {
+  // The invoice sheet says "Acme Inc" while the client record says
+  // "Acme, Inc." — a strict-equality miss would silently read On Target.
+  const entries = [inv('4/1/2026', null, { client: 'Acme Inc' })]; // 30+ days overdue
+  const clients = [{ clientName: 'Acme, Inc.', paymentTerms: 30 }];
+  const index = buildPaymentStatusIndex(entries, clients, at('2026-06-11T12:00:00'));
+  assert.equal(getClientPaymentStatus(index, 'Acme, Inc.').status, HOLD);
+  assert.equal(getClientPaymentStatus(index, 'ACME—Inc').status, HOLD);
 });
 
 test('labels, ranks, badges, and the Hold flag are wired for all three tags', () => {
