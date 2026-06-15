@@ -1098,6 +1098,10 @@ export const useAnalyticsData = ({
           channel: client.channel || '',
           contactEmail: client.contactEmail || '',
           website: client.website || '',
+          // Per-client "General Notes" synced from the finance sheet, kept on
+          // the client object so it stays paired with its client by name
+          // (never by row position) through any table sort.
+          notes: (client.notes || '').trim(),
           byAttorney: stats.byAttorney || {},
           byCategory: stats.byCategory || {},
           entries: sortedEntries,
