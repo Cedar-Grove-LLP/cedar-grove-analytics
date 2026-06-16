@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LogOut, Shield, User } from 'lucide-react';
+import { LogOut, Shield, User, GitBranch } from 'lucide-react';
 import { getDateRangeLabel } from '@/utils/dateHelpers';
 import { useAnalyticsData } from '@/hooks/useAnalyticsData';
 import { useAuth } from '@/context/AuthContext';
@@ -465,6 +465,16 @@ const Header = ({
           showDropdown={showDateDropdown}
           setShowDropdown={setShowDateDropdown}
         />
+
+        {!restrictedMode && (
+          <Link
+            href="/tech-team"
+            className="flex items-center gap-2 px-4 py-2 bg-cg-white border border-gray-300 text-cg-dark hover:bg-gray-50 rounded-lg transition-colors"
+          >
+            <GitBranch className="w-4 h-4" />
+            <span className="text-sm font-medium">Tech Team</span>
+          </Link>
+        )}
 
         {restrictedMode ? (
           matchedUserName && (
