@@ -3,13 +3,13 @@
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LogOut, Shield, User, GitBranch } from 'lucide-react';
+import { LogOut, Shield, User } from 'lucide-react';
 import { getDateRangeLabel } from '@/utils/dateHelpers';
 import { useAnalyticsData } from '@/hooks/useAnalyticsData';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { DateRangeDropdown, AttorneyFilterDropdown } from './shared';
-import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView, TargetsView } from './views';
+import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView, TargetsView, TechTeamView } from './views';
 
 const TRANSACTIONS_OPS_TABS = ['transactions', 'ops'];
 const DEFAULT_DASHBOARD_DATE_RANGE = 'current-month';
@@ -101,7 +101,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   const [transactionAttorneyFilter, setTransactionAttorneyFilter] = useState('all');
 
   // View state — read initial tab from URL query param (?tab=clients)
-  const VALID_TABS = ['overview', 'attorneys', 'transactions', 'ops', 'clients', 'downloads', 'targets'];
+  const VALID_TABS = ['overview', 'attorneys', 'transactions', 'ops', 'clients', 'downloads', 'targets', 'tech-team'];
   const defaultTab = downloadsOnly ? 'downloads' : transactionsOpsOnly ? 'transactions' : 'overview';
   const tabFromUrl = searchParams.get('tab');
   const initialTab = tabFromUrl && VALID_TABS.includes(tabFromUrl) ? tabFromUrl : defaultTab;
@@ -217,8 +217,9 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
 
   const dateRangeLabel = getDateRangeLabel(dateRange, customDateStart, customDateEnd);
 
-  // Loading state
-  if (loading) {
+  // Loading state — the Tech Team tab loads its own (commit) data, so it must
+  // not be blocked by the billing/ops data gates below.
+  if (loading && selectedView !== 'tech-team') {
     return (
       <div className="flex items-center justify-center h-screen bg-cg-background">
         <div className="text-center">
@@ -230,7 +231,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   }
 
   // Error state
-  if (error) {
+  if (error && selectedView !== 'tech-team') {
     return (
       <div className="flex items-center justify-center h-screen bg-cg-background">
         <div className="text-center max-w-md">
@@ -248,7 +249,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   }
 
   // No data state (skip for downloads-only users who don't need billable/ops entries)
-  if (!downloadsOnly && !transactionsOpsOnly && (!filteredBillableEntries || filteredBillableEntries.length === 0) && (!filteredOpsEntries || filteredOpsEntries.length === 0)) {
+  if (selectedView !== 'tech-team' && !downloadsOnly && !transactionsOpsOnly && (!filteredBillableEntries || filteredBillableEntries.length === 0) && (!filteredOpsEntries || filteredOpsEntries.length === 0)) {
     return (
       <div className="min-h-screen bg-cg-background px-4 py-6">
         <div className="max-w-[88rem] mx-auto">
@@ -319,6 +320,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             { key: 'clients', label: 'Clients' },
             { key: 'downloads', label: 'Downloads' },
             { key: 'targets', label: 'Targets', adminOnly: true },
+            { key: 'tech-team', label: 'Tech Team' },
           ].filter(tab => {
             if (downloadsOnly) return tab.key === 'downloads';
             if (transactionsOpsOnly) return TRANSACTIONS_OPS_TABS.includes(tab.key);
@@ -409,6 +411,8 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
         )}
 
         {selectedView === 'targets' && isAdmin && <TargetsView />}
+
+        {selectedView === 'tech-team' && <TechTeamView />}
       </div>
     </div>
   );
@@ -465,16 +469,6 @@ const Header = ({
           showDropdown={showDateDropdown}
           setShowDropdown={setShowDateDropdown}
         />
-
-        {!restrictedMode && (
-          <Link
-            href="/tech-team"
-            className="flex items-center gap-2 px-4 py-2 bg-cg-white border border-gray-300 text-cg-dark hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            <GitBranch className="w-4 h-4" />
-            <span className="text-sm font-medium">Tech Team</span>
-          </Link>
-        )}
 
         {restrictedMode ? (
           matchedUserName && (
