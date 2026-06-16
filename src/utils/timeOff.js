@@ -33,6 +33,15 @@ const normalizeDateKey = (s) => {
   return d ? toDateKey(d) : null;
 };
 
+// Firm off-sites are work days, not time off — attendees are still working, just
+// co-located. They land in the same calendar feed as OOO, so we must exclude them
+// here or they'd wrongly compress utilization targets. Title-based for now (the
+// sync has no explicit event type); tolerant of the hyphen variants seen in the
+// feed ("Off-Site", "Offsite", "Off Site"). Interim: a sync-stamped `type` field
+// is the durable fix.
+export const isOffsiteTitle = (title) =>
+  /\boff[\s-]?site\b/i.test(title || '');
+
 // Calendar OOO events are entered as all-day, so partial-day time off is only
 // signalled in the free-text title ("Half day", "2PM onwards", "AM only", …).
 // Parse that into an OFF fraction: how much of the working day the event removes
@@ -105,6 +114,7 @@ export const parseTimeOff = (timeOffDoc) => {
   if (timeOffDoc && Array.isArray(timeOffDoc.outOfOffice)) {
     timeOffDoc.outOfOffice.forEach((o) => {
       if (!o) return;
+      if (isOffsiteTitle(o.title)) return; // firm off-site = work day, not OOO
       const keys = expandRange(o.start, o.end);
       if (keys.length === 0) return;
       const { offFraction } = parseOooDayFraction(o.title);
