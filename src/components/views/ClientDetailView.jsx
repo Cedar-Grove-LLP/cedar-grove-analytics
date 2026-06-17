@@ -121,6 +121,11 @@ const ClientDetailView = ({ clientName }) => {
     );
   }, [firebaseClients, clientName]);
 
+  // Trimmed per-client "General Note" for display. The raw Firestore value can
+  // be a non-string (a numeric-only note cell syncs from Sheets as a number),
+  // so coerce before trimming.
+  const clientNote = String(clientMetadata?.notes || '').trim();
+
   // Payment status (On Target / Warning / Hold) — auto-calculated from the
   // synced invoice rows + this client's payment terms (utils/paymentStatus.mjs)
   const { index: paymentIndex } = usePaymentStatusIndex();
@@ -563,32 +568,45 @@ const ClientDetailView = ({ clientName }) => {
         </div>
 
         {/* Client Metadata */}
-        {clientMetadata && (clientMetadata.contactEmail || clientMetadata.website || clientMetadata.channel) && (
-          <div className="bg-white rounded-lg shadow p-4">
-            <div className="flex flex-wrap gap-6 text-sm">
-              {clientMetadata.contactEmail && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Mail className="w-4 h-4" />
-                  <a href={`mailto:${clientMetadata.contactEmail}`} className="hover:text-blue-600">
-                    {clientMetadata.contactEmail}
-                  </a>
+        {clientMetadata && (clientMetadata.contactEmail || clientMetadata.website || clientMetadata.channel || clientNote) && (
+          <div className="bg-white rounded-lg shadow p-4 space-y-3">
+            {(clientMetadata.contactEmail || clientMetadata.website || clientMetadata.channel) && (
+              <div className="flex flex-wrap gap-6 text-sm">
+                {clientMetadata.contactEmail && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Mail className="w-4 h-4" />
+                    <a href={`mailto:${clientMetadata.contactEmail}`} className="hover:text-blue-600">
+                      {clientMetadata.contactEmail}
+                    </a>
+                  </div>
+                )}
+                {clientMetadata.website && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Globe className="w-4 h-4" />
+                    <a href={clientMetadata.website} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
+                      {clientMetadata.website}
+                    </a>
+                  </div>
+                )}
+                {clientMetadata.channel && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Briefcase className="w-4 h-4" />
+                    <span>Channel: {clientMetadata.channel}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Per-client "General Notes" synced from the finance sheet, tied to
+                this client by name. */}
+            {clientNote && (
+              <div className="flex items-start gap-2 text-sm text-gray-600">
+                <FileText className="w-4 h-4 mt-0.5 shrink-0 text-gray-400" />
+                <div>
+                  <span className="font-medium text-gray-500">Notes: </span>
+                  <span className="whitespace-pre-wrap">{clientNote}</span>
                 </div>
-              )}
-              {clientMetadata.website && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Globe className="w-4 h-4" />
-                  <a href={clientMetadata.website} target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
-                    {clientMetadata.website}
-                  </a>
-                </div>
-              )}
-              {clientMetadata.channel && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Briefcase className="w-4 h-4" />
-                  <span>Channel: {clientMetadata.channel}</span>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
 

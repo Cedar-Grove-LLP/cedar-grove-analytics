@@ -34,13 +34,13 @@ const ClientsTable = ({
           <tr>
             <th
               onClick={() => onSort('name')}
-              className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[16%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               Client Name {getSortIndicator('name')}
             </th>
             <th
               onClick={() => onSort('status')}
-              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[9%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               <span className="inline-flex items-center gap-1">
                 Status {getSortIndicator('status')}
@@ -49,7 +49,7 @@ const ClientsTable = ({
             </th>
             <th
               onClick={() => onSort('paymentStatus')}
-              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[11%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               <span className="inline-flex items-center gap-1">
                 Payment {getSortIndicator('paymentStatus')}
@@ -58,7 +58,7 @@ const ClientsTable = ({
             </th>
             <th
               onClick={() => onSort('avgPaymentDays')}
-              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[9%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               <span className="inline-flex items-center gap-1">
                 Avg Days {getSortIndicator('avgPaymentDays')}
@@ -67,7 +67,7 @@ const ClientsTable = ({
             </th>
             <th
               onClick={() => onSort('outstandingInvoices')}
-              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[9%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               <span className="inline-flex items-center gap-1">
                 Outstanding {getSortIndicator('outstandingInvoices')}
@@ -76,7 +76,7 @@ const ClientsTable = ({
             </th>
             <th
               onClick={() => onSort('billableHours')}
-              className="w-[13%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[11%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               <span className="inline-flex items-center gap-1">
                 Billable Hours {getSortIndicator('billableHours')}
@@ -85,16 +85,22 @@ const ClientsTable = ({
             </th>
             <th
               onClick={() => onSort('grossBillables')}
-              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[11%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               <span className="inline-flex items-center gap-1">
                 Billables {getSortIndicator('grossBillables')}
                 <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
               </span>
             </th>
+            {/* Per-client "General Notes" — paired to each client by name, so it
+                rides along with its row through any sort (not sortable itself,
+                free text). */}
+            <th className="w-[14%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Notes
+            </th>
             <th
               onClick={() => onSort('lastActivity')}
-              className="w-[13%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
             >
               Last Activity {getSortIndicator('lastActivity')}
             </th>
@@ -158,9 +164,15 @@ const ClientsTable = ({
               <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
                 {formatCurrency(client.grossBillables || 0)}
               </td>
+              <td
+                className="px-6 py-4 text-sm text-gray-500 truncate"
+                title={client.notes || undefined}
+              >
+                {client.notes || '—'}
+              </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {client.lastActivity !== 'No activity' 
-                  ? new Date(client.lastActivity).toLocaleDateString() 
+                {client.lastActivity !== 'No activity'
+                  ? new Date(client.lastActivity).toLocaleDateString()
                   : 'No activity'}
               </td>
             </tr>
