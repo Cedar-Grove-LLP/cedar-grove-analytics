@@ -5,8 +5,11 @@ import { Save, Calendar, CheckCircle, AlertCircle } from 'lucide-react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, waitForAuth } from '@/firebase/config';
 import { formatHours } from '@/utils/formatters';
+import { getPSTDate } from '@/utils/dateHelpers';
+import { groupUsersByEmployment } from '@/utils/annualUtilizationProgress';
 import { useMonthlyActualsVsTarget } from '@/hooks/useMonthlyActualsVsTarget';
 import { CalcTooltip } from '@/components/shared';
+import AnnualUtilizationSummary from '@/components/admin/AnnualUtilizationSummary';
 
 const MONTHS = [
   { idx: 0, short: 'Jan', long: 'January' },
@@ -519,23 +522,7 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
 
   const summaryLabel = selectedQuarter === 'all' ? 'Annual' : selectedQuarter;
 
-  const groups = useMemo(() => {
-    const pte = [];
-    const fte = [];
-    const other = [];
-    users.forEach(u => {
-      const role = u.role || 'Attorney';
-      const emp = u.employmentType || 'FTE';
-      if (role !== 'Attorney') other.push(u);
-      else if (emp === 'PTE') pte.push(u);
-      else fte.push(u);
-    });
-    const byName = (a, b) => (a.name || a.id).localeCompare(b.name || b.id);
-    pte.sort(byName);
-    fte.sort(byName);
-    other.sort(byName);
-    return { pte, fte, other };
-  }, [users]);
+  const groups = useMemo(() => groupUsersByEmployment(users), [users]);
 
   // Per-attorney, per-month actuals + capacity-pro-rated fractions for the
   // selected year. Shared hook so this isn't hand-rolled inline (see #1/#6).
@@ -623,6 +610,14 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
           </div>
         </div>
       </div>
+
+      <AnnualUtilizationSummary
+        groups={groups}
+        matrix={matrix}
+        actuals={actuals}
+        capacity={capacity}
+        isFutureYear={selectedYear > getPSTDate().getFullYear()}
+      />
 
       <TargetTable title="Attorneys Full-time" users={groups.fte} matrix={matrix} actuals={actuals} capacity={capacity} onChange={handleChange} visibleMonths={visibleMonths} summaryLabel={summaryLabel} showMonthTotals={selectedQuarter !== 'all'} />
       <TargetTable title="Attorneys Part-time" users={groups.pte} matrix={matrix} actuals={actuals} capacity={capacity} onChange={handleChange} visibleMonths={visibleMonths} summaryLabel={summaryLabel} showMonthTotals={selectedQuarter !== 'all'} />

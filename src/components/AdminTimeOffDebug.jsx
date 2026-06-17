@@ -13,12 +13,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  MapPin,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useUsers, useTimeOff } from '@/hooks/useFirestoreData';
 import { KPICard, AttorneyFilterDropdown } from '@/components/shared';
 import { CHART_COLORS } from '@/utils/constants';
-import { parseOooDayFraction } from '@/utils/timeOff';
+import { parseOooDayFraction, isOffsiteTitle } from '@/utils/timeOff';
 
 // ── Matching helpers (mirror utils/timeOff.js normalization so this debug view
 //    classifies each raw outOfOffice entry the exact same way the pro-rating does).
@@ -78,6 +79,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const TABS = [
   { key: 'calendar', label: 'Calendar', icon: CalendarClock },
   { key: 'unmatched', label: 'Unclassified', icon: AlertTriangle },
+  { key: 'offsite', label: 'Offsite', icon: MapPin },
   { key: 'holidays', label: 'Holidays', icon: CalendarOff },
 ];
 
@@ -126,6 +128,9 @@ const AdminTimeOffDebug = () => {
       }
       const businessDays = countBusinessDays(o.start, o.end);
       const { offFraction: fraction, partial, label: partialLabel } = parseOooDayFraction(o.title);
+      // Offsite events (title matches "offsite") are excluded from pro-rating —
+      // attendees are working, just co-located — same rule as parseTimeOff.
+      const offsite = isOffsiteTitle(o.title);
       return {
         idx,
         raw: o,
@@ -138,6 +143,7 @@ const AdminTimeOffDebug = () => {
         fraction,
         partial,
         partialLabel,
+        offsite,
         effectiveBusinessDays: businessDays * fraction,
         attorney,
         attorneyName: attorney ? (attorney.name || attorney.id) : null,
@@ -146,7 +152,10 @@ const AdminTimeOffDebug = () => {
     });
   }, [timeOffDoc, byEmail, byName]);
 
-  const unmatched = useMemo(() => classified.filter((c) => !c.attorney), [classified]);
+  // Offsite entries are excluded from pro-rating; an unmatched entry only counts
+  // as "unclassified" if it is genuine OOO (not offsite).
+  const unmatched = useMemo(() => classified.filter((c) => !c.attorney && !c.offsite), [classified]);
+  const offsites = useMemo(() => classified.filter((c) => c.offsite), [classified]);
 
   const holidays = useMemo(() => {
     const h = (timeOffDoc && Array.isArray(timeOffDoc.holidays)) ? timeOffDoc.holidays : [];
@@ -203,6 +212,7 @@ const AdminTimeOffDebug = () => {
       ensure(toKey(d)).holiday = h.name || 'Holiday';
     });
     classified.forEach((c) => {
+      if (c.offsite) return; // excluded from pro-rating → not shown as OOO
       if (!c.attorney) return;
       if (!selectedSet.has(c.attorneyName)) return;
       expandRangeKeys(c.start, c.end).forEach((k) => {
@@ -221,20 +231,22 @@ const AdminTimeOffDebug = () => {
   }, [holidays, classified, selectedSet, colorByName]);
 
   const stats = useMemo(() => {
-    const matchedCount = classified.length - unmatched.length;
+    // Matched = joins to a user AND counts toward pro-rating (offsite excluded).
+    const matchedCount = classified.filter((c) => c.attorney && !c.offsite).length;
     const attorneysWithOoo = new Set(
-      classified.filter((c) => c.attorney).map((c) => c.attorneyName),
+      classified.filter((c) => c.attorney && !c.offsite).map((c) => c.attorneyName),
     ).size;
-    const partialCount = classified.filter((c) => c.partial).length;
+    const partialCount = classified.filter((c) => c.partial && !c.offsite).length;
     return {
       totalOoo: classified.length,
       matchedCount,
       unmatchedCount: unmatched.length,
+      offsiteCount: offsites.length,
       attorneysWithOoo,
       partialCount,
       holidayCount: holidays.length,
     };
-  }, [classified, unmatched, holidays]);
+  }, [classified, unmatched, offsites, holidays]);
 
   const loading = usersLoading || timeOffLoading;
 
@@ -329,7 +341,7 @@ const AdminTimeOffDebug = () => {
             </div>
 
             {/* Summary KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
               <KPICard title="OOO Entries" value={stats.totalOoo} icon={CalendarClock} />
               <KPICard title="Matched" value={stats.matchedCount} icon={UsersIcon} iconColor="text-green-600" />
               <KPICard
@@ -343,6 +355,12 @@ const AdminTimeOffDebug = () => {
                 value={stats.partialCount}
                 icon={Clock}
                 iconColor={stats.partialCount > 0 ? 'text-purple-600' : 'text-gray-400'}
+              />
+              <KPICard
+                title="Offsite (excl.)"
+                value={stats.offsiteCount}
+                icon={MapPin}
+                iconColor={stats.offsiteCount > 0 ? 'text-amber-600' : 'text-gray-400'}
               />
               <KPICard title="Attorneys w/ OOO" value={stats.attorneysWithOoo} icon={UsersIcon} />
               <KPICard title="Holidays" value={stats.holidayCount} icon={CalendarOff} iconColor="text-blue-600" />
@@ -389,6 +407,7 @@ const AdminTimeOffDebug = () => {
               />
             )}
             {activeTab === 'unmatched' && <UnmatchedTab entries={unmatched} />}
+            {activeTab === 'offsite' && <OffsiteTab entries={offsites} />}
             {activeTab === 'holidays' && <HolidaysTab holidays={holidays} />}
           </>
         )}
@@ -625,6 +644,54 @@ const UnmatchedTab = ({ entries }) => {
                     ? 'email not in users collection'
                     : 'name does not match any user'}
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// ── Offsite (excluded from pro-rating) ───────────────────────────────────────
+const OffsiteTab = ({ entries }) => {
+  if (entries.length === 0) {
+    return (
+      <div className="text-sm text-gray-600">
+        No offsite events detected. Calendar entries whose title contains “offsite” are excluded
+        from target pro-rating — attendees are working, just co-located.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="text-sm text-gray-600">
+        These entries are treated as <span className="font-medium">offsite</span> (title matches
+        “offsite”) and are <span className="font-medium">excluded</span> from target pro-rating — the
+        same rule the dashboard applies. They are not shown as OOO on the calendar; listed here so
+        the exclusion is auditable.
+      </div>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-gray-500 border-b border-gray-100 bg-gray-50">
+              <th className="px-5 py-2 font-medium">Dates</th>
+              <th className="px-5 py-2 font-medium">Biz days</th>
+              <th className="px-5 py-2 font-medium">Attorney</th>
+              <th className="px-5 py-2 font-medium">Match</th>
+              <th className="px-5 py-2 font-medium">Raw title</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((e) => (
+              <tr key={e.idx} className="border-b border-gray-50 last:border-0">
+                <td className="px-5 py-2 whitespace-nowrap font-mono text-xs text-gray-700">
+                  {fmtRange(e.start, e.end)}
+                </td>
+                <td className="px-5 py-2 text-gray-700">{e.businessDays}</td>
+                <td className="px-5 py-2 text-gray-700">{e.attorneyName || e.name || '—'}</td>
+                <td className="px-5 py-2 text-gray-700">{e.attorney ? e.matchBy : 'unmatched'}</td>
+                <td className="px-5 py-2 text-gray-700">{e.title || '—'}</td>
               </tr>
             ))}
           </tbody>

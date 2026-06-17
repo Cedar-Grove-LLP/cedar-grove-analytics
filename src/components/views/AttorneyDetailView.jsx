@@ -34,6 +34,7 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { useUserBillableEntries, useUserOpsEntries, useUsers, useDataWarnings } from '@/hooks/useFirestoreData';
+import { useMonthlyActualsVsTarget } from '@/hooks/useMonthlyActualsVsTarget';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import {
   getEntryDate,
@@ -46,10 +47,16 @@ import {
   getOooMapFor,
   proRateMonth,
 } from '@/utils/timeOff';
+import {
+  annualGroupForUser,
+  computeAnnualProgress,
+  monthlyHoursFromTargetMap,
+  monthlyActualsByIndex,
+} from '@/utils/annualUtilizationProgress';
 import { formatCurrency, formatHours, formatDate, formatTimeOffContext } from '@/utils/formatters';
 import { CHART_COLORS, CHART, GRAY, LABEL_LINE_COLOR } from '@/utils/colors';
 import { getUtilizationColor, getUtilizationBgColor, getProgressBarColor } from '@/utils/statusStyles';
-import { DateRangeDropdown, CalcTooltip } from '@/components/shared';
+import { DateRangeDropdown, CalcTooltip, AnnualProgressBar } from '@/components/shared';
 
 // Custom tooltip for charts - defined outside component to prevent re-creation on render
 const CustomChartTooltip = ({ active, payload, label }) => {
@@ -92,6 +99,50 @@ const renderPieLabel = ({ cx, cy, midAngle, outerRadius, percent, hours }) => {
   );
 };
 
+// One labelled stat (with calc tooltip) inside the compact annual card. Hoisted
+// to module scope so it isn't re-created on every AnnualProgressCompact render.
+const AnnualStat = ({ label, calcKey, value }) => (
+  <div>
+    <div className="text-xs text-gray-500 inline-flex items-center gap-1">
+      {label}
+      <CalcTooltip calcKey={calcKey} position="bottom" />
+    </div>
+    <div className="text-2xl font-bold text-cg-black">{value}</div>
+  </div>
+);
+
+// Compact single-person annual progress card — mirrors the Targets-page summary
+// for one member (same capacity-weighted pacing). Shows aggregate pace only; no
+// per-event OOO details are surfaced, so it is safe on a non-admin's own page.
+const AnnualProgressCompact = ({ year, group, result }) => {
+  return (
+    <div className="bg-white rounded-lg shadow p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <TrendingUp className="w-5 h-5 text-blue-600" />
+        {year} Annual Progress
+        <span className="text-sm font-normal text-gray-500">· {group.metricLabel} hours</span>
+      </h3>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+        <AnnualStat label="Annual Target" calcKey="annualTarget" value={result.hasTarget ? `${formatHours(result.annualTarget)}h` : '—'} />
+        <AnnualStat label="Actual YTD" calcKey="annualActualYtd" value={`${formatHours(result.actualYtd)}h`} />
+        <AnnualStat label="Remaining" calcKey="annualRemaining" value={result.hasTarget ? `${formatHours(result.remaining)}h` : '—'} />
+        <AnnualStat label="% Complete" calcKey="annualPctComplete" value={result.percentComplete == null ? '—' : `${Math.round(result.percentComplete * 100)}%`} />
+      </div>
+      <AnnualProgressBar
+        percentComplete={result.percentComplete}
+        pacePercent={result.pacePercent}
+        status={result.status}
+        paceDeltaHours={result.paceDeltaHours}
+        barClassName="h-3"
+      />
+      <p className="text-xs text-gray-400 mt-3 inline-flex items-center gap-1 flex-wrap">
+        Pace marker shows where you should be by today
+        <CalcTooltip calcKey="annualPaceMarker" position="bottom" />
+      </p>
+    </div>
+  );
+};
+
 const AttorneyDetailView = ({ attorneyName }) => {
   const router = useRouter();
   const { data: billableEntries, loading: billableLoading, error: billableError } = useUserBillableEntries(attorneyName);
@@ -112,17 +163,14 @@ const AttorneyDetailView = ({ attorneyName }) => {
   // Attorney targets from shared cache
   const attorneyTargets = useMemo(() => allTargets[attorneyName] || {}, [allTargets, attorneyName]);
 
-  // Get the person's role from user profile
-  const personRole = useMemo(() => {
-    const user = users.find(u => (u.name || u.id) === attorneyName || u.id === attorneyName);
-    return user?.role || 'Attorney';
-  }, [users, attorneyName]);
-
+  // The full user record for this person (role, email, employment type).
+  const currentUser = useMemo(
+    () => users.find(u => (u.name || u.id) === attorneyName || u.id === attorneyName) || null,
+    [users, attorneyName]
+  );
+  const personRole = currentUser?.role || 'Attorney';
   // Email for joining out-of-office data (exact normalized match in the calendar)
-  const attorneyEmail = useMemo(() => {
-    const user = users.find(u => (u.name || u.id) === attorneyName || u.id === attorneyName);
-    return user?.email || '';
-  }, [users, attorneyName]);
+  const attorneyEmail = currentUser?.email || '';
 
   const loading = billableLoading || opsLoading;
   const error = billableError || opsError;
@@ -366,6 +414,25 @@ const AttorneyDetailView = ({ attorneyName }) => {
       opsUtilization,
     };
   }, [attorneyEntries, filteredBillableEntries, filteredOpsEntries, calculatedTargets]);
+
+  // Annual utilization progress for this person — the same capacity-weighted
+  // pacing shown on the Targets page, scoped to one member. The year follows the
+  // active date range's end date (current PST year for all-time / unbounded).
+  const summaryYear = dateRangeInfo.endDate.getFullYear();
+  const summaryUsers = useMemo(() => (currentUser ? [currentUser] : []), [currentUser]);
+  const { actuals: annualActuals, capacity: annualCapacity } = useMonthlyActualsVsTarget(summaryYear, summaryUsers);
+
+  const annualProgress = useMemo(() => {
+    if (!currentUser) return null;
+    const group = annualGroupForUser(currentUser);
+    if (!group) return null;
+    const monthlyTargets = monthlyHoursFromTargetMap(attorneyTargets, summaryYear, group.targetField);
+    const monthlyActuals = monthlyActualsByIndex(annualActuals?.[currentUser.id], group.actualField);
+    const capacityFractions = annualCapacity?.[currentUser.id]?.fractions;
+    const isFutureYear = summaryYear > getPSTDate().getFullYear();
+    const result = computeAnnualProgress(monthlyTargets, monthlyActuals, capacityFractions, { isFutureYear });
+    return { group, result };
+  }, [currentUser, attorneyTargets, summaryYear, annualActuals, annualCapacity]);
 
   // Client breakdown data (billable entries only — ops entries have no client)
   const clientBreakdown = useMemo(() => {
@@ -718,6 +785,11 @@ const AttorneyDetailView = ({ attorneyName }) => {
             </div>
           </div>
         </div>
+
+        {/* Annual Progress (capacity-weighted YTD pacing for the selected year) */}
+        {annualProgress && (
+          <AnnualProgressCompact year={summaryYear} group={annualProgress.group} result={annualProgress.result} />
+        )}
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
