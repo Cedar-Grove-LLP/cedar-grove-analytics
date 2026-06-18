@@ -274,12 +274,13 @@ export const CALC_DEFINITIONS = Object.freeze({
   },
   projectedEarnings: {
     label: 'Projected Earnings (take-home)',
-    formula: 'Σ over remaining months: (target hours − actual this month) × projected take-home rate',
-    inputs: ['monthly targets (admin-entered)', 'rate card ladder (Q2/Q4 rank bumps, capped at rank 19)', 'YTD actuals'],
+    formula: 'YTD actual earnings + Σ over remaining months: (target hours − actual this month) × projected take-home rate',
+    inputs: ['YTD actual earnings', 'monthly targets (admin-entered)', 'rate card ladder (Q2/Q4 rank bumps, capped at rank 19)', 'YTD actuals'],
     source: SOURCE.COMPUTED,
     notes: [
       'Rank is matched on the client rate; the payout uses the attorney (take-home) column — Colin rate for Colin.',
       'If the current client rate has no exact rate-card match, take-home is unknown and the projection is $0.',
+      'Part-time (PTE) attorneys skip the rate card entirely: their stored rate is paid flat for the whole year, with no Q2/Q4 rank bumps.',
     ],
   },
   projectedHours: {
@@ -287,6 +288,17 @@ export const CALC_DEFINITIONS = Object.freeze({
     formula: 'Σ over remaining months: target hours − actual hours this month (never below 0)',
     inputs: ['monthly billable targets (admin-entered)', 'current-month actual hours'],
     source: SOURCE.COMPUTED,
+  },
+  partnerProfitShare: {
+    label: 'Partner Profit Share',
+    formula: '(avg completed-month firm profit × 12) × partner share % — Sam McClure 95%, Colin Van Loon 5%',
+    inputs: ['monthly firm profit (invoices sheet B16, synced as firmProfit on monthlyMetrics)', 'count of completed months', 'partner share %'],
+    source: SOURCE.COMPUTED,
+    notes: [
+      'Predicted annual firm profit = average of the current year\'s completed-month profit, projected across all 12 months.',
+      'Only the two partners receive a share; it is added on top of their labor projection in the Proj. Earnings total.',
+      'Shows $0 until firmProfit is synced from the invoices sheet (B16).',
+    ],
   },
   activeClients: {
     label: 'Active Clients',

@@ -139,13 +139,16 @@ driveDownloads/{monthKey}  — month, totalDownloads, uniqueUsers, uniqueFiles, 
 monthlyMetrics/all       — firm-wide per-month metrics. Single doc with entries[] array:
                               { entries: [{ month, year, revenueAccrued,
                                   attorneyBillables,  // optional; pulled from the sheet
+                                  firmProfit,         // optional; invoices sheet cell B16
                                   syncedAt }],
                                 entryCount, lastSyncedAt }
                               Synced manually from the monthly sheet tab via Apps Script
                               (cell B10 "Revenue Accrued" + the "Attorney Billables" line).
                               attorneyBillables is shown on the Billing Summaries page and
                               drives the Overview "Total Billables" KPI (see
-                              utils/billingSummary.js).
+                              utils/billingSummary.js). firmProfit (invoices workbook B16)
+                              is optional — absent until the sync ships; drives the partner
+                              profit-share column on the Projected Earnings admin page.
 
 rateCard/all             — shared rate ladder used ONLY for predictive earnings
                               modeling. Single doc:
@@ -190,7 +193,7 @@ Legacy field names (`hours`, `secondaryHours`) are normalized to `billableHours`
 - **Client Payment Status tags:** Clients carry an auto-calculated **On Target / Warning / Hold** tag (replacing the old manual Ideal/Non-Ideal/TBD ideal-fit tags). `src/utils/paymentStatus.mjs` (pure, tested by `tests/payment-status.test.mjs`) derives the tag from the synced `invoices/all` rows + the client's `paymentTerms`, so it refreshes whenever the Payment Status sheet re-syncs — **never set manually**. Criteria: On Target = avg payment ≤ 15d AND ≥90% of invoices paid within 15d AND 0 outstanding; Hold = 2+ invoices overdue at once OR 1 invoice 30+ days past terms OR avg > 30d (displays the "No new matters without partner approval" flag); Warning = avg 22–30d, 1 invoice 21+ days overdue, or 2 unpaid accumulated — implemented as the middle catch-all so the three tags cover the whole book. **Hold exit is sticky:** the invoice history is replayed per calendar-month billing cycle; leaving Hold requires zero balance + 2 consecutive clean cycles and steps down to Warning first, never straight to On Target.
 - **Hidden attorneys:** Configured in `hiddenAttorneys.mjs` with date thresholds. Hidden from UI but included in aggregate totals.
 - **Role overrides:** `roles.js` maps non-attorney staff to custom display roles.
-- **Earnings predictions:** Use `rateCard/all` only for forward projections. Derive an attorney's current rank by exact-matching their latest stored rate (a **client** billing rate) against `rateCard.levels[].clientRate`. For each projected month, bump rank by 1 at every Q2 (Apr 1) and Q4 (Oct 1) boundary, capped at rank 19. Projected earnings pay out the **take-home** column for the predicted rank — `attorneyRate`, or `colinRate` for Colin (null below rank 13 → falls back to `attorneyRate`) — never the client rate. If the current rate has no exact match, warn ("No rank match" badge) and project $0 take-home (unknowable without a rank).
+- **Earnings predictions:** Use `rateCard/all` only for forward projections. Derive an attorney's current rank by exact-matching their latest stored rate (a **client** billing rate) against `rateCard.levels[].clientRate`. For each projected month, bump rank by 1 at every Q2 (Apr 1) and Q4 (Oct 1) boundary, capped at rank 19. Projected earnings pay out the **take-home** column for the predicted rank — `attorneyRate`, or `colinRate` for Colin (null below rank 13 → falls back to `attorneyRate`) — never the client rate. If the current rate has no exact match, warn ("No rank match" badge) and project $0 take-home (unknowable without a rank). **Part-time (PTE) attorneys** skip the rate card entirely — their stored rate is held flat for the whole year (no Q2/Q4 bumps); the Projected Earnings page also exposes a per-attorney **Promote** checkbox to toggle their rank bumps on/off. **Partner profit share:** the two partners (Sam McClure 95%, Colin Van Loon 5%) additionally receive a share of the predicted full-year firm profit — `avg(completed-month firmProfit) × 12 × share%` — surfaced in a Profit Share column and folded into their Proj. Earnings total.
 
 ## Environment Variables
 
