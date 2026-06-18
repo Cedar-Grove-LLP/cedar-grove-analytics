@@ -74,6 +74,9 @@ const OverviewView = ({
     // (already folded into each member's earnings; surfaced here for visibility,
     // NOT added into Total Billables, which is rate × hours / the sheet figure).
     const adjustmentSum = subset.reduce((acc, a) => acc + (a.adjustment || 0), 0);
+    // Show the Adjustments card whenever any cohort member has an adjustment
+    // entry (matches the detail pages, which also show it on a net-zero amount).
+    const hasAdjustment = subset.some((a) => a.hasAdjustment);
     // Cohort-wide out-of-office / holiday context — the pace targets above are
     // already reduced for each member's OOO (capacity model); this drives a tooltip.
     const oooDays = subset.reduce((acc, a) => acc + (a.oooDays || 0), 0);
@@ -123,6 +126,7 @@ const OverviewView = ({
       opsTarget,
       grossBillables,
       adjustmentSum,
+      hasAdjustment,
       billablesLabel,
       billablesSubtitle,
       billablesCalcKey,
@@ -272,7 +276,7 @@ const OverviewView = ({
           <div className="text-sm text-gray-600 text-center">{cohortMetrics.billablesSubtitle}</div>
         </div>
 
-        {cohortMetrics.adjustmentSum !== 0 && (
+        {cohortMetrics.hasAdjustment && (
           <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
             <KpiTitle label="Adjustments" calcKey="adjustment" icon={<DollarSign className="w-5 h-5 text-amber-500" />} />
             <div className="flex-1 flex items-center justify-center">

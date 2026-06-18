@@ -400,6 +400,7 @@ export const useAnalyticsData = ({
       userMonthlyActivity[userName].billable += billableHours;
       userMonthlyActivity[userName].earnings += earnings;
       userMonthlyActivity[userName].adjustment += entry.adjustment || 0;
+      if (entry.adjustment) userMonthlyActivity[userName].hasAdjustment = true;
       // Gross billables = rate × hours (distinct from take-home `earnings`)
       if (billableHours > 0) {
         userMonthlyActivity[userName].grossBillables =
@@ -507,6 +508,7 @@ export const useAnalyticsData = ({
         ops: data.ops,
         earnings: data.earnings,
         adjustment: data.adjustment || 0,
+        hasAdjustment: !!data.hasAdjustment,
         grossBillables: data.grossBillables || 0,
         target: Math.round(totalTarget * 10) / 10,
         billableTarget: Math.round(totalBillableTarget * 10) / 10,
@@ -549,11 +551,12 @@ export const useAnalyticsData = ({
       const userName = userMap[entry.userId] || entry.userId;
 
       if (!userMonthlyActivity[userName]) {
-        userMonthlyActivity[userName] = { billable: 0, ops: 0, earnings: 0 };
+        userMonthlyActivity[userName] = { billable: 0, ops: 0, earnings: 0, adjustment: 0 };
       }
 
       userMonthlyActivity[userName].billable += (entry.billableHours || 0);
       userMonthlyActivity[userName].earnings += (entry.earnings || 0);
+      userMonthlyActivity[userName].adjustment += (entry.adjustment || 0);
     });
 
     // Collect ops hours
@@ -561,7 +564,7 @@ export const useAnalyticsData = ({
       const userName = userMap[entry.userId] || entry.userId;
 
       if (!userMonthlyActivity[userName]) {
-        userMonthlyActivity[userName] = { billable: 0, ops: 0, earnings: 0 };
+        userMonthlyActivity[userName] = { billable: 0, ops: 0, earnings: 0, adjustment: 0 };
       }
 
       userMonthlyActivity[userName].ops += (entry.opsHours || 0);
@@ -575,6 +578,7 @@ export const useAnalyticsData = ({
         billable: data.billable,
         ops: data.ops,
         earnings: data.earnings,
+        adjustment: data.adjustment || 0,
         target: defaultTarget.totalHours,
         billableTarget: defaultTarget.billableHours,
         opsTarget: defaultTarget.opsHours,
