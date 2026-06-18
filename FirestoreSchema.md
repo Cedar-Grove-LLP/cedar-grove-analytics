@@ -27,6 +27,8 @@ Each sheet has a header row (row 9) with the following columns:
 
 A single sheet row may contain billable data, ops data, both, or an 83(b) election entry. The sync script parses each row and writes to the appropriate collections based on which columns have data.
 
+**Current layout (row-11 tabs) + the McClure "Adjustment ($)" column:** newer tabs put the header on **row 11** (entries from row 12). Sam McClure's workbook additionally inserts an **"Adjustment ($)"** column at **D**, which shifts "Billables Earnings" to **E** (`= Hours × Rate + Adjustment`) and pushes every later billable / ops / 83(b) / reimbursement column **+1** (e.g. ops Hours moves M → N). To stay robust to the shift — and to the fact that the column exists only in McClure's workbook — the sync should locate billable-block columns **by header name** rather than by fixed letters. See `docs/timesheet-sync.md` §8 for the Apps Script steps.
+
 Rows 1–8 contain summary totals that are synced as `sheetTotals` metadata on the Firestore documents for dashboard validation:
 
 | Row | Column A Label | Column B Value | Column E Label | Column F Value |
@@ -194,8 +196,9 @@ Only rows that have at least one of: client, billable date, or billable hours ar
   // Sheet summary totals (from rows 1–8 of the spreadsheet, used for dashboard validation)
   sheetTotals: {
     totalBillableHours: 87.40,           // number — from row 1 col B
-    billableEarnings: 29497.50,          // number — from row 2 col B
+    billableEarnings: 29497.50,          // number — from row 2 col B (includes Adjustments)
     reimbursements: 686.00,              // number — from row 3 col B
+    adjustment: 0,                       // number — Σ Adjustment ($) column (McClure only)
     totalPayment: 30346.20,              // number — from row 6 col B
   },
 
@@ -205,7 +208,8 @@ Only rows that have at least one of: client, billable date, or billable hours ar
       client: "C47 Inc.",                // string — client name
       date: Timestamp,                   // Firestore Timestamp — billable date
       hours: 0.6,                        // number — billable hours
-      earnings: 203.00,                  // number — dollar amount (parsed from "$203" format)
+      earnings: 203.00,                  // number — dollar amount (parsed from "$203" format); = Hours×Rate + Adjustment
+      adjustment: 0,                     // number — manual month-end +/- adjustment (McClure only); folded into earnings
       billingCategory: "General Diligence", // string — billing category
       matter: "YC Application Questions",   // string — matter name (may be empty)
       reimbursements: 0,                 // number — reimbursement amount
@@ -219,7 +223,8 @@ Only rows that have at least one of: client, billable date, or billable hours ar
 
 ### Field Notes
 
-- `earnings`: Parsed from the spreadsheet's currency format (e.g., `"$709"` or `"$29,497.50"` → `709` or `29497.50`). Stored as a plain number, not a string.
+- `earnings`: Parsed from the spreadsheet's currency format (e.g., `"$709"` or `"$29,497.50"` → `709` or `29497.50`). Stored as a plain number, not a string. On Sam McClure's current-layout tabs this column is `Hours × Rate + Adjustment`, so it already includes any month-end adjustment.
+- `adjustment`: Manual month-end dollar adjustment — positive = extra charge, negative = credit/discount — used on **Sam McClure's** timesheet only to tune a client's final bill without logging time. In the current (row-11) layout it is column **D**, which makes "Billables Earnings" column **E** (`= Hours × Rate + Adjustment`). Defaults to `0`; absent on other attorneys' workbooks and on legacy (row-9) tabs. Folded into `earnings`, so on the dashboard it is informational and must **not** be summed on top of earnings.
 - `date`: The billable date from the spreadsheet. Dates in the sheet are formatted as `M/D` (e.g., `1/2`, `1/14`). The year is appended from the spreadsheet name during sync. Stored as a Firestore Timestamp.
 - `matter`: May be empty string if no matter is specified for that entry.
 - `reimbursements`: Defaults to `0` if the cell is empty.
@@ -354,6 +359,8 @@ The dashboard compares computed entry sums against the `sheetTotals` stored on e
 | 83(b) fee earnings mismatch | Sum of entry `flatFee` vs `sheetTotals.eightThreeBFeeEarnings` |
 | Total hours mismatch | (billable hours + ops hours) vs `sheetTotals.totalHours` |
 | Total payment mismatch | (billable earnings + reimbursements + 83(b) fees) vs `sheetTotals.totalPayment` |
+
+Because Sam McClure's `Adjustment ($)` is folded into the Billables Earnings column, both sides of the **Billable earnings** and **Total payment** checks already include it, so they continue to reconcile — no separate adjustment check is required. The synced `sheetTotals.adjustment` is informational.
 
 Warnings only appear when `sheetTotals` are present on the document (i.e., after the sync script has been re-run to populate them).
 

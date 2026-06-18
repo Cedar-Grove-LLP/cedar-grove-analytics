@@ -334,6 +334,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
         billableHours: 0,
         opsHours: 0,
         totalEarnings: 0,
+        totalAdjustments: 0,
         matterCount: 0,
         uniqueTransactionTypes: 0,
         uniqueClients: 0,
@@ -351,6 +352,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
       billableHours: 0,
       opsHours: 0,
       totalEarnings: 0,
+      totalAdjustments: 0,
       matters: new Set(),
       transactionTypes: new Set(),
       clients: new Set(),
@@ -363,6 +365,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
       stats.billableHours += billable;
       stats.totalHours += billable;
       stats.totalEarnings += entry.earnings || 0;
+      stats.totalAdjustments += entry.adjustment || 0;
 
       if (entry.matter) {
         stats.matters.add(entry.matter);
@@ -585,6 +588,10 @@ const AttorneyDetailView = ({ attorneyName }) => {
       })
       .slice(0, 50);
   }, [attorneyEntries]);
+
+  // Sam McClure's manual month-end adjustments (folded into earnings). Only show
+  // the Adjustments KPI/column when this attorney actually has adjustment data.
+  const hasAdjustments = attorneyStats.totalAdjustments !== 0 || recentEntries.some((e) => e.adjustment);
 
   const dateRangeLabel = getDateRangeLabel(dateRange, customDateStart, customDateEnd);
 
@@ -824,6 +831,22 @@ const AttorneyDetailView = ({ attorneyName }) => {
             <div className="text-2xl font-bold text-green-600">{formatCurrency(attorneyStats.totalEarnings)}</div>
             <div className="text-xs text-gray-500 mt-1">From billable work</div>
           </div>
+
+          {hasAdjustments && (
+            <div className="bg-white p-4 rounded-lg shadow">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-600 text-sm font-medium inline-flex items-center gap-1">
+                  Adjustments
+                  <CalcTooltip calcKey="adjustment" position="bottom" />
+                </span>
+                <DollarSign className="w-5 h-5 text-amber-500" />
+              </div>
+              <div className={`text-2xl font-bold ${attorneyStats.totalAdjustments < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                {formatCurrency(attorneyStats.totalAdjustments)}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Included in Earnings</div>
+            </div>
+          )}
 
           <div className="bg-white p-4 rounded-lg shadow">
             <div className="flex items-center justify-between mb-2">
@@ -1155,6 +1178,14 @@ const AttorneyDetailView = ({ attorneyName }) => {
                         <CalcTooltip calcKey="entryEarnings" position="bottom" align="right" />
                       </span>
                     </th>
+                    {hasAdjustments && (
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        <span className="inline-flex items-center gap-1">
+                          Adjustment
+                          <CalcTooltip calcKey="entryAdjustment" position="bottom" align="right" />
+                        </span>
+                      </th>
+                    )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
                   </tr>
                 </thead>
@@ -1181,9 +1212,16 @@ const AttorneyDetailView = ({ attorneyName }) => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
                           {entry.opsHours > 0 ? `${formatHours(entry.opsHours)}h` : '-'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
-                          {entry.earnings > 0 ? formatCurrency(entry.earnings) : '-'}
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${entry.earnings < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {entry.earnings ? formatCurrency(entry.earnings) : '-'}
                         </td>
+                        {hasAdjustments && (
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
+                            {entry.adjustment
+                              ? <span className={entry.adjustment < 0 ? 'text-red-600' : 'text-gray-900'}>{formatCurrency(entry.adjustment)}</span>
+                              : <span className="text-gray-400">-</span>}
+                          </td>
+                        )}
                         <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={entry.notes}>
                           {entry.notes || '-'}
                         </td>

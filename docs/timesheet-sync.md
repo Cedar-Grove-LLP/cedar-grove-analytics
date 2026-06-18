@@ -136,3 +136,145 @@ With custom range **Jan 1 – Mar 12, 2025**:
 - **Total Billables** is nonzero (Rate × Hours subtitle — this range is not
   month-aligned, so the sheet figure is intentionally not used).
 - The admin missing-rate banner is gone (no attorney bills at $0).
+
+## 8. Adding the "Adjustment ($)" column to McClure's timesheet (current layout)
+
+Sam McClure needs to adjust a client's **final bill** at month-end without
+logging time (logging fake hours distorts every hours metric). His workbook
+gains a manual **"Adjustment ($)"** column; this section is the Apps Script side
+of that change. **Scope: the McClure workbook only** — other attorneys'
+workbooks and all legacy (row-9) tabs are unchanged, so the parser must treat
+the column as optional.
+
+### 8.1 Sheet change (done by hand in the workbook — recap)
+
+In the current-layout tabs (header **row 11**) and the **Template** tab:
+
+- A column is **inserted at D**, so:
+  - **D** = `Adjustment ($)` — manual input, blank/0 by default, accepts
+    positive (extra charge) and negative (credit/discount) values.
+  - **E** = `Billables Earnings`, now `= Hours × Rate + Adjustment`
+    (`E12 = C12*$B$2 + D12`, filled down).
+  - Everything from the old column D rightward shifts **+1** (Billing Category
+    E→F, Matter F→G, … ops Hours **M→N**, Reimbursement Amount T→U).
+- A pure month-end adjustment is a row with **client + date, 0 hours, and the
+  amount in D** → that row's E = `0 × Rate + Adjustment`.
+- Hours (C) and `Total Billable Hours` (B1 `=sum(C:C)`) are untouched; the
+  `Billable Earnings` (B3) and `Total Payment` (B8) summary cells already sum
+  column E, so they include adjustments automatically.
+
+### 8.2 Apps Script: resolve billable columns by header name (recommended)
+
+The insert shifts the fixed column letters the parser relies on, and the column
+exists in only one workbook. The robust fix is to **resolve the billable-block
+columns by matching the header row** (row 11 in current-layout tabs, row 9 in
+legacy) instead of hard-coding letters:
+
+```js
+// Build { headerLabel(lowercased) -> 0-based column index } from the header row.
+function billableColumnMap(sheet, headerRow) {
+  const lastCol = sheet.getLastColumn();
+  const headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+  const map = {};
+  headers.forEach((h, i) => {
+    const key = String(h).trim().toLowerCase();
+    if (key) map[key] = i; // 0-based
+  });
+  return map;
+}
+
+// Resolve with fallbacks; returns -1 when the column is absent.
+function col(map, ...labels) {
+  for (const l of labels) {
+    const k = l.trim().toLowerCase();
+    if (k in map) return map[k];
+  }
+  return -1;
+}
+
+const m = billableColumnMap(sheet, headerRow);
+const cClient   = col(m, 'Client');
+const cDate     = col(m, 'Date');                          // first "Date" = billable date
+const cHours    = col(m, 'Hours');                         // first "Hours" = billable hours
+const cAdjust   = col(m, 'Adjustment ($)', 'Adjustment');  // -1 on non-McClure / legacy tabs
+const cEarnings = col(m, 'Billables Earnings', 'Billable Earnings');
+const cCategory = col(m, 'Billing Category');
+const cMatter   = col(m, 'Matter');
+const cNotes    = col(m, 'Notes');
+// Ops / 83(b) / Reimbursement blocks resolve the same way (their "Date"/"Hours"
+// are the 2nd occurrences — index from the "Ops" column rightward).
+```
+
+This makes the parser immune to the +1 shift and needs **no per-workbook
+special-casing**.
+
+### 8.3 Per-entry fields
+
+For each billable row, read and write a new `adjustment` field alongside the
+existing `earnings`:
+
+```js
+const adjustment = cAdjust >= 0 ? (parseMoney(row[cAdjust]) || 0) : 0;
+const earnings   = parseMoney(row[cEarnings]) || 0; // already = Hours×Rate + Adjustment
+
+entry.earnings   = earnings;    // unchanged source column (now col E); includes the adjustment
+entry.adjustment = adjustment;  // NEW — raw adjustment, for dashboard transparency
+```
+
+- `earnings` keeps coming from the **Billables Earnings** column (now E); because
+  the sheet formula folds the adjustment in, **do not add it again**.
+- `adjustment` defaults to **0** when the column is absent (other attorneys,
+  legacy tabs).
+
+### 8.4 Summary totals (`sheetTotals`)
+
+Read summary values by scanning **column-A labels** in rows 1–8 and taking the
+adjacent column-B value, rather than hard-coding B2/B3 — this is layout-proof:
+
+- `billableEarnings` (label `Billable Earnings`) and `totalPayment` (label
+  `Total Payment`) already include adjustments (they sum / derive from column E),
+  so **no formula change** — just read the right labels.
+- Add **`sheetTotals.adjustment`** = `Σ` of the `Adjustment ($)` column (0 when
+  the column is absent).
+
+`totalBillableHours` (label `Total Billable Hours`, `=sum(C:C)`) is untouched.
+
+### 8.5 Row inclusion & scope
+
+- Keep the existing rule: include a row if it has **client, billable date, or
+  billable hours**. A 0-hour adjustment row carries client + date, so it is
+  included and its `earnings` (= the adjustment) syncs.
+- Hours parsing is unchanged, so no hours metric moves.
+- Applies to the McClure workbook only; everywhere else `adjustment` is 0 and
+  nothing changes.
+
+### 8.6 Fixed-index fallback (only if you keep hard-coded columns)
+
+If the parser must stay index-based, apply this **+1 shift to McClure's
+current-layout tabs only** (1-based columns):
+
+| Field | Old | New |
+|------|-----|-----|
+| Adjustment ($) (NEW) | — | D (4) |
+| Billables Earnings | D (4) | E (5) |
+| Billing Category | E (5) | F (6) |
+| Matter | F (6) | G (7) |
+| Client Filing Fees | G (7) | H (8) |
+| Notes | H (8) | I (9) |
+| Ops (description) | J (10) | K (11) |
+| Ops Category | K (11) | L (12) |
+| Ops Date | L (12) | M (13) |
+| Ops Hours | M (13) | N (14) |
+| Company / Name / Flat Fee | O/P/Q | P/Q/R |
+| Reimb. Desc / Amount | S/T | T/U |
+
+The header-detection approach (§8.2) is preferred because it needs no
+per-workbook branching.
+
+### 8.7 Verify
+
+Re-sync one McClure month that has an adjustment row, then on his attorney
+detail page confirm: **Earnings** reflects `Hours×Rate + Adjustment`, the
+**Adjustments** KPI shows the net (red when negative), the Recent Entries
+**Adjustment** column shows the per-row ±, and hours / utilization are unchanged.
+Other attorneys show no Adjustments card.

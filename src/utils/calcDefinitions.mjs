@@ -76,8 +76,8 @@ export const CALC_DEFINITIONS = Object.freeze({
     formula: 'Σ ops entry hours within the selected date range and filters',
     inputs: ['per-row ops hours', 'date range + attorney filters'],
     source: SOURCE.COMPUTED,
-    sheetRef: { workbook: 'invoices', label: 'Hours (Ops section)', scope: 'column', currentCell: 'M12 down', legacyCell: 'M10 down' },
-    notes: ["The sheet's 'Ops Hours' summary cell (F1 in both layouts) sums the whole tab; the dashboard re-sums rows after date filtering."],
+    sheetRef: { workbook: 'invoices', label: 'Hours (Ops section)', scope: 'column', currentCell: 'N12 down', legacyCell: 'M10 down' },
+    notes: ["The sheet's 'Ops Hours' summary cell (F1 in the legacy layout / G1 in the current layout, after the Adjustment column) sums the whole tab; the dashboard re-sums rows after date filtering."],
   },
   totalHours: {
     label: 'Total Hours',
@@ -87,12 +87,12 @@ export const CALC_DEFINITIONS = Object.freeze({
   },
   earnings: {
     label: 'Earnings (take-home)',
-    formula: 'Σ per-entry earnings, exactly as synced from the sheet',
+    formula: 'Σ per-entry earnings (Hours × Rate + any month-end Adjustment), exactly as synced from the sheet',
     inputs: ['per-row earnings values'],
     source: SOURCE.SHEET_LITERAL,
-    sheetRef: { workbook: 'invoices', label: 'Billables Earnings', scope: 'column', currentCell: 'D12 down', legacyCell: 'D10 down' },
+    sheetRef: { workbook: 'invoices', label: 'Billables Earnings', scope: 'column', currentCell: 'E12 down', legacyCell: 'D10 down' },
     notes: [
-      'Not recomputed as rate × hours — differences vs Gross Billables are expected.',
+      "Not recomputed as rate × hours — differences vs Gross Billables are expected; Sam McClure's month-end Adjustment is folded into this column.",
       `Sheet summary: ${BILLABLE_EARNINGS_SUMMARY_REF}.`,
     ],
   },
@@ -101,7 +101,25 @@ export const CALC_DEFINITIONS = Object.freeze({
     formula: 'The earnings value of this single sheet row, as synced',
     inputs: ['one sheet row'],
     source: SOURCE.SHEET_LITERAL,
-    sheetRef: { workbook: 'invoices', label: 'Billables Earnings', scope: 'column', currentCell: 'D (entry row)', legacyCell: 'D (entry row)' },
+    sheetRef: { workbook: 'invoices', label: 'Billables Earnings', scope: 'column', currentCell: 'E (entry row)', legacyCell: 'D (entry row)' },
+  },
+  adjustment: {
+    label: 'Adjustments',
+    formula: 'Σ per-entry manual dollar adjustments (Sam McClure only)',
+    inputs: ['per-row Adjustment ($) values'],
+    source: SOURCE.COMPUTED,
+    sheetRef: { workbook: 'invoices', label: 'Adjustment ($)', scope: 'column', currentCell: 'D12 down', legacyCell: 'n/a - column added in the current layout' },
+    notes: [
+      "Manual month-end charge (+) or credit/discount (-) to a client's final bill, entered without logging time so the hours totals stay untouched.",
+      'Already folded into the Billables Earnings column, so it is part of Earnings / Total Payment — shown separately here for transparency, never added on top.',
+    ],
+  },
+  entryAdjustment: {
+    label: 'Entry Adjustment',
+    formula: 'The manual dollar adjustment on this single sheet row, as synced',
+    inputs: ['one sheet row'],
+    source: SOURCE.SHEET_LITERAL,
+    sheetRef: { workbook: 'invoices', label: 'Adjustment ($)', scope: 'column', currentCell: 'D (entry row)', legacyCell: 'n/a - column added in the current layout' },
   },
   utilizationPct: {
     label: 'Utilization %',

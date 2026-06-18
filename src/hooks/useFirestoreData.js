@@ -4,7 +4,7 @@ import { buildPaymentStatusIndex } from '@/utils/paymentStatus.mjs';
 
 /**
  * Normalize a billable entry from the new schema.
- * New schema fields: client, date, hours, earnings, billingCategory, matter, reimbursements, notes, sheetRowNumber
+ * New schema fields: client, date, hours, earnings, adjustment, billingCategory, matter, reimbursements, notes, sheetRowNumber
  * Normalized output adds: userId, billableHours, month, year
  */
 export const normalizeBillableEntry = (entryData, userId, month, year) => {
@@ -20,6 +20,10 @@ export const normalizeBillableEntry = (entryData, userId, month, year) => {
     client: entryData.client || 'Unknown',
     matter: entryData.matter || '',
     reimbursements: parseFloat(entryData.reimbursements) || 0,
+    // Manual month-end dollar adjustment (Sam McClure timesheet only): already
+    // folded into `earnings` via the sheet's Billables Earnings column; passed
+    // through here for transparency/display. Defaults to 0 when absent.
+    adjustment: parseFloat(entryData.adjustment) || 0,
     notes: entryData.notes || '',
     month: month || '',
     year: year || new Date().getFullYear(),
