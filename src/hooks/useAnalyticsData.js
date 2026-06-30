@@ -18,6 +18,7 @@ import {
   filterHiddenAttorneys,
 } from '../utils/hiddenAttorneys.mjs';
 import { monthKeyFromDate } from '../utils/rateLookup.mjs';
+import { sortBySeniority } from '../utils/seniority.mjs';
 
 export const useAnalyticsData = ({
   dateRange,
@@ -230,8 +231,9 @@ export const useAnalyticsData = ({
       names.add(user.name || user.id);
     });
 
-    // Drop hidden attorneys, plus inactive attorneys with no data this timeframe
-    const allNames = Array.from(names).sort();
+    // Drop hidden attorneys, plus inactive attorneys with no data this timeframe.
+    // Listed in firm seniority order (unknown names trail alphabetically).
+    const allNames = sortBySeniority(Array.from(names));
     return filterHiddenAttorneys(allNames).filter(name =>
       !inactiveAttorneyNames.has(name) || namesWithDataInRange.has(name)
     );
@@ -538,7 +540,9 @@ export const useAnalyticsData = ({
              !isAttorneyHidden(user.name);
     });
 
-    return visibleUserData;
+    // Default per-attorney order is firm seniority, so any consumer that renders
+    // this list as-is (and not via its own sort) shows staff most→least tenured.
+    return sortBySeniority(visibleUserData, user => user.name || user.id);
   }, [filteredBillableEntries, filteredOpsEntries, userMap, getRate, dateRangeInfo, userTargets, getUserRole, userEmploymentTypeMap, userEmailMap, parsedTimeOff, getDefaultTarget, firebaseUsers, globalAttorneyFilter, dateRangeMonths, inactiveAttorneyNames, namesWithDataInRange]);
 
   // Create a separate dataset that includes hidden users for totals calculation
@@ -1251,13 +1255,14 @@ export const useAnalyticsData = ({
       record.hours += billableHours;
     });
 
-    const warnings = [...byUser.entries()]
-      .map(([userName, record]) => ({
+    const warnings = sortBySeniority(
+      [...byUser.entries()].map(([userName, record]) => ({
         userName,
         monthKeys: [...record.monthKeys].sort(),
         hours: record.hours,
-      }))
-      .sort((a, b) => a.userName.localeCompare(b.userName));
+      })),
+      (w) => w.userName,
+    );
 
     return { totalGrossBillables: total, missingRateWarnings: warnings };
   }, [filteredBillableEntries, userMap, getRateInfo]);

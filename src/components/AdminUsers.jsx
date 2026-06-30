@@ -18,6 +18,7 @@ import {
 import { collection, getDocs, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
+import { compareBySeniority } from '@/utils/seniority.mjs';
 
 const AdminUsers = () => {
   const { user, signOut } = useAuth();
@@ -55,12 +56,8 @@ const AdminUsers = () => {
           addedAt: doc.data().addedAt?.toDate() || null,
         }));
 
-        // Sort by name or email
-        adminList.sort((a, b) => {
-          const nameA = a.name || a.email;
-          const nameB = b.name || b.email;
-          return nameA.localeCompare(nameB);
-        });
+        // Staff admins lead in firm seniority order; other admins trail alphabetically.
+        adminList.sort((a, b) => compareBySeniority(a.name || a.email, b.name || b.email));
 
         setAdmins(adminList);
       } catch (err) {
@@ -129,11 +126,7 @@ const AdminUsers = () => {
         email: email,
         name: name,
         addedAt: new Date(),
-      }].sort((a, b) => {
-        const nameA = a.name || a.email;
-        const nameB = b.name || b.email;
-        return nameA.localeCompare(nameB);
-      }));
+      }].sort((a, b) => compareBySeniority(a.name || a.email, b.name || b.email)));
 
       // Clear form
       setNewAdminEmail('');

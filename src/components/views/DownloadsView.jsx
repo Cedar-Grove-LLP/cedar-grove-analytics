@@ -5,6 +5,7 @@ import { ChevronLeft } from 'lucide-react';
 import { DateRangeIndicator, CalcTooltip } from '../shared';
 import { DownloadsTable } from '../tables';
 import { TopDownloadsChart } from '../charts';
+import { compareBySeniority } from '@/utils/seniority.mjs';
 
 const TRACKED_FOLDERS = [
   'Administrative',
@@ -257,7 +258,7 @@ const DownloadsView = ({
                   .sort((a, b) => {
                     if (attorneySort === 'files') return b.uniqueFiles - a.uniqueFiles;
                     if (attorneySort === 'recent') return (b.lastDownload || '').localeCompare(a.lastDownload || '');
-                    if (attorneySort === 'name') return a.user.localeCompare(b.user);
+                    if (attorneySort === 'name') return compareBySeniority(a.user, b.user);
                     return b.totalDownloads - a.totalDownloads;
                   })
                   .map(attorney => (

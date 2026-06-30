@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Target, TrendingUp } from 'lucide-react';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys.mjs';
+import { sortBySeniority } from '@/utils/seniority.mjs';
 import UtilizationTargetsTab from '@/components/admin/UtilizationTargetsTab';
 import ProjectedEarningsTable from '@/components/admin/ProjectedEarningsTable';
 
@@ -20,9 +21,10 @@ const TargetsView = () => {
     if (!allUsers || allUsers.length === 0) return [];
     const allNames = allUsers.map(u => u.name || u.id);
     const visibleNames = filterHiddenAttorneys(allNames);
-    return allUsers
-      .filter(u => u.active !== false && visibleNames.includes(u.name || u.id))
-      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+    return sortBySeniority(
+      allUsers.filter(u => u.active !== false && visibleNames.includes(u.name || u.id)),
+      u => u.name || u.id,
+    );
   }, [allUsers]);
 
   return (

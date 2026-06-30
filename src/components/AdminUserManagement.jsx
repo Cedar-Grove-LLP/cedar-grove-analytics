@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useUsers } from '@/hooks/useFirestoreData';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys.mjs';
+import { sortBySeniority } from '@/utils/seniority.mjs';
 import RoleManagementTab from '@/components/admin/RoleManagementTab';
 import AddUserTab from '@/components/admin/AddUserTab';
 import ManageAdminsTab from '@/components/admin/ManageAdminsTab';
@@ -36,9 +37,10 @@ const AdminUserManagement = () => {
     if (!allUsers || allUsers.length === 0) return [];
     const allNames = allUsers.map(u => u.name || u.id);
     const visibleNames = filterHiddenAttorneys(allNames);
-    return allUsers
-      .filter(u => visibleNames.includes(u.name || u.id))
-      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+    return sortBySeniority(
+      allUsers.filter(u => visibleNames.includes(u.name || u.id)),
+      u => u.name || u.id,
+    );
   }, [allUsers]);
 
   if (usersLoading) {

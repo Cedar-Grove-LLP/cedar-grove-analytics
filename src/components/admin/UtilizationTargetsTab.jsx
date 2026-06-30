@@ -6,7 +6,7 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, waitForAuth } from '@/firebase/config';
 import { formatHours } from '@/utils/formatters';
 import { getPSTDate } from '@/utils/dateHelpers';
-import { groupUsersByEmployment } from '@/utils/annualUtilizationProgress';
+import { groupUsersByEmployment, ANNUAL_GROUPS } from '@/utils/annualUtilizationProgress';
 import { useMonthlyActualsVsTarget } from '@/hooks/useMonthlyActualsVsTarget';
 import { CalcTooltip } from '@/components/shared';
 import AnnualUtilizationSummary from '@/components/admin/AnnualUtilizationSummary';
@@ -621,9 +621,11 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
         isFutureYear={selectedYear > getPSTDate().getFullYear()}
       />
 
-      <TargetTable title="Attorneys Full-time" users={groups.fte} matrix={matrix} actuals={actuals} capacity={capacity} onChange={handleChange} visibleMonths={visibleMonths} summaryLabel={summaryLabel} showMonthTotals={selectedQuarter !== 'all'} />
-      <TargetTable title="Attorneys Part-time" users={groups.pte} matrix={matrix} actuals={actuals} capacity={capacity} onChange={handleChange} visibleMonths={visibleMonths} summaryLabel={summaryLabel} showMonthTotals={selectedQuarter !== 'all'} />
-      <TargetTable title="Other" users={groups.other} matrix={matrix} actuals={actuals} capacity={capacity} onChange={handleChange} visibleMonths={visibleMonths} summaryLabel={summaryLabel} showMonthTotals={selectedQuarter !== 'all'} />
+      {/* Section order (Full-time → Operations → Part-time) is driven by
+          ANNUAL_GROUPS so the grid and the Annual progress summary stay in sync. */}
+      {ANNUAL_GROUPS.map((group) => (
+        <TargetTable key={group.key} title={group.gridTitle} users={groups[group.key]} matrix={matrix} actuals={actuals} capacity={capacity} onChange={handleChange} visibleMonths={visibleMonths} summaryLabel={summaryLabel} showMonthTotals={selectedQuarter !== 'all'} />
+      ))}
 
       <div className="flex justify-end">
         <button

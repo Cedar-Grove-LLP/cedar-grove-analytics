@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { PerBarTooltip } from '../tooltips';
 import { CHART } from '@/utils/colors';
 import { getSourceNote } from '@/utils/calcDefinitions.mjs';
+import { sortBySeniority } from '@/utils/seniority.mjs';
 
 const SOURCE_NOTES = {
   billable: getSourceNote('billableHours'),
@@ -14,12 +15,8 @@ const SOURCE_NOTES = {
 const BillableVsOpsChart = ({ data, title = "Billable vs Ops Time by Attorney" }) => {
   const [hoveredBarKey, setHoveredBarKey] = useState(null);
 
-  const sortedData = [...data].sort((a, b) => {
-    const aType = a.employmentType || 'FTE';
-    const bType = b.employmentType || 'FTE';
-    if (aType !== bType) return aType === 'FTE' ? -1 : 1;
-    return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-  });
+  // Bars run left→right in firm seniority order.
+  const sortedData = sortBySeniority(data, (d) => d.name);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { collection, getDocs, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
+import { compareBySeniority } from '@/utils/seniority.mjs';
 import { useAuth } from '@/context/AuthContext';
 
 const ManageAdminsTab = () => {
@@ -45,11 +46,8 @@ const ManageAdminsTab = () => {
           addedAt: doc.data().addedAt?.toDate() || null,
         }));
 
-        adminList.sort((a, b) => {
-          const nameA = a.name || a.email;
-          const nameB = b.name || b.email;
-          return nameA.localeCompare(nameB);
-        });
+        // Staff admins lead in firm seniority order; other admins trail alphabetically.
+        adminList.sort((a, b) => compareBySeniority(a.name || a.email, b.name || b.email));
 
         setAdmins(adminList);
       } catch (err) {
@@ -112,11 +110,7 @@ const ManageAdminsTab = () => {
         email: email,
         name: name,
         addedAt: new Date(),
-      }].sort((a, b) => {
-        const nameA = a.name || a.email;
-        const nameB = b.name || b.email;
-        return nameA.localeCompare(nameB);
-      }));
+      }].sort((a, b) => compareBySeniority(a.name || a.email, b.name || b.email)));
 
       setNewAdminEmail('');
       setNewAdminName('');

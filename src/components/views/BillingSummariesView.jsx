@@ -15,6 +15,7 @@ import { useAllBillableEntries, useUsers } from '@/hooks/useFirestoreData';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { getEntryDate } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours, formatDate } from '@/utils/formatters';
+import { sortBySeniority } from '@/utils/seniority.mjs';
 import { CalcTooltip } from '../shared';
 import MonthlyAttorneyBillables from './MonthlyAttorneyBillables';
 
@@ -126,9 +127,10 @@ const BillingSummariesView = () => {
       if (!entry.rateMissing) return;
       byName.set(entry.attorneyName, (byName.get(entry.attorneyName) || 0) + entry.billableHours);
     });
-    return [...byName.entries()]
-      .map(([name, hours]) => ({ name, hours }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return sortBySeniority(
+      [...byName.entries()].map(([name, hours]) => ({ name, hours })),
+      (a) => a.name,
+    );
   }, [filteredEntries]);
 
   // Calculate totals

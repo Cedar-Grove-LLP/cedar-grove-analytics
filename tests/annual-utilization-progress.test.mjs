@@ -148,9 +148,24 @@ test('groupUsersByEmployment buckets PTE / FTE / Other with sane defaults', () =
     { id: 'e', name: 'Amy Ash', role: 'Attorney', employmentType: 'PTE' },
   ];
   const { fte, pte, other } = groupUsersByEmployment(roster);
-  assert.deepEqual(fte.map((u) => u.name), ['Dan Dunn', 'Zoe Adams']); // sorted by name
+  // None of these names are on the seniority roster, so each bucket falls back
+  // to alphabetical order.
+  assert.deepEqual(fte.map((u) => u.name), ['Dan Dunn', 'Zoe Adams']);
   assert.deepEqual(pte.map((u) => u.name), ['Amy Ash', 'Bob Brown']);
   assert.deepEqual(other.map((u) => u.name), ['Cara Cole']);
+});
+
+test('groupUsersByEmployment orders each bucket by firm seniority', () => {
+  const roster = [
+    { id: '1', name: 'Martyna Skrodzka', role: 'Attorney', employmentType: 'PTE' },
+    { id: '2', name: 'Colin Van Loon', role: 'Attorney', employmentType: 'FTE' },
+    { id: '3', name: 'Valery Uscanga', role: 'Attorney', employmentType: 'PTE' },
+    { id: '4', name: 'Sam McClure', role: 'Attorney', employmentType: 'FTE' },
+  ];
+  const { fte, pte } = groupUsersByEmployment(roster);
+  // Sam (rank 0) before Colin (rank 1); Valery (rank 5) before Martyna (rank 9).
+  assert.deepEqual(fte.map((u) => u.name), ['Sam McClure', 'Colin Van Loon']);
+  assert.deepEqual(pte.map((u) => u.name), ['Valery Uscanga', 'Martyna Skrodzka']);
 });
 
 test('groupUsersByEmployment tolerates empty / nullish input', () => {
@@ -169,8 +184,13 @@ test('annualGroupForUser picks the right metric fields', () => {
   assert.equal(annualGroupByKey('other').targetField, 'opsHours');
   assert.equal(annualGroupByKey('fte').actualField, 'client');
   assert.equal(annualGroupByKey('fte').targetField, 'billableHours');
-  // Render order matches the mockup: Other, Part-time, Full-time.
-  assert.deepEqual(ANNUAL_GROUPS.map((g) => g.key), ['other', 'pte', 'fte']);
+  // Canonical section order: Full-time, Operations (Other), Part-time.
+  assert.deepEqual(ANNUAL_GROUPS.map((g) => g.key), ['fte', 'other', 'pte']);
+  // Each group also carries its editable-grid section header.
+  assert.deepEqual(
+    ANNUAL_GROUPS.map((g) => g.gridTitle),
+    ['Attorneys Full-time', 'Other', 'Attorneys Part-time'],
+  );
 });
 
 // --- 7. Capacity-weighted front/back-loaded monthly targets ---------------

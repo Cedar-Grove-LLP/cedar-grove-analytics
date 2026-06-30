@@ -5,6 +5,7 @@ import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { getEntryDate } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours } from '@/utils/formatters';
 import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys.mjs';
+import { sortBySeniority } from '@/utils/seniority.mjs';
 import { CalcTooltip } from '@/components/shared';
 
 const MAX_RANK = 19;
@@ -231,15 +232,12 @@ const ProjectedEarningsTable = () => {
 
     const attorneys = users.filter((u) => (u.role || 'Attorney') === 'Attorney' && u.active !== false);
     const visibleNames = filterHiddenAttorneys(attorneys.map((u) => u.name || u.id));
-    const visibleAttorneys = attorneys
-      .filter((u) => visibleNames.includes(u.name || u.id))
-      // FTE grouped above PTE (matching the Targets page), then alphabetical within each group.
-      .sort((a, b) => {
-        const aType = a.employmentType || 'FTE';
-        const bType = b.employmentType || 'FTE';
-        if (aType !== bType) return aType === 'FTE' ? -1 : 1;
-        return (a.name || a.id).localeCompare(b.name || b.id);
-      });
+    // Firm seniority order; the Full-time / Part-time cards below preserve it
+    // when they split these rows by employment type.
+    const visibleAttorneys = sortBySeniority(
+      attorneys.filter((u) => visibleNames.includes(u.name || u.id)),
+      (u) => u.name || u.id,
+    );
 
     return visibleAttorneys.map((u) => {
       const name = u.name || u.id;

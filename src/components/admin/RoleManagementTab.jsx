@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Save, Users, CheckCircle, AlertCircle } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, waitForAuth } from '@/firebase/config';
+import { sortBySeniority } from '@/utils/seniority.mjs';
 
 const EMPLOYMENT_TYPES = ['FTE', 'PTE'];
 
@@ -28,9 +29,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
   // back on. Fall back to the visible list if the full list wasn't provided.
   const manageableUsers = useMemo(() => {
     const source = (allUsers && allUsers.length > 0) ? allUsers : users;
-    return [...(source || [])].sort((a, b) =>
-      (a.name || a.id).localeCompare(b.name || b.id)
-    );
+    return sortBySeniority(source, (u) => u.name || u.id);
   }, [allUsers, users]);
 
   const [roleEdits, setRoleEdits] = useState(() => buildEditsFromUsers(manageableUsers));

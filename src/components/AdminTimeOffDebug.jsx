@@ -20,6 +20,7 @@ import { useUsers, useTimeOff } from '@/hooks/useFirestoreData';
 import { KPICard, AttorneyFilterDropdown } from '@/components/shared';
 import { CHART_COLORS } from '@/utils/constants';
 import { parseOooDayFraction, isOffsiteTitle } from '@/utils/timeOff';
+import { sortBySeniority } from '@/utils/seniority.mjs';
 
 // ── Matching helpers (mirror utils/timeOff.js normalization so this debug view
 //    classifies each raw outOfOffice entry the exact same way the pro-rating does).
@@ -165,13 +166,15 @@ const AdminTimeOffDebug = () => {
   }, [timeOffDoc]);
 
   // ── Calendar selection state ────────────────────────────────────────────
-  // Selectable attorney names: active attorneys only (inactive hidden), sorted.
+  // Selectable attorney names: active attorneys only (inactive hidden), in
+  // firm seniority order.
   const allAttorneyNames = useMemo(
     () =>
-      (allUsers || [])
-        .filter((u) => u.active !== false)
-        .map((u) => u.name || u.id)
-        .sort((a, b) => a.localeCompare(b)),
+      sortBySeniority(
+        (allUsers || [])
+          .filter((u) => u.active !== false)
+          .map((u) => u.name || u.id),
+      ),
     [allUsers],
   );
 
@@ -509,8 +512,7 @@ const CalendarTab = ({
       {/* Legend */}
       {presentNames.size > 0 && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
-          {[...presentNames]
-            .sort((a, b) => a.localeCompare(b))
+          {sortBySeniority([...presentNames])
             .map((name) => (
               <div key={name} className="flex items-center gap-1.5 text-xs text-gray-600">
                 <span
