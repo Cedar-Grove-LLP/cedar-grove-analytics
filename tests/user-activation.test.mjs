@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseActivationDate, hasJoinedBy } from '../src/utils/userActivation.mjs';
+import { parseActivationDate, hasJoinedBy, deriveActivationMonth } from '../src/utils/userActivation.mjs';
 
 test('hasJoinedBy returns true when activationDate is absent/null/undefined, regardless of asOfDate', () => {
   const asOfDate = new Date(2026, 0, 1);
@@ -65,4 +65,51 @@ test('parseActivationDate parses a legacy "YYYY-MM-DD" as a local-midnight Date 
   assert.equal(d.getFullYear(), 2026);
   assert.equal(d.getMonth(), 2);
   assert.equal(d.getDate(), 15);
+});
+
+test('deriveActivationMonth returns null for empty/absent entries', () => {
+  assert.equal(deriveActivationMonth([]), null);
+  assert.equal(deriveActivationMonth(null), null);
+  assert.equal(deriveActivationMonth(undefined), null);
+});
+
+test('deriveActivationMonth picks the earliest month/year across entries', () => {
+  const entries = [
+    { month: 'March', year: 2025 },
+    { month: 'January', year: 2025 },
+    { month: 'December', year: 2024 },
+    { month: 'June', year: 2025 },
+  ];
+  assert.equal(deriveActivationMonth(entries), '2024-12');
+});
+
+test('deriveActivationMonth zero-pads the month', () => {
+  assert.equal(deriveActivationMonth([{ month: 'April', year: 2026 }]), '2026-04');
+});
+
+test('deriveActivationMonth mixes billables and ops (earliest of either wins)', () => {
+  const billables = [{ month: 'May', year: 2025 }];
+  const ops = [{ month: 'February', year: 2025 }];
+  assert.equal(deriveActivationMonth([...billables, ...ops]), '2025-02');
+});
+
+test('deriveActivationMonth is case-insensitive and trims month names', () => {
+  assert.equal(deriveActivationMonth([{ month: '  july ', year: 2025 }]), '2025-07');
+});
+
+test('deriveActivationMonth ignores entries with an unrecognized month (no January fallback)', () => {
+  const entries = [
+    { month: 'Smarch', year: 2020 },  // garbage — must be skipped, not treated as Jan 2020
+    { month: 'August', year: 2025 },
+  ];
+  assert.equal(deriveActivationMonth(entries), '2025-08');
+});
+
+test('deriveActivationMonth ignores entries with a non-integer year', () => {
+  const entries = [
+    { month: 'January', year: undefined },
+    { month: 'March', year: '2025' },  // numeric-coercible string is accepted
+    { month: 'May', year: 2026 },
+  ];
+  assert.equal(deriveActivationMonth(entries), '2025-03');
 });

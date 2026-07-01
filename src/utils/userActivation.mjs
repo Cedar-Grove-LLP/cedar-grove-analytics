@@ -36,6 +36,45 @@ export function parseActivationDate(value) {
   return d;
 }
 
+const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december'];
+
+/**
+ * Strictly resolve a long month name ("January") to a 1-indexed number, or
+ * null if unrecognized. Unlike dateHelpers.getMonthNumber, does NOT fall back
+ * to January for bad input — a garbage month must not poison the min below.
+ */
+function monthNameToNumber(month) {
+  const idx = MONTH_NAMES.indexOf(String(month || '').trim().toLowerCase());
+  return idx === -1 ? null : idx + 1;
+}
+
+/**
+ * Derive an attorney's first-activity month from their time entries, as a
+ * "YYYY-MM" string suitable for `activationDate`. Returns null when no entry
+ * carries a recognizable month/year (so callers can leave the field blank
+ * rather than write a bogus date).
+ *
+ * Each entry is floored by its parent-document `month`/`year` (the authoritative
+ * period the sheet was synced for), NOT its per-entry `date` — per-entry dates
+ * can drift outside their month (FirestoreDataContext warns on this), so the
+ * doc's month/year is the reliable signal. Pass billables and ops entries
+ * together to capture whichever came first.
+ */
+export function deriveActivationMonth(entries) {
+  let best = null; // { year, monthNum }
+  for (const entry of entries || []) {
+    const year = Number(entry?.year);
+    const monthNum = monthNameToNumber(entry?.month);
+    if (!Number.isInteger(year) || monthNum === null) continue;
+    if (!best || year < best.year || (year === best.year && monthNum < best.monthNum)) {
+      best = { year, monthNum };
+    }
+  }
+  if (!best) return null;
+  return `${best.year}-${String(best.monthNum).padStart(2, '0')}`;
+}
+
 /**
  * Whether `user` had already joined as of `asOfDate`.
  */
