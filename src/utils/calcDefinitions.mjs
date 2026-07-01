@@ -290,6 +290,23 @@ export const CALC_DEFINITIONS = Object.freeze({
     inputs: ['per-category hours', 'matter/entry counts'],
     source: SOURCE.COMPUTED,
   },
+  practiceArea: {
+    label: 'Practice Area',
+    formula: 'billing category text matched to one of four practice-area buckets',
+    inputs: ['billing category (free text typed into the timesheet)'],
+    source: SOURCE.COMPUTED,
+    notes: [
+      'Commercial: redline review, new draft, or IP/trademark/patent matters. M&A: category mentions M&A. Non-profit: category mentions non-profit. Corporate: everything else.',
+      'A keyword match over free-text billing categories, not a stored field — re-classified every time the data loads.',
+    ],
+  },
+  practiceAreaSharePct: {
+    label: 'Share of Billable Hours',
+    formula: 'practice-area billable hours ÷ total billable hours for the same period × 100',
+    inputs: ['per-practice-area billable hours (rolled up from billing categories)', 'total billable hours for the same period'],
+    source: SOURCE.COMPUTED,
+    notes: ['Practice areas are derived from billingCategory — see the Practice Area column tooltip for the exact grouping rule.'],
+  },
   projectedEarnings: {
     label: 'Projected Earnings (take-home)',
     formula: 'YTD actual earnings + Σ over remaining months: (target hours − actual this month) × projected take-home rate',

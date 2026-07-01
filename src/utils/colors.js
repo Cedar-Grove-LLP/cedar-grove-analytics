@@ -36,3 +36,12 @@ export const GRAY = {
 // Tooltip/label styling constants used by Recharts/D3
 export const LABEL_LINE_COLOR = GRAY[400];
 export const TOOLTIP_BORDER = GRAY[200];
+
+// Practice-area accent colors for the admin Practice Composition tab, matched
+// to the existing brand palette rather than the generic CHART_COLORS rotation.
+export const PRACTICE_AREA_COLORS = {
+  Corporate: '#274E12',
+  Commercial: '#1CA33B', // == --color-cg-green
+  'M&A': '#5A5A48',      // == GRAY[600] / --color-cg-dark
+  'Non-profit': '#A5A699', // == GRAY[400]
+};
