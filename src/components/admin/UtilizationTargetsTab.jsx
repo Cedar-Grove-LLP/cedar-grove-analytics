@@ -10,6 +10,7 @@ import { groupUsersByEmployment, ANNUAL_GROUPS } from '@/utils/annualUtilization
 import { useMonthlyActualsVsTarget } from '@/hooks/useMonthlyActualsVsTarget';
 import { CalcTooltip } from '@/components/shared';
 import AnnualUtilizationSummary from '@/components/admin/AnnualUtilizationSummary';
+import { hasJoinedBy } from '@/utils/userActivation.mjs';
 
 const MONTHS = [
   { idx: 0, short: 'Jan', long: 'January' },
@@ -411,6 +412,32 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
 
+  // Actuals/capacity for the FULL roster (not just visibleUsers below) so the
+  // data-overlap escape hatch can see actuals for users a mis-set/late
+  // activationDate would otherwise exclude. bucketMonthlyHoursByUser keys off
+  // every entry's userId regardless of the `users` list passed in — only the
+  // capacity fractions are scoped to it — so this is safe/cheap to compute
+  // against the full roster.
+  const { actuals, capacity } = useMonthlyActualsVsTarget(selectedYear, users);
+
+  // Users who have at least one logged billable/ops hour anywhere in the
+  // selected year — mirrors the namesWithDataInRange escape hatch in
+  // useAnalyticsData.js so a mis-set/late activationDate never hides a user
+  // who already has real targets/actuals for this year.
+  const userIdsWithDataInYear = useMemo(() => {
+    const ids = new Set();
+    Object.entries(actuals).forEach(([userId, months]) => {
+      const hasHours = Object.values(months).some((m) => (m.client || 0) > 0 || (m.ops || 0) > 0);
+      if (hasHours) ids.add(userId);
+    });
+    return ids;
+  }, [actuals]);
+
+  const visibleUsers = useMemo(() => {
+    const yearEnd = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+    return users.filter(u => hasJoinedBy(u, yearEnd) || userIdsWithDataInYear.has(u.id));
+  }, [users, selectedYear, userIdsWithDataInYear]);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -419,7 +446,7 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
         await waitForAuth();
 
         const next = {};
-        for (const u of users) {
+        for (const u of visibleUsers) {
           const userMatrix = buildEmptyUserMatrix();
           try {
             const userDoc = await getDoc(doc(db, 'users', u.id));
@@ -449,13 +476,20 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
       }
     };
 
+    // Gate on the full roster (users), not visibleUsers: a year with zero
+    // visible users (e.g. every activationDate lies after this year) is a
+    // legitimate "nobody has joined yet" state, distinct from "no users exist
+    // in the database at all" — both should still run `load` (which is a
+    // no-op over an empty visibleUsers list) so the two cases keep rendering
+    // their own distinct messaging (see the users.length === 0 early return
+    // below) instead of collapsing into the same forced matrix({})/loading(false).
     if (!usersLoading && users.length > 0) {
       load();
     } else if (!usersLoading) {
       setLoading(false);
       setMatrix({});
     }
-  }, [selectedYear, users, usersLoading]);
+  }, [selectedYear, visibleUsers, usersLoading, users]);
 
   const handleChange = (userId, monthIdx, field, value) => {
     setMatrix(prev => ({
@@ -476,7 +510,7 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
       setSaveStatus(null);
       await waitForAuth();
 
-      for (const u of users) {
+      for (const u of visibleUsers) {
         const userMatrix = matrix[u.id];
         if (!userMatrix) continue;
 
@@ -524,11 +558,7 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
 
   const summaryLabel = selectedQuarter === 'all' ? 'Annual' : selectedQuarter;
 
-  const groups = useMemo(() => groupUsersByEmployment(users), [users]);
-
-  // Per-attorney, per-month actuals + capacity-pro-rated fractions for the
-  // selected year. Shared hook so this isn't hand-rolled inline (see #1/#6).
-  const { actuals, capacity } = useMonthlyActualsVsTarget(selectedYear, users);
+  const groups = useMemo(() => groupUsersByEmployment(visibleUsers), [visibleUsers]);
 
   if (loading || usersLoading) {
     return (

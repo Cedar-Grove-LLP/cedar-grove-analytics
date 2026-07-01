@@ -177,6 +177,12 @@ const AttorneyDetailView = ({ attorneyName }) => {
   const personRole = currentUser?.role || 'Attorney';
   // Email for joining out-of-office data (exact normalized match in the calendar)
   const attorneyEmail = currentUser?.email || '';
+  // activationDate is "YYYY-MM" (month precision — no partial-month proration
+  // exists anywhere in the app, so day-of-month isn't tracked). Floor the
+  // custom date-range picker's minDate at the 1st of that month.
+  const activationDate = currentUser?.activationDate || null;
+  const activationMonthStart = activationDate ? activationDate + '-01' : null;
+  const activationDateLabel = activationMonthStart ? new Date(activationMonthStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null;
 
   const loading = billableLoading || opsLoading;
   const error = billableError || opsError;
@@ -647,7 +653,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">{attorneyName}</h1>
-                  <p className="text-sm text-gray-500">{personRole} Performance Analytics</p>
+                  <p className="text-sm text-gray-500">{personRole} Performance Analytics{activationDateLabel && <span className="ml-2 text-gray-400">&middot; Active since {activationDateLabel}</span>}</p>
                 </div>
               </div>
             </div>
@@ -661,6 +667,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
               setCustomDateEnd={setCustomDateEnd}
               showDropdown={showDateDropdown}
               setShowDropdown={setShowDateDropdown}
+              minDate={activationMonthStart || undefined}
             />
           </div>
         </div>

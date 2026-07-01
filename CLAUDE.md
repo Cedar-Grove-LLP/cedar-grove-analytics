@@ -74,16 +74,29 @@ src/
 ## Firestore Data Model
 
 ```
-users/{userId}/         — { name, role, email, employmentType, active,
+users/{userId}/         — { name, role, email, employmentType, active, activationDate,
                               rates:   [{ rate, takeHomeRate?, month, year }],
                               targets: [{ month, year, billableHours, opsHours, totalHours, earnings }] }
                            `active` (bool, default true when absent): toggled in the
                            User Management → Role Management admin tab. Inactive
                            attorneys are hidden from dropdowns/rows EXCEPT when the
                            selected timeframe overlaps their actual billable/ops
-                           entries (auto-derived, no tenure dates), and are excluded
-                           from forward-looking Targets + Projected Earnings. Layered
-                           on top of the legacy hiddenAttorneys.mjs date config.
+                           entries (auto-derived), and are excluded from
+                           forward-looking Targets + Projected Earnings. Layered on
+                           top of the legacy hiddenAttorneys.mjs date config.
+                           `activationDate` (optional "YYYY-MM", tenure-start month —
+                           set via <input type="month">; no day-of-month precision
+                           since nothing pro-rates a partial month of tenure):
+                           set in the same Role Management tab. Drives
+                           `hasJoinedBy` (src/utils/userActivation.mjs, also accepts
+                           a legacy "YYYY-MM-DD" defensively) — attorneys are hidden
+                           from dropdowns/rows/year-scoped admin views (same
+                           data-overlap exception as `active`) for any timeframe
+                           ending before their activation month, and it floors the
+                           custom date-range picker (at the 1st of that month) on
+                           their own user page so an out-of-tenure range can't be
+                           selected. Absent = no restriction (back-compat for
+                           existing users).
   billables/{monthDocId}  — { month, year, entries: [{ date, client, matter, hours,
                                                        earnings, adjustment,
                                                        billingCategory,
