@@ -84,15 +84,19 @@ users/{userId}/         — { name, role, email, employmentType, active, activat
                            entries (auto-derived), and are excluded from
                            forward-looking Targets + Projected Earnings. Layered on
                            top of the legacy hiddenAttorneys.mjs date config.
-                           `activationDate` (optional "YYYY-MM-DD", tenure start):
+                           `activationDate` (optional "YYYY-MM", tenure-start month —
+                           set via <input type="month">; no day-of-month precision
+                           since nothing pro-rates a partial month of tenure):
                            set in the same Role Management tab. Drives
-                           `hasJoinedBy` (src/utils/userActivation.mjs) — attorneys
-                           are hidden from dropdowns/rows/year-scoped admin views
-                           (same data-overlap exception as `active`) for any
-                           timeframe ending before their activationDate, and it
-                           floors the custom date-range picker on their own user
-                           page so an out-of-tenure range can't be selected. Absent
-                           = no restriction (back-compat for existing users).
+                           `hasJoinedBy` (src/utils/userActivation.mjs, also accepts
+                           a legacy "YYYY-MM-DD" defensively) — attorneys are hidden
+                           from dropdowns/rows/year-scoped admin views (same
+                           data-overlap exception as `active`) for any timeframe
+                           ending before their activation month, and it floors the
+                           custom date-range picker (at the 1st of that month) on
+                           their own user page so an out-of-tenure range can't be
+                           selected. Absent = no restriction (back-compat for
+                           existing users).
   billables/{monthDocId}  — { month, year, entries: [{ date, client, matter, hours,
                                                        earnings, adjustment,
                                                        billingCategory,

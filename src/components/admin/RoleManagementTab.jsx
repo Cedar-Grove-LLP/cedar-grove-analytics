@@ -170,6 +170,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
 
       {/* Roles Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -239,7 +240,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <input
-                      type="date"
+                      type="month"
                       value={edits.activationDate}
                       onChange={(e) => handleChange(user.id, 'activationDate', e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -276,6 +277,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

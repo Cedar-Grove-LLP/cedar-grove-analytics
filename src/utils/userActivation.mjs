@@ -4,31 +4,33 @@
  * user should count as "on the roster yet" for a given as-of date. Must
  * stay free of React/Firebase imports.
  *
- * users/{id}.activationDate is stored as a "YYYY-MM-DD" string, produced
- * by an HTML <input type="date"> in the admin UI.
+ * users/{id}.activationDate is stored as a "YYYY-MM" string, produced by an
+ * HTML <input type="month"> in the admin UI — day-of-month precision isn't
+ * tracked since nothing in the app pro-rates a partial month of tenure.
+ * "YYYY-MM-DD" is also accepted defensively (e.g. a direct Firestore edit).
  */
 
 /**
- * Parse a "YYYY-MM-DD" activationDate string into a local-midnight Date.
- * Returns null for falsy input or an unparseable string.
+ * Parse a "YYYY-MM" (or "YYYY-MM-DD") activationDate string into a
+ * local-midnight Date at the 1st of that month (or the given day). Returns
+ * null for falsy input or an unparseable/calendar-invalid string.
  */
 export function parseActivationDate(value) {
   if (!value) return null;
 
-  // String concat (not a template literal, per project style) + new Date(str)
-  // parses as local time here, mirroring the split/Number/new Date(y, m-1, d)
-  // approach useAnalyticsData.js uses for customDateStart/customDateEnd — so
-  // activation-date comparisons never drift a day off from calendar-date
-  // comparisons elsewhere in the app.
-  const d = new Date(value + 'T00:00:00');
-  if (Number.isNaN(d.getTime())) return null;
+  const parts = value.split('-').map(Number);
+  if (parts.length === 2) parts.push(1);
+  if (parts.length !== 3) return null;
+  const [y, m, dd] = parts;
 
-  // Guard against calendar-invalid day-of-month strings (e.g. "2026-02-30"),
-  // which `new Date()` silently rolls forward into the next month instead of
-  // rejecting. Not reachable via the <input type="date"> UI, but a direct
-  // Firestore edit or future non-UI writer could store one — reject rather
-  // than silently gating on a shifted date.
-  const [y, m, dd] = value.split('-').map(Number);
+  // Numeric Date(y, m-1, d) form is always local time, so no day drifts in
+  // from a UTC-vs-local mismatch (see customDateStart/customDateEnd parsing
+  // in useAnalyticsData.js, which uses the same y/m/d construction).
+  const d = new Date(y, m - 1, dd);
+
+  // Guard against calendar-invalid input (e.g. "2026-13" or "2026-02-30"),
+  // which `new Date()` silently rolls into an adjacent month instead of
+  // rejecting.
   if (d.getFullYear() !== y || d.getMonth() !== m - 1 || d.getDate() !== dd) return null;
 
   return d;
