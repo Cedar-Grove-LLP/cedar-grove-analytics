@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw } from 'lucide-react';
+import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw, Search } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { db, auth } from '@/firebase/config';
@@ -65,6 +65,7 @@ const AdminInvoices = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [monthFilter, setMonthFilter] = useState('all');
+  const [nameFilter, setNameFilter] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'dateSent', direction: 'desc' });
   const [clientsData, setClientsData] = useState([]);
   const [matchSelections, setMatchSelections] = useState({});
@@ -466,6 +467,12 @@ const AdminInvoices = () => {
       items = items.filter((inv) => inv.status !== 'Paid');
     }
 
+    // Client name search (case-insensitive substring)
+    const nameQuery = nameFilter.trim().toLowerCase();
+    if (nameQuery) {
+      items = items.filter((inv) => (inv.client || '').toLowerCase().includes(nameQuery));
+    }
+
     // Sort
     items = [...items].sort((a, b) => {
       const { key, direction } = sortConfig;
@@ -488,7 +495,7 @@ const AdminInvoices = () => {
     });
 
     return items;
-  }, [invoices, monthFilter, statusFilter, sortConfig]);
+  }, [invoices, monthFilter, statusFilter, nameFilter, sortConfig]);
 
   const summaryStats = useMemo(() => {
     const paid = filteredAndSorted.filter((inv) => inv.status === 'Paid');
@@ -954,6 +961,18 @@ const AdminInvoices = () => {
                   {opt.label}
                 </button>
               ))}
+
+              {/* Client name search */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  placeholder="Search client..."
+                  className="pl-9 pr-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 w-48"
+                />
+              </div>
 
               <span className="ml-auto text-sm text-gray-500">
                 Showing {filteredAndSorted.length} invoice{filteredAndSorted.length !== 1 ? 's' : ''}
