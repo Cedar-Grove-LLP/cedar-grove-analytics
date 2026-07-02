@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * One-time migration: seed permissions/{email} docs from the hardcoded
  * email allowlists that used to live in src/utils/{partialAdminAccess,
@@ -10,18 +11,17 @@
  *   node scripts/seed-permissions.mjs          # dry run (default)
  *   node scripts/seed-permissions.mjs --apply  # write to Firestore
  *
- * Credentials: reads FIREBASE_SERVICE_ACCOUNT_KEY from .env.local (admin
- * SDK, bypasses security rules). Idempotent — re-running after --apply
- * just overwrites the same flags.
+ * Credentials (loaded from .env.local automatically; see scripts/lib/firestore.mjs):
+ *   FIREBASE_SERVICE_ACCOUNT_KEY='{...service account JSON...}'
+ *   or GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+ *
+ * Idempotent — re-running after --apply just overwrites the same flags.
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-import admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
+import { loadEnvFile } from './lib/env.mjs';
+import { getDb } from './lib/firestore.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, '..');
 const APPLY = process.argv.includes('--apply');
 
 // Mirrors the allowlists removed from src/utils/*Access.js. Update this
@@ -32,18 +32,9 @@ const GRANTS = [
   { email: 'michael@cedargrovellp.com', downloadsAccess: true },
 ];
 
-function loadServiceAccount() {
-  const envPath = path.join(repoRoot, '.env.local');
-  const raw = readFileSync(envPath, 'utf8');
-  const line = raw.split('\n').find((l) => l.startsWith('FIREBASE_SERVICE_ACCOUNT_KEY='));
-  if (!line) throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY not found in .env.local');
-  const json = line.slice('FIREBASE_SERVICE_ACCOUNT_KEY='.length).trim();
-  return JSON.parse(json);
-}
-
 async function main() {
-  admin.initializeApp({ credential: admin.credential.cert(loadServiceAccount()) });
-  const db = admin.firestore();
+  loadEnvFile('.env.local');
+  const db = getDb();
 
   console.log(`Seeding ${GRANTS.length} permission grant(s). Mode: ${APPLY ? 'APPLY' : 'DRY RUN'}\n`);
 
@@ -55,15 +46,13 @@ async function main() {
     if (APPLY) {
       await db.collection('permissions').doc(email).set({
         ...flags,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
         updatedBy: 'scripts/seed-permissions.mjs',
       }, { merge: true });
     }
   }
 
   if (!APPLY) console.log('\nRe-run with --apply to persist.');
-
-  await admin.app().delete();
 }
 
 main().catch((err) => {

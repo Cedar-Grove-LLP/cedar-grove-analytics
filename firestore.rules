@@ -123,22 +123,27 @@ service cloud.firestore {
     // (RoleManagementTab / AddUserTab), both full-admin-only routes.
     // ------------------------------------------------------------------
     match /users/{userId} {
-      allow read: if hasFullDataAccess() || isOwnUserDoc();
+      // isOwnUserDoc() first: it's a free check against the already-loaded
+      // `resource`, whereas hasFullDataAccess() costs one or two extra
+      // document reads (admins/permissions). || short-circuits, so putting
+      // the free check first avoids those reads for the common case of an
+      // attorney reading their own profile.
+      allow read: if isOwnUserDoc() || hasFullDataAccess();
       allow write: if isAdmin();
 
       // Per-month entry docs. Populated only by the out-of-repo Apps
       // Script sync (service-account auth, bypasses these rules) — the
       // app itself never writes here.
       match /billables/{monthDocId} {
-        allow read: if hasFullDataAccess() || isOwnUserId(userId);
+        allow read: if isOwnUserId(userId) || hasFullDataAccess();
         allow write: if false;
       }
       match /ops/{monthDocId} {
-        allow read: if hasFullDataAccess() || isOwnUserId(userId);
+        allow read: if isOwnUserId(userId) || hasFullDataAccess();
         allow write: if false;
       }
       match /eightThreeB/{monthDocId} {
-        allow read: if hasFullDataAccess() || isOwnUserId(userId);
+        allow read: if isOwnUserId(userId) || hasFullDataAccess();
         allow write: if false;
       }
     }
@@ -150,7 +155,8 @@ service cloud.firestore {
     // "am I an admin" check works before isAdmin() would otherwise apply.
     // ------------------------------------------------------------------
     match /admins/{email} {
-      allow get: if isAdmin() || (signedIn() && email == emailLower());
+      // Free self-check first (see the users/{userId} comment above for why).
+      allow get: if (signedIn() && email == emailLower()) || isAdmin();
       allow list: if isAdmin();
       allow write: if isAdmin();
     }
@@ -162,7 +168,8 @@ service cloud.firestore {
     // resolve its own flags on sign-in.
     // ------------------------------------------------------------------
     match /permissions/{email} {
-      allow get: if isAdmin() || (signedIn() && email == emailLower());
+      // Free self-check first (see the users/{userId} comment above for why).
+      allow get: if (signedIn() && email == emailLower()) || isAdmin();
       allow list: if isAdmin();
       allow write: if isAdmin();
     }
@@ -218,7 +225,16 @@ service cloud.firestore {
     }
 
     match /invoices/{docId} {
-      allow read: if isAdmin() || isPartialAdmin();
+      // Read is hasFullDataAccess(), NOT just isAdmin()||isPartialAdmin():
+      // FirestoreDataContext.js bulk-fetches invoices/all inside the same
+      // Promise.all as clients/monthlyMetrics/rateCard/driveDownloads,
+      // gated by the single hasFullAccess flag (also true for
+      // hasDownloadsAccess/hasTransactionsOpsAccess users). A narrower
+      // read rule here denies that read and fails the whole Promise.all
+      // for a downloads-only or transactions-ops-only user. Write stays
+      // narrower — only AdminInvoices.jsx (admin/partial-admin route)
+      // writes this collection.
+      allow read: if hasFullDataAccess();
       allow write: if isAdmin() || isPartialAdmin();
     }
 
