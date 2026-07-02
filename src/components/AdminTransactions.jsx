@@ -3,12 +3,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, DollarSign, ArrowDownCircle, ArrowUpCircle, ExternalLink, RefreshCw, Search } from 'lucide-react';
+import { ArrowLeft, LogOut, DollarSign, ArrowDownCircle, ArrowUpCircle, ExternalLink, RefreshCw, Search, Download } from 'lucide-react';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge } from '@/utils/statusStyles';
+import { downloadCSV } from '@/utils/csv';
 
 const FILTER_OPTIONS = [
   { key: 'all', label: 'All Transactions' },
@@ -101,6 +102,21 @@ const AdminTransactions = () => {
   const getSortIndicator = (key) => {
     if (sortConfig.key !== key) return '';
     return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
+  };
+
+  // Export the currently filtered/sorted transactions to CSV. Amount is a raw
+  // number so it's spreadsheet-friendly.
+  const handleExportCSV = () => {
+    const headers = ['Date', 'Status', 'Amount', 'Counterparty', 'Description', 'Note'];
+    const rows = filteredAndSorted.map((t) => [
+      t.postedAt || t.createdAt || '',
+      t.status || '',
+      t.amount ?? '',
+      t.counterpartyName || '',
+      t.bankDescription || '',
+      t.note || '',
+    ]);
+    downloadCSV(`transactions-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   const filteredAndSorted = useMemo(() => {
@@ -348,6 +364,16 @@ const AdminTransactions = () => {
               </button>
             )}
           </div>
+
+          <button
+            onClick={handleExportCSV}
+            disabled={filteredAndSorted.length === 0}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Export the filtered transactions to CSV"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export CSV</span>
+          </button>
 
           <span className="ml-auto text-sm text-gray-500">
             Showing {filteredAndSorted.length} transaction{filteredAndSorted.length !== 1 ? 's' : ''}

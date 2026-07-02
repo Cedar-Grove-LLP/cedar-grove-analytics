@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw, Search } from 'lucide-react';
+import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw, Search, Download } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { db, auth } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge, getMatchTypeBadge } from '@/utils/statusStyles';
+import { downloadCSV } from '@/utils/csv';
 import { parseInvoiceDate } from '@/utils/paymentStatus.mjs';
 
 const MONTH_NAMES = [
@@ -416,6 +417,23 @@ const AdminInvoices = () => {
       key,
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
     }));
+  };
+
+  // Export the currently filtered/sorted invoices to CSV. Amount is exported
+  // as a raw number (no $) so it's spreadsheet-friendly.
+  const handleExportCSV = () => {
+    const headers = ['Client', 'Amount', 'Year', 'Date Sent', 'Status', 'Date Received', 'Last Reminder', 'Notes'];
+    const rows = filteredAndSorted.map((inv) => [
+      inv.client || '',
+      inv.amount ?? '',
+      inv.year ?? '',
+      inv.dateSent || '',
+      inv.status || '',
+      inv.dateReceived || '',
+      inv.lastReminder || '',
+      inv.notes || '',
+    ]);
+    downloadCSV(`invoices-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   const getSortIndicator = (key) => {
@@ -973,6 +991,16 @@ const AdminInvoices = () => {
                   className="pl-9 pr-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 w-48"
                 />
               </div>
+
+              <button
+                onClick={handleExportCSV}
+                disabled={filteredAndSorted.length === 0}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Export the filtered invoices to CSV"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export CSV</span>
+              </button>
 
               <span className="ml-auto text-sm text-gray-500">
                 Showing {filteredAndSorted.length} invoice{filteredAndSorted.length !== 1 ? 's' : ''}
