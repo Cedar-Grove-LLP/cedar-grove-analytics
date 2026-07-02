@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, DollarSign, ArrowDownCircle, ArrowUpCircle, ExternalLink, RefreshCw } from 'lucide-react';
+import { ArrowLeft, LogOut, DollarSign, ArrowDownCircle, ArrowUpCircle, ExternalLink, RefreshCw, Search } from 'lucide-react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
@@ -24,6 +24,7 @@ const AdminTransactions = () => {
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [nameFilter, setNameFilter] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'postedAt', direction: 'desc' });
 
   const fetchTransactions = useCallback(async () => {
@@ -94,6 +95,12 @@ const AdminTransactions = () => {
       items = items.filter((t) => t.amount > 0);
     }
 
+    // Counterparty name search (case-insensitive substring)
+    const nameQuery = nameFilter.trim().toLowerCase();
+    if (nameQuery) {
+      items = items.filter((t) => (t.counterpartyName || '').toLowerCase().includes(nameQuery));
+    }
+
     items = [...items].sort((a, b) => {
       const { key, direction } = sortConfig;
       let aVal = a[key];
@@ -116,7 +123,7 @@ const AdminTransactions = () => {
     });
 
     return items;
-  }, [transactions, filter, sortConfig]);
+  }, [transactions, filter, nameFilter, sortConfig]);
 
   const summaryStats = useMemo(() => {
     const expenses = transactions.filter((t) => t.amount < 0);
@@ -262,6 +269,19 @@ const AdminTransactions = () => {
               {opt.label}
             </button>
           ))}
+
+          {/* Counterparty name search */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              placeholder="Search counterparty..."
+              className="pl-9 pr-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 w-52"
+            />
+          </div>
+
           <span className="ml-auto text-sm text-gray-500">
             Showing {filteredAndSorted.length} transaction{filteredAndSorted.length !== 1 ? 's' : ''}
           </span>
