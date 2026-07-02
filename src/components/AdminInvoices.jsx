@@ -437,22 +437,10 @@ const AdminInvoices = () => {
     return options;
   }, [invoices]);
 
-  // Set default month filter to current month ONCE, when data first loads.
-  // Guarded by a ref rather than `monthFilter === 'all'` so a later
-  // deliberate "All Time" selection isn't clobbered: every invoice mutation
-  // (dismiss match / mark paid / confirm) rebuilds monthOptions, which would
-  // otherwise re-run this effect and reset the filter to the current month.
-  const didInitMonthFilter = useRef(false);
-  useEffect(() => {
-    if (didInitMonthFilter.current || monthOptions.length === 0) return;
-    didInitMonthFilter.current = true;
-    const now = new Date();
-    const currentKey = `${now.getFullYear()}-${now.getMonth()}`;
-    const match = monthOptions.find(
-      (o) => `${o.year}-${o.month}` === currentKey
-    );
-    setMonthFilter(match ? currentKey : `${monthOptions[0].year}-${monthOptions[0].month}`);
-  }, [monthOptions]);
+  // Month filter defaults to "All Time" (the initial monthFilter state) so a
+  // paid invoice from any month stays visible after a reload. Previously this
+  // defaulted to the current month, which hid older paid invoices and made
+  // confirmed matches appear to vanish on the next visit.
 
   const filteredAndSorted = useMemo(() => {
     let items = invoices;
