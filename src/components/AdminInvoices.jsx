@@ -23,6 +23,10 @@ const STATUS_FILTER_OPTIONS = [
   { key: 'outstanding', label: 'Outstanding' },
 ];
 
+// Only suggest a payment as a match if it posted within this many days after
+// the invoice was sent. Bounds the candidate list for old outstanding invoices.
+const MATCH_WINDOW_DAYS = 90;
+
 // Invoice date parsing (M/D, M/D/YYYY, Firestore Timestamps, verbose
 // Date.toString()) is shared with the Payment Status tag engine.
 const parseDateSent = parseInvoiceDate;
@@ -524,10 +528,15 @@ const AdminInvoices = () => {
       for (const txn of transactions) {
         // Skip transactions already matched to another invoice
         if (matchedTxnIds.has(txn.id)) continue;
-        // Skip transactions that occurred before the invoice was sent
+        // Only consider payments in the window [invoice sent, +90 days].
+        // A payment can't predate the invoice, and capping at 90 days keeps
+        // very old invoices from accumulating dozens of coincidental matches.
         if (invSentDate) {
           const txnDate = txn.postedAt ? new Date(txn.postedAt) : txn.createdAt ? new Date(txn.createdAt) : null;
-          if (txnDate && txnDate < invSentDate) continue;
+          if (txnDate) {
+            if (txnDate < invSentDate) continue;
+            if (txnDate - invSentDate > MATCH_WINDOW_DAYS * 24 * 60 * 60 * 1000) continue;
+          }
         }
         const cpName = txn.counterpartyName || '';
         const cpLower = cpName.toLowerCase();
