@@ -25,6 +25,8 @@ const AdminTransactions = () => {
   const [syncStatus, setSyncStatus] = useState(null);
   const [filter, setFilter] = useState('all');
   const [nameFilter, setNameFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'postedAt', direction: 'desc' });
 
   const fetchTransactions = useCallback(async () => {
@@ -101,6 +103,23 @@ const AdminTransactions = () => {
       items = items.filter((t) => (t.counterpartyName || '').toLowerCase().includes(nameQuery));
     }
 
+    // Date range filter (inclusive) on the transaction's posted/created date.
+    // yyyy-mm-dd inputs are parsed as local dates; the end bound covers the
+    // whole day.
+    const startMs = startDate ? new Date(`${startDate}T00:00:00`).getTime() : null;
+    const endMs = endDate ? new Date(`${endDate}T23:59:59.999`).getTime() : null;
+    if (startMs != null || endMs != null) {
+      items = items.filter((t) => {
+        const raw = t.postedAt || t.createdAt;
+        if (!raw) return false;
+        const ms = new Date(raw).getTime();
+        if (isNaN(ms)) return false;
+        if (startMs != null && ms < startMs) return false;
+        if (endMs != null && ms > endMs) return false;
+        return true;
+      });
+    }
+
     items = [...items].sort((a, b) => {
       const { key, direction } = sortConfig;
       let aVal = a[key];
@@ -123,7 +142,7 @@ const AdminTransactions = () => {
     });
 
     return items;
-  }, [transactions, filter, nameFilter, sortConfig]);
+  }, [transactions, filter, nameFilter, startDate, endDate, sortConfig]);
 
   const summaryStats = useMemo(() => {
     const expenses = transactions.filter((t) => t.amount < 0);
@@ -280,6 +299,36 @@ const AdminTransactions = () => {
               placeholder="Search counterparty..."
               className="pl-9 pr-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 w-52"
             />
+          </div>
+
+          {/* Date range filter */}
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              title="From date"
+            />
+            <span className="text-gray-400 text-sm">–</span>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              title="To date"
+            />
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                className="text-gray-400 hover:text-gray-600 text-sm px-2 py-2"
+                title="Clear date range"
+              >
+                Clear
+              </button>
+            )}
           </div>
 
           <span className="ml-auto text-sm text-gray-500">
