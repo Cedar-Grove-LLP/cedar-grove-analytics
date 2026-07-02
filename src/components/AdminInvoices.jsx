@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw } from 'lucide-react';
@@ -67,6 +67,9 @@ const AdminInvoices = () => {
   const [savingAlias, setSavingAlias] = useState(null);
   const [confirmedMatches, setConfirmedMatches] = useState({});
   const [markingPaid, setMarkingPaid] = useState(null);
+  const [editingDateRow, setEditingDateRow] = useState(null);
+  const [editDateValue, setEditDateValue] = useState('');
+  const [savingDate, setSavingDate] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
 
@@ -402,22 +405,22 @@ const AdminInvoices = () => {
     return options;
   }, [invoices]);
 
-  // Set default month filter to current month once data loads
+  // Set default month filter to current month ONCE, when data first loads.
+  // Guarded by a ref rather than `monthFilter === 'all'` so a later
+  // deliberate "All Time" selection isn't clobbered: every invoice mutation
+  // (dismiss match / mark paid / confirm) rebuilds monthOptions, which would
+  // otherwise re-run this effect and reset the filter to the current month.
+  const didInitMonthFilter = useRef(false);
   useEffect(() => {
-    if (monthOptions.length > 0 && monthFilter === 'all') {
-      const now = new Date();
-      const currentKey = `${now.getFullYear()}-${now.getMonth()}`;
-      const match = monthOptions.find(
-        (o) => `${o.year}-${o.month}` === currentKey
-      );
-      if (match) {
-        setMonthFilter(currentKey);
-      } else {
-        const first = monthOptions[0];
-        setMonthFilter(`${first.year}-${first.month}`);
-      }
-    }
-  }, [monthOptions]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (didInitMonthFilter.current || monthOptions.length === 0) return;
+    didInitMonthFilter.current = true;
+    const now = new Date();
+    const currentKey = `${now.getFullYear()}-${now.getMonth()}`;
+    const match = monthOptions.find(
+      (o) => `${o.year}-${o.month}` === currentKey
+    );
+    setMonthFilter(match ? currentKey : `${monthOptions[0].year}-${monthOptions[0].month}`);
+  }, [monthOptions]);
 
   const filteredAndSorted = useMemo(() => {
     let items = invoices;
@@ -483,6 +486,15 @@ const AdminInvoices = () => {
   const matchCandidates = useMemo(() => {
     const candidateMap = {};
 
+    // Transactions already matched to an invoice — hidden from every
+    // selector so one payment can't be matched to two invoices. Scans the
+    // full invoices list (not filteredAndSorted) so a match made under a
+    // different month/status filter is still excluded.
+    const matchedTxnIds = new Set();
+    for (const inv of invoices) {
+      if (inv.matchedTransactionId) matchedTxnIds.add(inv.matchedTransactionId);
+    }
+
     for (const inv of filteredAndSorted) {
       const clientLower = (inv.client || '').toLowerCase();
       const invSentDate = parseDateSent(inv.dateSent, inv.year);
@@ -490,6 +502,8 @@ const AdminInvoices = () => {
       const seenTxnIds = new Set();
 
       for (const txn of transactions) {
+        // Skip transactions already matched to another invoice
+        if (matchedTxnIds.has(txn.id)) continue;
         // Skip transactions that occurred before the invoice was sent
         if (invSentDate) {
           const txnDate = txn.postedAt ? new Date(txn.postedAt) : txn.createdAt ? new Date(txn.createdAt) : null;
@@ -540,7 +554,7 @@ const AdminInvoices = () => {
     }
 
     return candidateMap;
-  }, [filteredAndSorted, transactions, aliases]);
+  }, [filteredAndSorted, transactions, aliases, invoices]);
 
   // Confirm a match: save alias + persist match on the invoice + mark as Paid
   const handleConfirmMatch = async (invoice, transactionId) => {
@@ -677,6 +691,45 @@ const AdminInvoices = () => {
     const parsed = parseDateSent(dateStr, year);
     if (!parsed) return dateStr;
     return parsed.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', year: 'numeric' });
+  };
+
+  // Convert a stored date ("M/D/YYYY", Timestamp, etc.) to the yyyy-mm-dd
+  // format an <input type="date"> expects. Empty string when unparseable.
+  const toDateInputValue = (dateStr, year) => {
+    const parsed = parseDateSent(dateStr, year);
+    if (!parsed) return '';
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  // Persist a manually-edited Date Received. inputValue is yyyy-mm-dd (or ''
+  // to clear); it's stored in the sheet-native "M/D/YYYY" form. Matched by
+  // natural key so a row shift can't write the wrong invoice.
+  // NOTE: for an invoice with a matchedTransactionId, the Apps Script
+  // write-back re-derives Date Received from the Mercury transaction, so a
+  // manual edit here is intended for unmatched / manually-paid invoices.
+  const handleSaveDateReceived = async (invoice, inputValue) => {
+    const targetKey = invoiceKey(invoice);
+    let stored = '';
+    if (inputValue) {
+      const [y, m, d] = inputValue.split('-').map(Number);
+      stored = `${m}/${d}/${y}`;
+    }
+    try {
+      setSavingDate(invoice.sheetRowNumber);
+      const updatedInvoices = invoices.map((inv) =>
+        invoiceKey(inv) === targetKey ? { ...inv, dateReceived: stored } : inv
+      );
+      await setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true });
+      setInvoices(updatedInvoices);
+    } catch (err) {
+      console.error('Error saving date received:', err);
+    } finally {
+      setSavingDate(null);
+      setEditingDateRow(null);
+    }
   };
 
 
@@ -1012,7 +1065,48 @@ const AdminInvoices = () => {
                           {renderMatchCell(inv)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {formatDateDisplay(inv.dateReceived, inv.year)}
+                          {editingDateRow === inv.sheetRowNumber ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="date"
+                                value={editDateValue}
+                                onChange={(e) => setEditDateValue(e.target.value)}
+                                className="border border-gray-300 rounded px-2 py-1 text-sm"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handleSaveDateReceived(inv, editDateValue)}
+                                disabled={savingDate === inv.sheetRowNumber}
+                                className="text-green-600 hover:text-green-800 transition-colors disabled:opacity-50"
+                                title="Save date received"
+                              >
+                                {savingDate === inv.sheetRowNumber ? (
+                                  <div className="w-3.5 h-3.5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Check className="w-4 h-4" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => setEditingDateRow(null)}
+                                disabled={savingDate === inv.sheetRowNumber}
+                                className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+                                title="Cancel"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditingDateRow(inv.sheetRowNumber);
+                                setEditDateValue(toDateInputValue(inv.dateReceived, inv.year));
+                              }}
+                              className="text-left hover:text-gray-900 hover:underline decoration-dotted underline-offset-2"
+                              title="Click to edit date received"
+                            >
+                              {formatDateDisplay(inv.dateReceived, inv.year)}
+                            </button>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                           {inv.status === 'Paid' ? (
