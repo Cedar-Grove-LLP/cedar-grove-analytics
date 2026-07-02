@@ -325,6 +325,38 @@ const AdminInvoices = () => {
     }
   }, []);
 
+  // Serialized read-modify-write for a single invoice entry in invoices/all.
+  //
+  // Every mutation (confirm match, mark paid, dismiss, edit date) must change
+  // exactly one row without clobbering the others. The previous code rebuilt
+  // the whole entries[] array from the `invoices` state captured in the
+  // handler's closure and wrote it back — so when several edits happened in
+  // quick succession, a later write built on a stale snapshot silently dropped
+  // the matches saved by earlier writes (last-write-wins on the full array).
+  //
+  // This helper instead (a) serializes all writes through a promise queue so
+  // they never overlap, and (b) re-reads the current doc immediately before
+  // each write, applies the change to the one entry matched by natural key,
+  // and writes the fresh array back. Sequential ordering + fresh read means no
+  // edit can overwrite another's changes.
+  const writeQueueRef = useRef(Promise.resolve());
+  const updateInvoiceEntry = useCallback((targetInvoice, updater) => {
+    const targetKey = invoiceKey(targetInvoice);
+    const run = writeQueueRef.current.then(async () => {
+      const snap = await getDoc(doc(db, 'invoices', 'all'));
+      const current = snap.exists() ? (snap.data().entries || []) : [];
+      const updated = current.map((inv) =>
+        invoiceKey(inv) === targetKey ? updater(inv) : inv
+      );
+      await setDoc(doc(db, 'invoices', 'all'), { entries: updated }, { merge: true });
+      setInvoices(updated);
+      return updated;
+    });
+    // Keep the queue alive even if one operation rejects.
+    writeQueueRef.current = run.catch(() => {});
+    return run;
+  }, []);
+
   const handleSync = async () => {
     setSyncing(true);
     setSyncStatus(null);
@@ -574,30 +606,22 @@ const AdminInvoices = () => {
         updatedAliases[cpLower] = [...existing, invoice.client];
       }
 
-      // Update the invoice entry with matched transaction ID and set status to Paid.
-      // Match by stable natural key — sheetRowNumber may shift between syncs.
-      const targetKey = invoiceKey(invoice);
-      const updatedInvoices = invoices.map((inv) => {
-        if (invoiceKey(inv) === targetKey) {
-          return {
-            ...inv,
-            matchedTransactionId: transactionId,
-            status: 'Paid',
-            dateReceived: txn.postedAt || txn.createdAt || inv.dateReceived,
-          };
-        }
-        return inv;
-      });
-
-      // Write both updates to Firestore in parallel
+      // Persist the alias and the single-row invoice change. The invoice write
+      // goes through updateInvoiceEntry (fresh read + serialized) so a rapid
+      // sequence of matches can't clobber each other. Match by stable natural
+      // key — sheetRowNumber may shift between syncs.
       await Promise.all([
         setDoc(doc(db, 'clientAliases', 'all'), { aliases: updatedAliases }),
-        setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true }),
+        updateInvoiceEntry(invoice, (inv) => ({
+          ...inv,
+          matchedTransactionId: transactionId,
+          status: 'Paid',
+          dateReceived: txn.postedAt || txn.createdAt || inv.dateReceived,
+        })),
       ]);
 
       // Update local state
       setAliases(updatedAliases);
-      setInvoices(updatedInvoices);
       setConfirmedMatches((prev) => ({
         ...prev,
         [invoice.sheetRowNumber]: { txn, matchType: 'alias' },
@@ -618,20 +642,16 @@ const AdminInvoices = () => {
   const handleDismissMatch = async (sheetRowNumber) => {
     try {
       // Resolve the target invoice by sheetRowNumber for the current in-memory
-      // list, then match by stable natural key when writing back to Firestore
-      // so row shifts between fetch and write don't touch the wrong entry.
+      // list, then let updateInvoiceEntry match by stable natural key on a
+      // fresh read so row shifts between fetch and write don't touch the wrong
+      // entry and concurrent edits aren't clobbered.
       const target = invoices.find((inv) => inv.sheetRowNumber === sheetRowNumber);
-      const targetKey = target ? invoiceKey(target) : null;
-      const updatedInvoices = invoices.map((inv) => {
-        if (targetKey && invoiceKey(inv) === targetKey) {
+      if (target) {
+        await updateInvoiceEntry(target, (inv) => {
           const { matchedTransactionId, ...rest } = inv;
           return { ...rest, status: '', dateReceived: '' };
-        }
-        return inv;
-      });
-
-      await setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true });
-      setInvoices(updatedInvoices);
+        });
+      }
     } catch (err) {
       console.error('Error removing match:', err);
     }
@@ -648,16 +668,7 @@ const AdminInvoices = () => {
     try {
       setMarkingPaid(invoice.sheetRowNumber);
       const today = new Date().toLocaleDateString('en-US');
-      const targetKey = invoiceKey(invoice);
-      const updatedInvoices = invoices.map((inv) => {
-        if (invoiceKey(inv) === targetKey) {
-          return { ...inv, status: 'Paid', dateReceived: today };
-        }
-        return inv;
-      });
-
-      await setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true });
-      setInvoices(updatedInvoices);
+      await updateInvoiceEntry(invoice, (inv) => ({ ...inv, status: 'Paid', dateReceived: today }));
     } catch (err) {
       console.error('Error marking invoice as paid:', err);
     } finally {
@@ -669,16 +680,7 @@ const AdminInvoices = () => {
   const handleUnmarkPaid = async (invoice) => {
     try {
       setMarkingPaid(invoice.sheetRowNumber);
-      const targetKey = invoiceKey(invoice);
-      const updatedInvoices = invoices.map((inv) => {
-        if (invoiceKey(inv) === targetKey) {
-          return { ...inv, status: '', dateReceived: '' };
-        }
-        return inv;
-      });
-
-      await setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true });
-      setInvoices(updatedInvoices);
+      await updateInvoiceEntry(invoice, (inv) => ({ ...inv, status: '', dateReceived: '' }));
     } catch (err) {
       console.error('Error unmarking invoice:', err);
     } finally {
@@ -711,7 +713,6 @@ const AdminInvoices = () => {
   // write-back re-derives Date Received from the Mercury transaction, so a
   // manual edit here is intended for unmatched / manually-paid invoices.
   const handleSaveDateReceived = async (invoice, inputValue) => {
-    const targetKey = invoiceKey(invoice);
     let stored = '';
     if (inputValue) {
       const [y, m, d] = inputValue.split('-').map(Number);
@@ -719,11 +720,7 @@ const AdminInvoices = () => {
     }
     try {
       setSavingDate(invoice.sheetRowNumber);
-      const updatedInvoices = invoices.map((inv) =>
-        invoiceKey(inv) === targetKey ? { ...inv, dateReceived: stored } : inv
-      );
-      await setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true });
-      setInvoices(updatedInvoices);
+      await updateInvoiceEntry(invoice, (inv) => ({ ...inv, dateReceived: stored }));
     } catch (err) {
       console.error('Error saving date received:', err);
     } finally {
