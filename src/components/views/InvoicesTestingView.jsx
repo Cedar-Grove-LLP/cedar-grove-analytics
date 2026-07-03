@@ -37,6 +37,7 @@ import {
   mxFieldKey,
   cashKey,
   regKey,
+  expKey,
 } from '@/utils/invoicesOverrides.mjs';
 
 // The frozen snapshot's raw workbook (used as the drift baseline + fallback).
@@ -472,9 +473,9 @@ const ProfitsPaidScaffold = ({ rows }) => (
 // ===========================================================================
 // Expenses V2
 // ===========================================================================
-const ExpensesScaffold = ({ rows }) => (
+const ExpensesScaffold = ({ rows, edit }) => (
   <div className="space-y-2">
-    <SourceNote>Each vendor is tagged to a P&amp;L category (col O); column totals feed Cash Accounting Expenses and the P&amp;L expense lines.</SourceNote>
+    <SourceNote>Each vendor is tagged to a P&amp;L category (col O); column totals feed Cash Accounting Expenses and the P&amp;L expense lines.{edit ? ' Click a monthly cell to model a what-if — the change flows to that P&L line → NET INCOME.' : ''}</SourceNote>
     <SheetWrap>
       <table className="border-collapse">
         <tbody>
@@ -488,7 +489,7 @@ const ExpensesScaffold = ({ rows }) => (
             <tr key={i} className={r.highlight ? C.yellow : ''}>
               <td className={cx(cell, 'font-bold', r.highlight && C.yellow)}>{r.category}</td>
               <td className={cx(cell, r.highlight && C.yellow)}>{r.label}</td>
-              {r.vals.map((v, k) => <td key={k} className={cx(cell, 'text-right', r.highlight && C.yellow)}>{fmt(v)}</td>)}
+              {r.vals.map((v, k) => <td key={k} className={cx(cell, 'text-right', r.highlight && C.yellow)}><EditableNum cellKey={edit ? expKey(i, k) : null} value={v} edit={edit} /></td>)}
               <td className={cx(cell, r.highlight && C.yellow)}>{r.pnlCat || ''}</td>
             </tr>
           ))}
@@ -916,7 +917,7 @@ const InvoicesTestingView = () => {
       case 'rate-sheet': return <RateSheetScaffold rows={real ? ds.rateSheet : DUMMY_RATE_ROWS} />;
       case 'cash-accounting': return <CashAccountingScaffold rows={real ? ds.cashRows : DUMMY_CASH_ROWS} baseRows={baseDataset ? baseDataset.cashRows : undefined} edit={edit} />;
       case 'profits-paid': return <ProfitsPaidScaffold rows={real ? ds.profitsRows : DUMMY_PROFITS_ROWS} />;
-      case 'expenses': return <ExpensesScaffold rows={real ? ds.expenseRows : EXP_ROWS} />;
+      case 'expenses': return <ExpensesScaffold rows={real ? ds.expenseRows : EXP_ROWS} edit={edit} />;
       case 'pnl': return <PnlScaffold months={(real ? ds.pnl : DUMMY_PNL).months} rows={(real ? ds.pnl : DUMMY_PNL).rows} baseRows={baseDataset ? baseDataset.pnl.rows : undefined} />;
       case 'balance-sheet': return <BalanceSheetScaffold rows={real ? ds.balanceRows.map(classifyBalanceRow) : BALANCE_ROWS} />;
       case 'payment-status':
@@ -985,7 +986,7 @@ const InvoicesTestingView = () => {
         </div>
       )}
       {real && liveStatus === 'ready' && editCount === 0 && (
-        <p className="text-[12px] text-gray-500">Tip: on the month, Cash Accounting, and Payment Status tabs you can click any number to model a what-if — the effect ripples through the waterfalls, Cash summary, and P&amp;L (Revenue → NET INCOME) with old→new deltas, and never touches the sheet.</p>
+        <p className="text-[12px] text-gray-500">Tip: on the month, Cash Accounting, Expenses V2, and Payment Status tabs you can click any number to model a what-if — the effect ripples through the waterfalls, Cash summary, and P&amp;L (Revenue &amp; expenses → NET INCOME) with old→new deltas, and never touches the sheet.</p>
       )}
 
       <div className="flex gap-0 border-b border-gray-300 overflow-x-auto">

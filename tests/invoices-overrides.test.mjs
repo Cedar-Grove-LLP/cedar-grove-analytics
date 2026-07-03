@@ -6,6 +6,7 @@ import {
   mxBillKey,
   cashKey,
   regKey,
+  expKey,
 } from '../src/utils/invoicesOverrides.mjs';
 import { computeMonthlyWaterfall, computeCashProfits } from '../src/utils/invoicesCalc.mjs';
 import { REAL_WORKBOOK } from '../src/utils/invoicesRealData.mjs';
@@ -127,6 +128,35 @@ test('cash input edit recomputes that month Profits', () => {
   const expected = computeCashProfits({ ...base, expenses: newExpenses });
   assert.ok(near(workbook.cash[monthKey].sheet.profits, expected));
   assert.equal(meta.get(cashKey(monthKey, 'expenses')).state, 'edited');
+});
+
+test('editing an Expenses V2 cell flows (delta) to its P&L line + NET INCOME', () => {
+  // Pick an expense row tagged to a P&L expense line, with a Jan–Jun value.
+  const tagToKey = { 'Software & Technology': 'software', 'Malpractice Insurance': 'malpractice', 'Filing Fees': 'filingFees', 'Misc Expenses': 'misc', 'Payroll Taxes': 'payrollTaxes' };
+  let ri = -1; let mo = -1; let lineKey = null;
+  for (let i = 0; i < REAL_WORKBOOK.expenses.length; i++) {
+    const key = tagToKey[REAL_WORKBOOK.expenses[i].pnlCat];
+    if (!key) continue;
+    const m = REAL_WORKBOOK.expenses[i].vals.slice(0, 6).findIndex((v) => typeof v === 'number');
+    if (m >= 0) { ri = i; mo = m; lineKey = key; break; }
+  }
+  assert.ok(ri >= 0, 'an Expenses row tagged to a P&L line exists');
+
+  const dsBase = buildRealDataset(REAL_WORKBOOK);
+  const lineLabel = { software: 'DocuSign, Asana, Google, Etc.', malpractice: 'Malpractice Insurance', filingFees: 'Filing Fees', misc: 'Misc Expenses', payrollTaxes: 'Payroll Taxes' }[lineKey];
+  const netBase = dsBase.pnl.rows.find((r) => r.label === 'NET INCOME').vals[mo];
+  const expBase = dsBase.pnl.rows.find((r) => r.label === 'TOTAL EXPENSES').vals[mo];
+
+  const bump = 3000;
+  const { workbook, meta } = resolveWorkbook(REAL_WORKBOOK, { [expKey(ri, mo)]: REAL_WORKBOOK.expenses[ri].vals[mo] + bump });
+  const ds = buildRealDataset(workbook);
+  assert.equal(meta.get(expKey(ri, mo)).state, 'edited');
+  // the P&L expense line for that month grew by the bump
+  const line = ds.pnl.rows.find((r) => r.label === lineLabel);
+  assert.ok(near(line.vals[mo], dsBase.pnl.rows.find((r) => r.label === lineLabel).vals[mo] + bump), 'P&L line moved');
+  // TOTAL EXPENSES up by bump, NET INCOME down by bump
+  assert.ok(near(ds.pnl.rows.find((r) => r.label === 'TOTAL EXPENSES').vals[mo], expBase + bump), 'total expenses moved');
+  assert.ok(near(ds.pnl.rows.find((r) => r.label === 'NET INCOME').vals[mo], netBase - bump), 'net income dropped');
 });
 
 test('resolveWorkbook does not mutate the input workbook', () => {

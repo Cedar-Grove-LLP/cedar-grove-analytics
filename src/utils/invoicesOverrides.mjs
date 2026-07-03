@@ -33,6 +33,17 @@ export const mxBillKey = (month, row, j) => `mx|${month}|${row}|b${j}`;
 export const mxFieldKey = (month, row, field) => `mx|${month}|${row}|${field}`;
 export const cashKey = (month, field) => `cash|${month}|${field}`;
 export const regKey = (row) => `reg|${row}|amount`;
+export const expKey = (row, month) => `exp|${row}|${month}`;
+
+// Expenses V2 P&L tag → the P&L line it feeds (the SUMIF target). Names in
+// PNL_CONSULTANTS map to the per-consultant lines instead.
+const PNL_TAG_TO_KEY = {
+  'Software & Technology': 'software', 'Malpractice Insurance': 'malpractice', 'Franchise Taxes': 'franchiseTaxes',
+  'Filing Fees': 'filingFees', Reimbursements: 'reimbursements', 'Misc Expenses': 'misc',
+  'Outside Counsel': 'outsideCounsel', 'Payroll Taxes': 'payrollTaxes',
+  'Charitable Donations': 'charitable', 'Cedar Grove Foundation': 'cedarGrove',
+};
+const PNL_CONSULTANTS = new Set(['Valyria', 'Valery Uscanga', 'Martyna Skrodzka', 'Nick Agate', 'David Popkin', 'Paige Wilson', 'Accountants']);
 
 // Waterfall resolution order: inputs first, then derived (each formula reads the
 // already-resolved earlier cells, so a pin on a middle cell propagates downward).
@@ -202,6 +213,40 @@ export function resolveWorkbook(workbook, overrides = {}) {
     if (cashReceivedDelta[mi]) { c.inputs.cashReceived += cashReceivedDelta[mi]; changed = true; }
     if (changed) c.sheet.profits = computeCashProfits(c.inputs);
   });
+
+  // Expenses V2 edits → the P&L expense/consultant line they're tagged to
+  // (delta only, so the cached baseline — which for CGF isn't a pure SUMIF —
+  // is preserved and only the user's change flows to TOTAL EXPENSES → NET
+  // INCOME). Expense lines only cover Jan–Jun on the P&L; later-month edits
+  // show on the Expenses tab but don't reach the (6-column) P&L.
+  if (wb.expenses && keys.some((k) => k.startsWith('exp|'))) {
+    const lineDelta = {}; // `${lineKey|consultantName}|${m}` → delta
+    wb.expenses.forEach((row, ri) => {
+      row.vals.forEach((v, m) => {
+        const k = expKey(ri, m);
+        if (k in overrides) {
+          const base = row.vals[m];
+          row.vals[m] = overrides[k];
+          meta.set(k, { state: 'edited', base, value: overrides[k] });
+          const tag = row.pnlCat;
+          if (tag) { const t = `${tag}|${m}`; lineDelta[t] = (lineDelta[t] || 0) + (overrides[k] - base); }
+        }
+      });
+    });
+    if (wb.pnl && wb.pnl.lines) {
+      for (const [t, delta] of Object.entries(lineDelta)) {
+        const sep = t.lastIndexOf('|');
+        const tag = t.slice(0, sep);
+        const m = Number(t.slice(sep + 1));
+        const lineKey = PNL_TAG_TO_KEY[tag];
+        if (lineKey && Array.isArray(wb.pnl.lines[lineKey]) && m < wb.pnl.lines[lineKey].length) {
+          wb.pnl.lines[lineKey][m] += delta;
+        } else if (PNL_CONSULTANTS.has(tag) && wb.pnl.consultants && Array.isArray(wb.pnl.consultants[tag]) && m < wb.pnl.consultants[tag].length) {
+          wb.pnl.consultants[tag][m] += delta;
+        }
+      }
+    }
+  }
 
   return { workbook: wb, meta };
 }
