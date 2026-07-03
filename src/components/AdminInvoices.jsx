@@ -421,19 +421,23 @@ const AdminInvoices = () => {
 
   // Export the currently filtered/sorted invoices to CSV. Amount is exported
   // as a raw number (no $) so it's spreadsheet-friendly.
+  // Export only the outstanding (unpaid) invoices from the current filtered
+  // view. Amount is a raw number for spreadsheet use.
   const handleExportCSV = () => {
     const headers = ['Client', 'Amount', 'Year', 'Date Sent', 'Status', 'Date Received', 'Last Reminder', 'Notes'];
-    const rows = filteredAndSorted.map((inv) => [
-      inv.client || '',
-      inv.amount ?? '',
-      inv.year ?? '',
-      inv.dateSent || '',
-      inv.status || '',
-      inv.dateReceived || '',
-      inv.lastReminder || '',
-      inv.notes || '',
-    ]);
-    downloadCSV(`invoices-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    const rows = filteredAndSorted
+      .filter((inv) => inv.status !== 'Paid')
+      .map((inv) => [
+        inv.client || '',
+        inv.amount ?? '',
+        inv.year ?? '',
+        inv.dateSent || '',
+        inv.status || '',
+        inv.dateReceived || '',
+        inv.lastReminder || '',
+        inv.notes || '',
+      ]);
+    downloadCSV(`outstanding-invoices-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   const getSortIndicator = (key) => {
@@ -527,6 +531,34 @@ const AdminInvoices = () => {
       outstandingAmount: outstanding.reduce((sum, inv) => sum + (inv.amount || 0), 0),
     };
   }, [filteredAndSorted]);
+
+  // Map each client (lowercased) to the distinct counterparty names their
+  // matched payments actually came in under — i.e. what the client has
+  // "previously paid as". Derived from every invoice with a matched Mercury
+  // transaction, across the full book (not just the filtered view).
+  const paidAsByClient = useMemo(() => {
+    const txnById = new Map(transactions.map((t) => [t.id, t]));
+    const map = {};
+    for (const inv of invoices) {
+      if (!inv.matchedTransactionId) continue;
+      const txn = txnById.get(inv.matchedTransactionId);
+      const cp = txn && txn.counterpartyName ? txn.counterpartyName.trim() : '';
+      if (!cp) continue;
+      const key = (inv.client || '').toLowerCase();
+      if (!map[key]) map[key] = new Set();
+      map[key].add(cp);
+    }
+    return map;
+  }, [invoices, transactions]);
+
+  // Counterparty names a client paid under, excluding names identical to the
+  // client name (those add no information).
+  const getPaidAsNames = (client) => {
+    const clientLower = (client || '').toLowerCase();
+    const set = paidAsByClient[clientLower];
+    if (!set) return [];
+    return Array.from(set).filter((n) => n.toLowerCase() !== clientLower);
+  };
 
   // -------------------------------------------------------
   // Matching logic: for each invoice, find candidate
@@ -994,12 +1026,12 @@ const AdminInvoices = () => {
 
               <button
                 onClick={handleExportCSV}
-                disabled={filteredAndSorted.length === 0}
+                disabled={summaryStats.outstandingCount === 0}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Export the filtered invoices to CSV"
+                title="Export the outstanding invoices in the current view to CSV"
               >
                 <Download className="w-4 h-4" />
-                <span>Export CSV</span>
+                <span>Export Outstanding</span>
               </button>
 
               <span className="ml-auto text-sm text-gray-500">
@@ -1054,8 +1086,21 @@ const AdminInvoices = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredAndSorted.map((inv, idx) => (
                       <tr key={`${inv.client}-${inv.sheetRowNumber}-${idx}`} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 max-w-[250px] truncate">
-                          {inv.client}
+                        <td className="px-6 py-4 text-sm text-gray-900 max-w-[250px]">
+                          <div className="truncate">{inv.client}</div>
+                          {getPaidAsNames(inv.client).length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {getPaidAsNames(inv.client).map((name) => (
+                                <span
+                                  key={name}
+                                  className="inline-flex items-center max-w-[220px] truncate px-2 py-0.5 text-[10px] font-medium rounded-full bg-blue-50 text-blue-700"
+                                  title={`Previously paid as "${name}"`}
+                                >
+                                  Paid as: {name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-right ${
                           inv.status === 'Paid' ? 'text-green-600' : 'text-gray-900'
