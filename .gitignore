@@ -45,3 +45,9 @@ next-env.d.ts
 appscript/
 
 docs/
+# Real attorney-compensation data — kept local-only (synthetic stand-in is committed).
+# Regenerate the synthetic committed fixture with scripts/make-synthetic-invoices-data.mjs.
+src/utils/invoicesRealData.local.mjs
+scripts/invoices-real-snapshot.json
+scripts/invoices-real-snapshot.local.json
+tests/invoices-real-january-june.test.mjs
