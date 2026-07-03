@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw } from 'lucide-react';
+import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw, Search, Download } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { db, auth } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge, getMatchTypeBadge } from '@/utils/statusStyles';
+import { downloadCSV } from '@/utils/csv';
 import { parseInvoiceDate } from '@/utils/paymentStatus.mjs';
 
 const MONTH_NAMES = [
@@ -22,6 +23,10 @@ const STATUS_FILTER_OPTIONS = [
   { key: 'paid', label: 'Paid' },
   { key: 'outstanding', label: 'Outstanding' },
 ];
+
+// Only suggest a payment as a match if it posted within this many days after
+// the invoice was sent. Bounds the candidate list for old outstanding invoices.
+const MATCH_WINDOW_DAYS = 90;
 
 // Invoice date parsing (M/D, M/D/YYYY, Firestore Timestamps, verbose
 // Date.toString()) is shared with the Payment Status tag engine.
@@ -61,6 +66,7 @@ const AdminInvoices = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [monthFilter, setMonthFilter] = useState('all');
+  const [nameFilter, setNameFilter] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'dateSent', direction: 'desc' });
   const [clientsData, setClientsData] = useState([]);
   const [matchSelections, setMatchSelections] = useState({});
@@ -325,6 +331,38 @@ const AdminInvoices = () => {
     }
   }, []);
 
+  // Serialized read-modify-write for a single invoice entry in invoices/all.
+  //
+  // Every mutation (confirm match, mark paid, dismiss, edit date) must change
+  // exactly one row without clobbering the others. The previous code rebuilt
+  // the whole entries[] array from the `invoices` state captured in the
+  // handler's closure and wrote it back — so when several edits happened in
+  // quick succession, a later write built on a stale snapshot silently dropped
+  // the matches saved by earlier writes (last-write-wins on the full array).
+  //
+  // This helper instead (a) serializes all writes through a promise queue so
+  // they never overlap, and (b) re-reads the current doc immediately before
+  // each write, applies the change to the one entry matched by natural key,
+  // and writes the fresh array back. Sequential ordering + fresh read means no
+  // edit can overwrite another's changes.
+  const writeQueueRef = useRef(Promise.resolve());
+  const updateInvoiceEntry = useCallback((targetInvoice, updater) => {
+    const targetKey = invoiceKey(targetInvoice);
+    const run = writeQueueRef.current.then(async () => {
+      const snap = await getDoc(doc(db, 'invoices', 'all'));
+      const current = snap.exists() ? (snap.data().entries || []) : [];
+      const updated = current.map((inv) =>
+        invoiceKey(inv) === targetKey ? updater(inv) : inv
+      );
+      await setDoc(doc(db, 'invoices', 'all'), { entries: updated }, { merge: true });
+      setInvoices(updated);
+      return updated;
+    });
+    // Keep the queue alive even if one operation rejects.
+    writeQueueRef.current = run.catch(() => {});
+    return run;
+  }, []);
+
   const handleSync = async () => {
     setSyncing(true);
     setSyncStatus(null);
@@ -381,6 +419,23 @@ const AdminInvoices = () => {
     }));
   };
 
+  // Export the currently filtered/sorted invoices to CSV. Amount is exported
+  // as a raw number (no $) so it's spreadsheet-friendly.
+  const handleExportCSV = () => {
+    const headers = ['Client', 'Amount', 'Year', 'Date Sent', 'Status', 'Date Received', 'Last Reminder', 'Notes'];
+    const rows = filteredAndSorted.map((inv) => [
+      inv.client || '',
+      inv.amount ?? '',
+      inv.year ?? '',
+      inv.dateSent || '',
+      inv.status || '',
+      inv.dateReceived || '',
+      inv.lastReminder || '',
+      inv.notes || '',
+    ]);
+    downloadCSV(`invoices-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
+
   const getSortIndicator = (key) => {
     if (sortConfig.key !== key) return '';
     return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
@@ -405,22 +460,10 @@ const AdminInvoices = () => {
     return options;
   }, [invoices]);
 
-  // Set default month filter to current month ONCE, when data first loads.
-  // Guarded by a ref rather than `monthFilter === 'all'` so a later
-  // deliberate "All Time" selection isn't clobbered: every invoice mutation
-  // (dismiss match / mark paid / confirm) rebuilds monthOptions, which would
-  // otherwise re-run this effect and reset the filter to the current month.
-  const didInitMonthFilter = useRef(false);
-  useEffect(() => {
-    if (didInitMonthFilter.current || monthOptions.length === 0) return;
-    didInitMonthFilter.current = true;
-    const now = new Date();
-    const currentKey = `${now.getFullYear()}-${now.getMonth()}`;
-    const match = monthOptions.find(
-      (o) => `${o.year}-${o.month}` === currentKey
-    );
-    setMonthFilter(match ? currentKey : `${monthOptions[0].year}-${monthOptions[0].month}`);
-  }, [monthOptions]);
+  // Month filter defaults to "All Time" (the initial monthFilter state) so a
+  // paid invoice from any month stays visible after a reload. Previously this
+  // defaulted to the current month, which hid older paid invoices and made
+  // confirmed matches appear to vanish on the next visit.
 
   const filteredAndSorted = useMemo(() => {
     let items = invoices;
@@ -440,6 +483,12 @@ const AdminInvoices = () => {
       items = items.filter((inv) => inv.status === 'Paid');
     } else if (statusFilter === 'outstanding') {
       items = items.filter((inv) => inv.status !== 'Paid');
+    }
+
+    // Client name search (case-insensitive substring)
+    const nameQuery = nameFilter.trim().toLowerCase();
+    if (nameQuery) {
+      items = items.filter((inv) => (inv.client || '').toLowerCase().includes(nameQuery));
     }
 
     // Sort
@@ -464,7 +513,7 @@ const AdminInvoices = () => {
     });
 
     return items;
-  }, [invoices, monthFilter, statusFilter, sortConfig]);
+  }, [invoices, monthFilter, statusFilter, nameFilter, sortConfig]);
 
   const summaryStats = useMemo(() => {
     const paid = filteredAndSorted.filter((inv) => inv.status === 'Paid');
@@ -504,10 +553,15 @@ const AdminInvoices = () => {
       for (const txn of transactions) {
         // Skip transactions already matched to another invoice
         if (matchedTxnIds.has(txn.id)) continue;
-        // Skip transactions that occurred before the invoice was sent
+        // Only consider payments in the window [invoice sent, +90 days].
+        // A payment can't predate the invoice, and capping at 90 days keeps
+        // very old invoices from accumulating dozens of coincidental matches.
         if (invSentDate) {
           const txnDate = txn.postedAt ? new Date(txn.postedAt) : txn.createdAt ? new Date(txn.createdAt) : null;
-          if (txnDate && txnDate < invSentDate) continue;
+          if (txnDate) {
+            if (txnDate < invSentDate) continue;
+            if (txnDate - invSentDate > MATCH_WINDOW_DAYS * 24 * 60 * 60 * 1000) continue;
+          }
         }
         const cpName = txn.counterpartyName || '';
         const cpLower = cpName.toLowerCase();
@@ -574,30 +628,22 @@ const AdminInvoices = () => {
         updatedAliases[cpLower] = [...existing, invoice.client];
       }
 
-      // Update the invoice entry with matched transaction ID and set status to Paid.
-      // Match by stable natural key — sheetRowNumber may shift between syncs.
-      const targetKey = invoiceKey(invoice);
-      const updatedInvoices = invoices.map((inv) => {
-        if (invoiceKey(inv) === targetKey) {
-          return {
-            ...inv,
-            matchedTransactionId: transactionId,
-            status: 'Paid',
-            dateReceived: txn.postedAt || txn.createdAt || inv.dateReceived,
-          };
-        }
-        return inv;
-      });
-
-      // Write both updates to Firestore in parallel
+      // Persist the alias and the single-row invoice change. The invoice write
+      // goes through updateInvoiceEntry (fresh read + serialized) so a rapid
+      // sequence of matches can't clobber each other. Match by stable natural
+      // key — sheetRowNumber may shift between syncs.
       await Promise.all([
         setDoc(doc(db, 'clientAliases', 'all'), { aliases: updatedAliases }),
-        setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true }),
+        updateInvoiceEntry(invoice, (inv) => ({
+          ...inv,
+          matchedTransactionId: transactionId,
+          status: 'Paid',
+          dateReceived: txn.postedAt || txn.createdAt || inv.dateReceived,
+        })),
       ]);
 
       // Update local state
       setAliases(updatedAliases);
-      setInvoices(updatedInvoices);
       setConfirmedMatches((prev) => ({
         ...prev,
         [invoice.sheetRowNumber]: { txn, matchType: 'alias' },
@@ -618,20 +664,16 @@ const AdminInvoices = () => {
   const handleDismissMatch = async (sheetRowNumber) => {
     try {
       // Resolve the target invoice by sheetRowNumber for the current in-memory
-      // list, then match by stable natural key when writing back to Firestore
-      // so row shifts between fetch and write don't touch the wrong entry.
+      // list, then let updateInvoiceEntry match by stable natural key on a
+      // fresh read so row shifts between fetch and write don't touch the wrong
+      // entry and concurrent edits aren't clobbered.
       const target = invoices.find((inv) => inv.sheetRowNumber === sheetRowNumber);
-      const targetKey = target ? invoiceKey(target) : null;
-      const updatedInvoices = invoices.map((inv) => {
-        if (targetKey && invoiceKey(inv) === targetKey) {
+      if (target) {
+        await updateInvoiceEntry(target, (inv) => {
           const { matchedTransactionId, ...rest } = inv;
           return { ...rest, status: '', dateReceived: '' };
-        }
-        return inv;
-      });
-
-      await setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true });
-      setInvoices(updatedInvoices);
+        });
+      }
     } catch (err) {
       console.error('Error removing match:', err);
     }
@@ -648,16 +690,7 @@ const AdminInvoices = () => {
     try {
       setMarkingPaid(invoice.sheetRowNumber);
       const today = new Date().toLocaleDateString('en-US');
-      const targetKey = invoiceKey(invoice);
-      const updatedInvoices = invoices.map((inv) => {
-        if (invoiceKey(inv) === targetKey) {
-          return { ...inv, status: 'Paid', dateReceived: today };
-        }
-        return inv;
-      });
-
-      await setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true });
-      setInvoices(updatedInvoices);
+      await updateInvoiceEntry(invoice, (inv) => ({ ...inv, status: 'Paid', dateReceived: today }));
     } catch (err) {
       console.error('Error marking invoice as paid:', err);
     } finally {
@@ -669,16 +702,7 @@ const AdminInvoices = () => {
   const handleUnmarkPaid = async (invoice) => {
     try {
       setMarkingPaid(invoice.sheetRowNumber);
-      const targetKey = invoiceKey(invoice);
-      const updatedInvoices = invoices.map((inv) => {
-        if (invoiceKey(inv) === targetKey) {
-          return { ...inv, status: '', dateReceived: '' };
-        }
-        return inv;
-      });
-
-      await setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true });
-      setInvoices(updatedInvoices);
+      await updateInvoiceEntry(invoice, (inv) => ({ ...inv, status: '', dateReceived: '' }));
     } catch (err) {
       console.error('Error unmarking invoice:', err);
     } finally {
@@ -711,7 +735,6 @@ const AdminInvoices = () => {
   // write-back re-derives Date Received from the Mercury transaction, so a
   // manual edit here is intended for unmatched / manually-paid invoices.
   const handleSaveDateReceived = async (invoice, inputValue) => {
-    const targetKey = invoiceKey(invoice);
     let stored = '';
     if (inputValue) {
       const [y, m, d] = inputValue.split('-').map(Number);
@@ -719,11 +742,7 @@ const AdminInvoices = () => {
     }
     try {
       setSavingDate(invoice.sheetRowNumber);
-      const updatedInvoices = invoices.map((inv) =>
-        invoiceKey(inv) === targetKey ? { ...inv, dateReceived: stored } : inv
-      );
-      await setDoc(doc(db, 'invoices', 'all'), { entries: updatedInvoices }, { merge: true });
-      setInvoices(updatedInvoices);
+      await updateInvoiceEntry(invoice, (inv) => ({ ...inv, dateReceived: stored }));
     } catch (err) {
       console.error('Error saving date received:', err);
     } finally {
@@ -960,6 +979,28 @@ const AdminInvoices = () => {
                   {opt.label}
                 </button>
               ))}
+
+              {/* Client name search */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  placeholder="Search client..."
+                  className="pl-9 pr-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 w-48"
+                />
+              </div>
+
+              <button
+                onClick={handleExportCSV}
+                disabled={filteredAndSorted.length === 0}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Export the filtered invoices to CSV"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export CSV</span>
+              </button>
 
               <span className="ml-auto text-sm text-gray-500">
                 Showing {filteredAndSorted.length} invoice{filteredAndSorted.length !== 1 ? 's' : ''}

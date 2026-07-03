@@ -3,34 +3,53 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, DollarSign, ArrowDownCircle, ArrowUpCircle, ExternalLink, RefreshCw } from 'lucide-react';
-import { collection, getDocs } from 'firebase/firestore';
+import { ArrowLeft, LogOut, DollarSign, ArrowDownCircle, ArrowUpCircle, ExternalLink, RefreshCw, Search, Download } from 'lucide-react';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge } from '@/utils/statusStyles';
+import { downloadCSV } from '@/utils/csv';
 
 const FILTER_OPTIONS = [
   { key: 'all', label: 'All Transactions' },
   { key: 'expenses', label: 'Expenses' },
   { key: 'payments', label: 'Payments' },
+  { key: 'unmatched', label: 'Unmatched Payments' },
 ];
 
 const AdminTransactions = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const [transactions, setTransactions] = useState([]);
+  const [matchedTxnIds, setMatchedTxnIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [nameFilter, setNameFilter] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'postedAt', direction: 'desc' });
 
   const fetchTransactions = useCallback(async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'transactions'));
-      const docs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      // Load transactions plus the invoices doc so we can flag which payments
+      // are already matched to an invoice (drives the "Unmatched Payments"
+      // filter). matchedTransactionId is set by the invoices dashboard.
+      const [snapshot, invoicesSnap] = await Promise.all([
+        getDocs(collection(db, 'transactions')),
+        getDoc(doc(db, 'invoices', 'all')),
+      ]);
+      const docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       setTransactions(docs);
+
+      const entries = invoicesSnap.exists() ? (invoicesSnap.data().entries || []) : [];
+      const matched = new Set();
+      for (const inv of entries) {
+        if (inv.matchedTransactionId) matched.add(inv.matchedTransactionId);
+      }
+      setMatchedTxnIds(matched);
     } catch (err) {
       console.error('Error fetching transactions:', err);
     } finally {
@@ -85,6 +104,21 @@ const AdminTransactions = () => {
     return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
+  // Export the currently filtered/sorted transactions to CSV. Amount is a raw
+  // number so it's spreadsheet-friendly.
+  const handleExportCSV = () => {
+    const headers = ['Date', 'Status', 'Amount', 'Counterparty', 'Description', 'Note'];
+    const rows = filteredAndSorted.map((t) => [
+      t.postedAt || t.createdAt || '',
+      t.status || '',
+      t.amount ?? '',
+      t.counterpartyName || '',
+      t.bankDescription || '',
+      t.note || '',
+    ]);
+    downloadCSV(`transactions-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
+
   const filteredAndSorted = useMemo(() => {
     let items = transactions;
 
@@ -92,6 +126,32 @@ const AdminTransactions = () => {
       items = items.filter((t) => t.amount < 0);
     } else if (filter === 'payments') {
       items = items.filter((t) => t.amount > 0);
+    } else if (filter === 'unmatched') {
+      // Incoming payments not yet matched to any invoice.
+      items = items.filter((t) => t.amount > 0 && !matchedTxnIds.has(t.id));
+    }
+
+    // Counterparty name search (case-insensitive substring)
+    const nameQuery = nameFilter.trim().toLowerCase();
+    if (nameQuery) {
+      items = items.filter((t) => (t.counterpartyName || '').toLowerCase().includes(nameQuery));
+    }
+
+    // Date range filter (inclusive) on the transaction's posted/created date.
+    // yyyy-mm-dd inputs are parsed as local dates; the end bound covers the
+    // whole day.
+    const startMs = startDate ? new Date(`${startDate}T00:00:00`).getTime() : null;
+    const endMs = endDate ? new Date(`${endDate}T23:59:59.999`).getTime() : null;
+    if (startMs != null || endMs != null) {
+      items = items.filter((t) => {
+        const raw = t.postedAt || t.createdAt;
+        if (!raw) return false;
+        const ms = new Date(raw).getTime();
+        if (isNaN(ms)) return false;
+        if (startMs != null && ms < startMs) return false;
+        if (endMs != null && ms > endMs) return false;
+        return true;
+      });
     }
 
     items = [...items].sort((a, b) => {
@@ -116,7 +176,7 @@ const AdminTransactions = () => {
     });
 
     return items;
-  }, [transactions, filter, sortConfig]);
+  }, [transactions, matchedTxnIds, filter, nameFilter, startDate, endDate, sortConfig]);
 
   const summaryStats = useMemo(() => {
     const expenses = transactions.filter((t) => t.amount < 0);
@@ -262,6 +322,59 @@ const AdminTransactions = () => {
               {opt.label}
             </button>
           ))}
+
+          {/* Counterparty name search */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              placeholder="Search counterparty..."
+              className="pl-9 pr-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 w-52"
+            />
+          </div>
+
+          {/* Date range filter */}
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              title="From date"
+            />
+            <span className="text-gray-400 text-sm">–</span>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-2 rounded-lg text-sm bg-white text-gray-700 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              title="To date"
+            />
+            {(startDate || endDate) && (
+              <button
+                onClick={() => { setStartDate(''); setEndDate(''); }}
+                className="text-gray-400 hover:text-gray-600 text-sm px-2 py-2"
+                title="Clear date range"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={handleExportCSV}
+            disabled={filteredAndSorted.length === 0}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="Export the filtered transactions to CSV"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export CSV</span>
+          </button>
+
           <span className="ml-auto text-sm text-gray-500">
             Showing {filteredAndSorted.length} transaction{filteredAndSorted.length !== 1 ? 's' : ''}
           </span>
