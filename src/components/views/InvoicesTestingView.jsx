@@ -54,17 +54,20 @@ const FROZEN_WORKBOOK = REAL_WORKBOOK;
 // ---------------------------------------------------------------------------
 
 const cx = (...a) => a.filter(Boolean).join(' ');
-const cell = 'border-b border-gray-100 px-3 py-2 text-[13px] leading-[1.45] whitespace-nowrap';
+const cell = 'border-b border-gray-100 px-3 py-[7px] text-[13px] leading-[1.5] whitespace-nowrap tabular-nums';
+// Refined palette — brand-tinted neutrals instead of raw spreadsheet greens.
+// Header tokens include `sticky top-0` so tables inside a max-height SheetWrap
+// keep their header row pinned while scrolling.
 const C = {
-  greenHead: 'bg-[#38761d] text-white font-bold',
-  medGreenHead: 'bg-[#93c47d] font-bold',
-  grayHead: 'bg-[#efefef] font-bold',
-  lightGreen: 'bg-[#d9ead3]',
-  blueBand: 'bg-[#cfe2f3] font-bold',
-  tan: 'bg-[#fff2cc]',
-  yellow: 'bg-[#fff200]',
-  redItalic: 'text-[#cc0000] italic',
-  greenItalic: 'text-[#38761d] italic',
+  greenHead: 'bg-[#f3f5ee] text-[11px] uppercase tracking-wider text-cg-dark font-semibold sticky top-0 z-10',
+  medGreenHead: 'bg-[#e6ecdb] text-[11px] uppercase tracking-wider text-cg-dark font-semibold sticky top-0 z-10',
+  grayHead: 'bg-[#f3f5ee] text-[11px] uppercase tracking-wider text-cg-dark/70 font-semibold sticky top-0 z-10',
+  lightGreen: 'bg-[#e9f4ec]',
+  blueBand: 'bg-[#eef1f4] text-[11px] uppercase tracking-wider text-cg-dark/80 font-semibold',
+  tan: 'bg-[#faf3dd]',
+  yellow: 'bg-[#fdf3cd]',
+  redItalic: 'text-[#c0392b] italic',
+  greenItalic: 'text-cg-green italic',
 };
 // Currency like the sheet: negatives read -$9,389.44 (not $-9,389.44).
 const fmt = (n) => `${Number(n) < 0 ? '-' : ''}$${Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -73,21 +76,42 @@ const D = (y, m, d) => new Date(y, m - 1, d);
 const fmtDate = (d) => (d ? `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}` : '');
 const toInputValue = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-const SheetWrap = ({ children }) => (
-  <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">{children}</div>
+// Zeros render as a muted dash (like the sheet's accounting format "-") so the
+// eye lands on the numbers that matter.
+const Money = ({ v, f = fmt0 }) => (Math.abs(Number(v) || 0) > 0.004 ? <>{f(v)}</> : <span className="text-gray-300">–</span>);
+
+const SheetWrap = ({ children, maxH }) => (
+  <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm" style={maxH ? { maxHeight: maxH, overflowY: 'auto' } : undefined}>{children}</div>
 );
-const SubHead = ({ children }) => <p className="text-[13px] font-semibold text-cg-dark mb-1">{children}</p>;
+const SubHead = ({ children }) => (
+  <p className="mb-1.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-cg-dark/70">
+    <span className="inline-block h-3 w-1 rounded-full bg-cg-green" />{children}
+  </p>
+);
 const PaymentPill = ({ value }) => {
-  const styles = { Paid: 'bg-[#d9ead3] text-[#274e13]', 'Not Paid': 'bg-[#fce5cd] text-[#7f3e00]', 'Payment Initiated': 'bg-[#fff2cc] text-[#7f6000]', 'Write Off': 'bg-[#efefef] text-gray-600' };
-  return <span className={cx('inline-flex items-center gap-1 rounded px-2 py-[1px] text-[12px]', styles[value] || 'bg-gray-100')}>{value}<span className="text-[8px] opacity-60">▼</span></span>;
+  const styles = {
+    Paid: 'bg-[#e3f3e7] text-[#186a2f]',
+    'Not Paid': 'bg-[#fdeee0] text-[#93500e]',
+    'Payment Initiated': 'bg-[#fbf3d4] text-[#7f6000]',
+    'Write Off': 'bg-gray-100 text-gray-500',
+  };
+  const dot = { Paid: 'bg-[#1CA33B]', 'Not Paid': 'bg-[#e08a2e]', 'Payment Initiated': 'bg-[#d3b431]', 'Write Off': 'bg-gray-400' };
+  return (
+    <span className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-[2px] text-[12px] font-medium', styles[value] || 'bg-gray-100')}>
+      <span className={cx('h-1.5 w-1.5 rounded-full', dot[value] || 'bg-gray-400')} />{value}
+    </span>
+  );
 };
 const StatCard = ({ label, value, tone }) => (
-  <div className={cx('rounded-lg border px-3 py-2 min-w-[120px]', tone === 'red' ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white')}>
-    <div className="text-[11px] uppercase tracking-wide text-gray-500">{label}</div>
-    <div className={cx('text-sm font-semibold', tone === 'red' ? 'text-red-700' : 'text-cg-black')}>{value}</div>
+  <div className={cx(
+    'rounded-xl border px-3.5 py-2.5 min-w-[130px] shadow-sm',
+    tone === 'red' ? 'border-red-100 bg-red-50/70' : 'border-gray-200 bg-white',
+  )}>
+    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</div>
+    <div className={cx('mt-0.5 text-[15px] font-bold tabular-nums', tone === 'red' ? 'text-red-700' : 'text-cg-black')}>{value}</div>
   </div>
 );
-const SourceNote = ({ children }) => <p className="text-[12px] text-gray-500 mb-2">↳ {children}</p>;
+const SourceNote = ({ children }) => <p className="text-[12px] leading-relaxed text-gray-400 mb-2">{children}</p>;
 
 // Parse a user-typed number: strips $ , whitespace; (123) → -123. Returns null
 // on empty/invalid so a bad entry is ignored rather than committed.
@@ -114,7 +138,8 @@ const EditableNum = ({ cellKey, value, edit, fmtFn = fmt, pinnable = false }) =>
   const base = m && typeof m.base === 'number' ? m.base : null;
   const changed = base != null && Math.abs(value - base) > 0.005;
 
-  if (!canEdit) return <span>{fmtFn(value)}</span>;
+  const isZero = Math.abs(Number(value) || 0) < 0.005;
+  if (!canEdit) return isZero ? <span className="text-gray-300">–</span> : <span>{fmtFn(value)}</span>;
 
   const commit = () => {
     const n = parseNum(draft);
@@ -132,22 +157,31 @@ const EditableNum = ({ cellKey, value, edit, fmtFn = fmt, pinnable = false }) =>
         onFocus={() => setDraft(String(value))}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
-        className="w-24 border border-cg-green rounded px-1 py-[1px] text-[13px] text-right"
+        className="w-24 rounded-md border border-cg-green bg-white px-1.5 py-[2px] text-[13px] text-right shadow-sm outline-none ring-2 ring-cg-green/20"
       />
     );
   }
   const delta = changed ? value - base : 0;
-  const marker = state === 'pinned' ? 'ring-1 ring-[#1a4d80] bg-[#eaf2fb]' : state === 'edited' ? 'ring-1 ring-[#c78a00] bg-[#fdf6e3]' : state === 'derived-changed' ? 'bg-[#fdf6e3]' : '';
+  const marker = state === 'pinned'
+    ? 'ring-1 ring-[#4a6fa5] bg-[#eef3f9]'
+    : state === 'edited'
+      ? 'ring-1 ring-[#dcb75a] bg-[#fbf4de]'
+      : state === 'derived-changed' ? 'bg-[#fbf4de]' : '';
   return (
-    <span className="inline-flex items-center gap-1 justify-end">
-      {changed && <span className="text-gray-400 line-through text-[10px]">{fmtFn(base)}</span>}
-      <button type="button" onClick={() => { setDraft(String(value)); setEditing(true); }} className={cx('rounded px-1 tabular-nums hover:bg-gray-100', marker)} title={pinnable && state !== 'pinned' ? 'Click to override (pins this formula cell)' : 'Click to edit'}>
-        {fmtFn(value)}
+    <span className="inline-flex items-center justify-end gap-1">
+      {changed && <span className="text-[10px] text-gray-400 line-through">{fmtFn(base)}</span>}
+      <button
+        type="button"
+        onClick={() => { setDraft(String(value)); setEditing(true); }}
+        className={cx('cursor-text rounded-md px-1 tabular-nums transition-colors hover:bg-[#eef2e6] hover:ring-1 hover:ring-gray-200', marker, isZero && !changed && !state && 'text-gray-300')}
+        title={pinnable && state !== 'pinned' ? 'Click to override (pins this formula cell)' : 'Click to edit'}
+      >
+        {isZero && !changed && !state ? '–' : fmtFn(value)}
       </button>
-      {changed && <span className={cx('text-[10px]', delta < 0 ? 'text-[#cc0000]' : 'text-[#188038]')}>{delta > 0 ? '+' : ''}{fmtFn(delta)}</span>}
+      {changed && <span className={cx('text-[10px] font-semibold', delta < 0 ? 'text-[#c0392b]' : 'text-cg-green')}>{delta > 0 ? '+' : ''}{fmtFn(delta)}</span>}
       {state === 'pinned' && <span title="Pinned — overrides the formula; upstream edits no longer change it" className="text-[10px]">📌</span>}
       {(state === 'edited' || state === 'pinned') && (
-        <button type="button" onClick={() => edit.onEdit(cellKey, undefined)} title="Clear this override" className="text-[10px] text-gray-400 hover:text-red-600">✕</button>
+        <button type="button" onClick={() => edit.onEdit(cellKey, undefined)} title="Clear this override" className="text-[10px] text-gray-400 transition-colors hover:text-red-600">✕</button>
       )}
     </span>
   );
@@ -158,13 +192,13 @@ const EditableNum = ({ cellKey, value, edit, fmtFn = fmt, pinnable = false }) =>
 // aren't themselves editable — e.g. P&L NET INCOME, Cash Profits/Q Revenue).
 const DeltaVal = ({ value, base, fmtFn = fmt }) => {
   const changed = typeof base === 'number' && typeof value === 'number' && Math.abs(value - base) > 0.005;
-  if (!changed) return <>{fmtFn(value)}</>;
+  if (!changed) return Math.abs(Number(value) || 0) < 0.005 ? <span className="text-gray-300">–</span> : <>{fmtFn(value)}</>;
   const d = value - base;
   return (
-    <span className="inline-flex items-center gap-1 justify-end">
-      <span className="text-gray-400 line-through text-[10px]">{fmtFn(base)}</span>
-      <span className="bg-[#fdf6e3] rounded px-0.5">{fmtFn(value)}</span>
-      <span className={cx('text-[10px]', d < 0 ? 'text-[#cc0000]' : 'text-[#188038]')}>{d > 0 ? '+' : ''}{fmtFn(d)}</span>
+    <span className="inline-flex items-center justify-end gap-1">
+      <span className="text-[10px] text-gray-400 line-through">{fmtFn(base)}</span>
+      <span className="rounded-md bg-[#fbf4de] px-1">{fmtFn(value)}</span>
+      <span className={cx('text-[10px] font-semibold', d < 0 ? 'text-[#c0392b]' : 'text-cg-green')}>{d > 0 ? '+' : ''}{fmtFn(d)}</span>
     </span>
   );
 };
@@ -179,15 +213,25 @@ const MATRIX_TAIL = [
 ];
 const RATE_TABLE_COLS = ['Attorney', 'Client Rate', 'Take-Home Rate', 'Billable Earnings', '83(b) Earnings (Cash Bonus)', 'Personal Reimbursements', 'Check', 'Diff'];
 
+const CheckBadge = ({ ok }) => (
+  <span className={cx(
+    'inline-flex h-[18px] w-[18px] items-center justify-center rounded-full text-[11px] font-bold',
+    ok ? 'bg-[#e3f3e7] text-cg-green' : 'bg-[#fdeaea] text-[#c0392b]',
+  )}>
+    {ok ? '✓' : '✕'}
+  </span>
+);
 const rateCellRender = (v) => {
-  if (typeof v === 'number') return fmt(v);
-  if (typeof v === 'boolean') return v ? 'TRUE' : 'FALSE';
+  if (typeof v === 'number') return <Money v={v} f={fmt} />;
+  if (typeof v === 'boolean') return <CheckBadge ok={v} />;
   return v == null ? '' : String(v);
 };
 
 const WF_DERIVED_KEYS = new Set(['gross', 'netAccrued', 'revenueAccrued', 'cgfDonation', 'revenueMinusCgf', 'netRevenueBeforeOpEx', 'firmProfits']);
+// Component rows of Gross / deductions — indented under their derived parent.
+const WF_INDENT_KEYS = new Set(['writeOffs', 'attorneyBillables', 'flatFee83b', 'filingFees', 'outsideCounsel', 'deferred', 'attorneyPayout', 'opEx']);
 
-const MonthTab = ({ data, rolledFrom, realNote, monthKey, edit }) => {
+const MonthTab = ({ data, rolledFrom, monthKey, edit }) => {
   const wf = data.waterfall || computeMonthlyWaterfall(data.inputs);
   const errs = data.sheetErrors || {};
   const hasDetail = !!data.matrix;
@@ -196,17 +240,24 @@ const MonthTab = ({ data, rolledFrom, realNote, monthKey, edit }) => {
     <div>
       <SubHead>Accrual Waterfall</SubHead>
       <SheetWrap>
-        <table className="border-collapse w-full">
+        <table className="w-full border-collapse">
           <tbody>
-            <tr><td className={cx(cell, C.greenHead, 'text-right')}>Category</td><td className={cx(cell, C.greenHead, 'text-right')} style={{ minWidth: 130 }}>$</td></tr>
-            {WATERFALL_ROWS.map(([label, key, tag]) => (
-              <tr key={key}>
-                <td className={cx(cell, 'text-right font-bold', tag === 'hl' && C.lightGreen, tag === 'green' && C.greenItalic)}>{label}</td>
-                <td className={cx(cell, 'text-right', tag === 'hl' && cx(C.lightGreen, 'font-bold'), tag === 'red' && C.redItalic, tag === 'green' && C.greenItalic)}>
-                  {errs[key] ? <span className={C.redItalic}>{errs[key]}</span> : <EditableNum cellKey={wfCellKey(key)} value={wf[key]} edit={edit} pinnable={WF_DERIVED_KEYS.has(key)} />}
-                </td>
-              </tr>
-            ))}
+            {WATERFALL_ROWS.map(([label, key, tag]) => {
+              const derived = WF_DERIVED_KEYS.has(key);
+              const hl = tag === 'hl';
+              return (
+                <tr key={key} className={cx(hl && C.lightGreen)}>
+                  <td className={cx(cell, hl ? 'font-bold text-cg-black' : derived ? 'font-semibold text-cg-black' : 'text-cg-dark', WF_INDENT_KEYS.has(key) && 'pl-7', tag === 'green' && C.greenItalic)}>
+                    {label.replace(/:$/, '')}
+                  </td>
+                  <td className={cx(cell, 'text-right', hl && 'font-bold', tag === 'red' && C.redItalic, tag === 'green' && C.greenItalic)} style={{ minWidth: 130 }}>
+                    {errs[key]
+                      ? <span className={cx(C.redItalic, 'whitespace-normal text-[11px]')}>{String(errs[key]).split(' (')[0]}</span>
+                      : <EditableNum cellKey={wfCellKey(key)} value={wf[key]} edit={edit} pinnable={WF_DERIVED_KEYS.has(key)} />}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </SheetWrap>
@@ -216,7 +267,6 @@ const MonthTab = ({ data, rolledFrom, realNote, monthKey, edit }) => {
   if (!hasDetail) {
     return (
       <div className="space-y-3">
-        {realNote && <div className="rounded-lg border border-[#d9ead3] bg-[#eaf7ea] px-3 py-2 text-[13px] text-cg-dark"><span className="font-semibold">Real data.</span> {realNote}</div>}
         <div className="max-w-xl">{waterfallCard}</div>
       </div>
     );
@@ -227,10 +277,9 @@ const MonthTab = ({ data, rolledFrom, realNote, monthKey, edit }) => {
   const tot = (k) => sumColumn(matrix.map((r) => r[k]));
   return (
     <div className="space-y-6">
-      {rolledFrom && <div className="rounded-lg border border-[#cfe2f3] bg-[#eaf2fb] px-3 py-2 text-[13px] text-cg-dark"><span className="font-semibold">Rolled over from {rolledFrom}.</span> Structure cloned; inputs refreshed with new dummy data, so the waterfall recomputes.</div>}
-      {realNote && <div className="rounded-lg border border-[#d9ead3] bg-[#eaf7ea] px-3 py-2 text-[13px] text-cg-dark"><span className="font-semibold">Real data.</span> {realNote}</div>}
+      {rolledFrom && <div className="rounded-xl border border-[#cfdcee] bg-[#eef3f9] px-3.5 py-2 text-[13px] text-cg-dark"><span className="font-semibold">Rolled over from {rolledFrom}.</span> Structure cloned; inputs refreshed with new dummy data, so the waterfall recomputes.</div>}
       {Object.keys(errs).length > 0 && (
-        <SourceNote>The sheet itself shows {Object.values(errs)[0]} for some waterfall cells (broken IMPORTRANGE at export time) — rendered as-is.</SourceNote>
+        <SourceNote>The sheet itself shows {String(Object.values(errs)[0]).split(' (')[0]} for some waterfall cells (broken IMPORTRANGE) — rendered as-is.</SourceNote>
       )}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
         {waterfallCard}
@@ -246,11 +295,17 @@ const MonthTab = ({ data, rolledFrom, realNote, monthKey, edit }) => {
                       {data.rateHeaders.map((h, i) => <td key={i} className={cx(cell, C.greenHead, 'text-right')}>{h}</td>)}
                     </tr>
                     {data.rateRows.map((r, i) => (
-                      <tr key={i}>
-                        <td className={cx(cell, 'font-bold')}>{r.name}</td>
-                        {r.vals.map((v, j) => (
-                          <td key={j} className={cx(cell, typeof v === 'boolean' ? 'text-center' : 'text-right')}>{rateCellRender(v)}</td>
-                        ))}
+                      <tr key={i} className="transition-colors hover:bg-[#f8faf5]">
+                        <td className={cx(cell, 'font-semibold')}>{r.name}</td>
+                        {r.vals.map((v, j) => {
+                          const isDiff = data.rateHeaders[j] === 'Diff';
+                          const badDiff = isDiff && typeof v === 'number' && Math.abs(v) > 0.02;
+                          return (
+                            <td key={j} className={cx(cell, typeof v === 'boolean' ? 'text-center' : 'text-right', badDiff && 'font-semibold text-[#c0392b]')}>
+                              {rateCellRender(v)}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </>
@@ -258,15 +313,15 @@ const MonthTab = ({ data, rolledFrom, realNote, monthKey, edit }) => {
                   <>
                     <tr>{RATE_TABLE_COLS.map((c, i) => <td key={c} className={cx(cell, C.greenHead, i === 0 ? 'text-left' : 'text-right')}>{c}</td>)}</tr>
                     {data.rateTable.map((r, i) => (
-                      <tr key={i}>
-                        <td className={cx(cell, 'font-bold')}>{r.name}</td>
+                      <tr key={i} className="transition-colors hover:bg-[#f8faf5]">
+                        <td className={cx(cell, 'font-semibold')}>{r.name}</td>
                         <td className={cx(cell, 'text-right')}>{fmt(r.clientRate)}</td>
                         <td className={cx(cell, 'text-right')}>{fmt(r.takeHome)}</td>
                         <td className={cx(cell, 'text-right')}>{fmt(r.billableEarnings)}</td>
-                        <td className={cx(cell, 'text-right')}>{fmt(r.earnings83b)}</td>
-                        <td className={cx(cell, 'text-right')}>{fmt(r.personalReimb)}</td>
-                        <td className={cx(cell, 'text-center')}>{r.check ? 'TRUE' : 'FALSE'}</td>
-                        <td className={cx(cell, 'text-right')}>{fmt0(r.diff)}</td>
+                        <td className={cx(cell, 'text-right')}><Money v={r.earnings83b} f={fmt} /></td>
+                        <td className={cx(cell, 'text-right')}><Money v={r.personalReimb} f={fmt} /></td>
+                        <td className={cx(cell, 'text-center')}><CheckBadge ok={r.check} /></td>
+                        <td className={cx(cell, 'text-right')}><Money v={r.diff} /></td>
                       </tr>
                     ))}
                   </>
@@ -281,11 +336,11 @@ const MonthTab = ({ data, rolledFrom, realNote, monthKey, edit }) => {
         {data.matrixTotalRows != null && (
           <SourceNote>Showing {matrix.length} active clients of {data.matrixTotalRows} (all-zero rows omitted; totals unaffected). Sum Billables = Σ attorney columns + prior deferrals billed this month.</SourceNote>
         )}
-        <SheetWrap>
+        <SheetWrap maxH="65vh">
           <table className="border-collapse">
             <tbody>
               <tr>
-                <td className={cx(cell, C.medGreenHead)} style={{ minWidth: 180 }}>Client</td>
+                <td className={cx(cell, 'sticky left-0 top-0 z-30 bg-[#e6ecdb] text-[11px] font-semibold uppercase tracking-wider text-cg-dark')} style={{ minWidth: 190 }}>Client</td>
                 {attorneys.map((a) => <td key={a} className={cx(cell, C.grayHead, 'text-center')} style={{ minWidth: 70 }}>{a}</td>)}
                 {MATRIX_TAIL.map((h) => <td key={h} className={cx(cell, h === 'Sum Billables' ? C.medGreenHead : C.grayHead, 'text-center')} style={{ minWidth: 90 }}>{h}</td>)}
               </tr>
@@ -293,43 +348,43 @@ const MonthTab = ({ data, rolledFrom, realNote, monthKey, edit }) => {
                 const bk = (j) => (edit && monthKey ? mxBillKey(monthKey, ri, j) : null);
                 const fk = (f) => (edit && monthKey ? mxFieldKey(monthKey, ri, f) : null);
                 return (
-                  <tr key={r.client}>
-                    <td className={cell}><span className="flex items-center justify-between gap-3"><span>{r.client}</span><span className="text-[8px] text-gray-400">▼</span></span></td>
+                  <tr key={r.client} className="group transition-colors hover:bg-[#f8faf5]">
+                    <td className={cx(cell, 'sticky left-0 z-[5] bg-white font-medium text-cg-black transition-colors group-hover:bg-[#f8faf5]')}>{r.client}</td>
                     {r.billings.map((v, j) => <td key={j} className={cx(cell, 'text-right')}><EditableNum cellKey={bk(j)} value={v} edit={edit} fmtFn={fmt0} /></td>)}
-                    <td className={cx(cell, 'text-right italic', C.lightGreen)}>{fmt0(r.sumBillables)}</td>
+                    <td className={cx(cell, 'text-right font-medium', C.lightGreen)}><Money v={r.sumBillables} /></td>
                     <td className={cx(cell, 'text-right')}><EditableNum cellKey={fk('elections83b')} value={r.elections83b} edit={edit} fmtFn={fmt0} /></td>
                     <td className={cx(cell, 'text-right')}><EditableNum cellKey={fk('filingFees')} value={r.filingFees} edit={edit} fmtFn={fmt0} /></td>
                     <td className={cell}>{r.feesNotes}</td>
                     <td className={cx(cell, 'text-right')}><EditableNum cellKey={fk('outsideCounsel')} value={r.outsideCounsel} edit={edit} fmtFn={fmt0} /></td>
                     <td className={cell}>{r.ocNotes}</td>
                     <td className={cx(cell, 'text-right')}><EditableNum cellKey={fk('priorDeferred')} value={r.priorDeferred} edit={edit} fmtFn={fmt0} /></td>
-                    <td className={cell}>{r.priorToggle}</td>
+                    <td className={cx(cell, 'text-center')}>{r.priorToggle && <span className="rounded-full bg-[#eef3f9] px-2 py-[1px] text-[11px] font-medium text-[#3b5d8f]">{r.priorToggle}</span>}</td>
                     <td className={cx(cell, 'text-right')}><EditableNum cellKey={fk('deferredThisMonth')} value={r.deferredThisMonth} edit={edit} fmtFn={fmt0} /></td>
-                    <td className={cx(cell, 'text-right')}>{fmt0(r.totalDeferred)}</td>
+                    <td className={cx(cell, 'text-right')}><Money v={r.totalDeferred} /></td>
                     <td className={cx(cell, 'text-right')}><EditableNum cellKey={fk('writeOff')} value={r.writeOff} edit={edit} fmtFn={fmt0} /></td>
-                    <td className={cx(cell, 'text-right')}>{fmt0(r.invoiced)}</td>
-                    <td className={cell}>{r.generalNotes}</td>
+                    <td className={cx(cell, 'text-right')}><Money v={r.invoiced} /></td>
+                    <td className={cx(cell, 'max-w-[240px] truncate')} title={r.generalNotes}>{r.generalNotes}</td>
                     <td className={cell}>{r.contactName}</td>
-                    <td className={cell}>{r.contactEmail}</td>
-                    <td className={cx(cell, 'text-right')}>{r.paymentTerms}</td>
+                    <td className={cx(cell, 'text-gray-500')}>{r.contactEmail}</td>
+                    <td className={cx(cell, 'text-center')}>{r.paymentTerms ? `Net ${r.paymentTerms}` : ''}</td>
                   </tr>
                 );
               })}
               <tr className="font-bold">
-                <td className={cx(cell, C.lightGreen)}>Totals</td>
-                {totalBillings.map((v, j) => <td key={j} className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(v)}</td>)}
-                <td className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(tot('sumBillables'))}</td>
-                <td className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(tot('elections83b'))}</td>
-                <td className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(tot('filingFees'))}</td>
+                <td className={cx(cell, C.lightGreen, 'sticky left-0 z-[5] text-[12px] uppercase tracking-wide')}>Totals</td>
+                {totalBillings.map((v, j) => <td key={j} className={cx(cell, 'text-right', C.lightGreen)}><Money v={v} /></td>)}
+                <td className={cx(cell, 'text-right', C.lightGreen)}><Money v={tot('sumBillables')} /></td>
+                <td className={cx(cell, 'text-right', C.lightGreen)}><Money v={tot('elections83b')} /></td>
+                <td className={cx(cell, 'text-right', C.lightGreen)}><Money v={tot('filingFees')} /></td>
                 <td className={cx(cell, C.lightGreen)} />
-                <td className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(tot('outsideCounsel'))}</td>
+                <td className={cx(cell, 'text-right', C.lightGreen)}><Money v={tot('outsideCounsel')} /></td>
                 <td className={cx(cell, C.lightGreen)} />
-                <td className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(tot('priorDeferred'))}</td>
+                <td className={cx(cell, 'text-right', C.lightGreen)}><Money v={tot('priorDeferred')} /></td>
                 <td className={cx(cell, C.lightGreen)} />
-                <td className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(tot('deferredThisMonth'))}</td>
-                <td className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(tot('totalDeferred'))}</td>
-                <td className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(tot('writeOff'))}</td>
-                <td className={cx(cell, 'text-right', C.lightGreen)}>{fmt0(tot('invoiced'))}</td>
+                <td className={cx(cell, 'text-right', C.lightGreen)}><Money v={tot('deferredThisMonth')} /></td>
+                <td className={cx(cell, 'text-right', C.lightGreen)}><Money v={tot('totalDeferred')} /></td>
+                <td className={cx(cell, 'text-right', C.lightGreen)}><Money v={tot('writeOff')} /></td>
+                <td className={cx(cell, 'text-right', C.lightGreen)}><Money v={tot('invoiced')} /></td>
                 <td className={cx(cell, C.lightGreen)} colSpan={4} />
               </tr>
             </tbody>
@@ -367,28 +422,28 @@ const RATE_NOTES = [
   'Semi-annual review cycles and leveling ensures the right balance of frequent forward momentum and meaningful feedback (unlike Big Law, annual lockstep).',
   '** Note that partners bill fewer client hours but receive profit share.',
 ];
-const rateBand = (level) => (level.startsWith('C') ? 'bg-[#cfe2f3]' : level.startsWith('P') ? C.lightGreen : '');
+const rateBand = (level) => (level.startsWith('C') ? 'bg-[#eef3f9]' : level.startsWith('P') ? C.lightGreen : '');
 const RateSheetScaffold = ({ rows }) => (
   <SheetWrap>
     <table className="border-collapse">
       <tbody>
         <tr>
-          {RATE_COLS.map((h, i) => <td key={i} className={cx(cell, 'font-bold underline', i >= 2 ? 'text-right' : 'text-center')} style={{ minWidth: i === 5 ? 210 : 80 }}>{h}</td>)}
-          <td className={cell} style={{ minWidth: 340 }} />
+          {RATE_COLS.map((h, i) => <td key={i} className={cx(cell, C.greenHead, i >= 2 ? 'text-right' : 'text-center')} style={{ minWidth: i === 5 ? 210 : 80 }}>{h}</td>)}
+          <td className={cx(cell, C.greenHead)} style={{ minWidth: 340 }} />
         </tr>
         {rows.map((r, i) => {
           const band = rateBand(r.level);
           const variable = r.salary === 'Variable';
           return (
-            <tr key={i}>
-              <td className={cx(cell, band, 'font-bold')}>{r.level}</td>
-              <td className={cx(cell, band)}>{r.tier}</td>
-              <td className={cx(cell, band, 'text-right')}>{fmt(r.clientRate)}</td>
+            <tr key={i} className="transition-colors hover:bg-[#f8faf5]">
+              <td className={cx(cell, band, 'font-bold text-cg-black')}>{r.level}</td>
+              <td className={cx(cell, band, 'text-gray-500')}>{r.tier}</td>
+              <td className={cx(cell, band, 'text-right font-medium')}>{fmt(r.clientRate)}</td>
               <td className={cx(cell, band, 'text-right')}>{fmt(r.attorneyRate)}</td>
-              <td className={cx(cell, band, 'text-right')}>{typeof r.colinRate === 'number' ? fmt(r.colinRate) : ''}</td>
-              <td className={cx(cell, band, 'text-right', variable && 'italic')}>{variable ? 'Variable' : fmt0(r.salary)}</td>
-              {i % 2 === 0 && <td className={cx(cell, band, 'text-center italic align-middle')} rowSpan={2}>{r.cravath != null ? fmt0(r.cravath) : ''}</td>}
-              {i === 0 && <td className={cx(cell, 'align-top text-[12px] leading-[1.5] whitespace-normal')} rowSpan={rows.length}><ul className="space-y-1">{RATE_NOTES.map((n, k) => <li key={k}>*{n}</li>)}</ul></td>}
+              <td className={cx(cell, band, 'text-right')}>{typeof r.colinRate === 'number' ? fmt(r.colinRate) : <span className="text-gray-300">–</span>}</td>
+              <td className={cx(cell, band, 'text-right', variable && 'italic text-gray-500')}>{variable ? 'Variable' : fmt0(r.salary)}</td>
+              {i % 2 === 0 && <td className={cx(cell, band, 'text-center italic align-middle text-gray-500')} rowSpan={2}>{r.cravath != null ? fmt0(r.cravath) : ''}</td>}
+              {i === 0 && <td className={cx(cell, 'align-top text-[12px] leading-[1.6] whitespace-normal text-gray-500')} rowSpan={rows.length}><ul className="list-disc space-y-1.5 pl-4 marker:text-cg-green">{RATE_NOTES.map((n, k) => <li key={k}>{n}</li>)}</ul></td>}
             </tr>
           );
         })}
@@ -417,21 +472,21 @@ const CashAccountingScaffold = ({ rows, baseRows, edit }) => {
       <SheetWrap>
         <table className="border-collapse">
           <tbody>
-            <tr>{CASH_COLS.map((h) => <td key={h} className={cx(cell, C.lightGreen, 'font-bold whitespace-normal')} style={{ minWidth: 100 }}>{h}</td>)}</tr>
+            <tr>{CASH_COLS.map((h) => <td key={h} className={cx(cell, C.greenHead, 'whitespace-normal')} style={{ minWidth: 100 }}>{h}</td>)}</tr>
             {withDerived.map((r, i) => (
-              <tr key={i}>
-                <td className={cell}>{r.month}</td>
-                <td className={cx(cell, 'text-right')}>{r.filled ? <EditableNum cellKey={ck(r, 'cashReceived')} value={r.cashReceived} edit={edit} /> : fmt(0)}</td>
-                <td className={cx(cell, 'text-right')}>{r.filled ? <EditableNum cellKey={ck(r, 'expenses')} value={r.expenses} edit={edit} /> : fmt(0)}</td>
+              <tr key={i} className={cx('transition-colors hover:bg-[#f8faf5]', !r.filled && 'opacity-50')}>
+                <td className={cx(cell, 'font-medium text-cg-black')}>{r.month}</td>
+                <td className={cx(cell, 'text-right')}>{r.filled ? <EditableNum cellKey={ck(r, 'cashReceived')} value={r.cashReceived} edit={edit} /> : <span className="text-gray-300">–</span>}</td>
+                <td className={cx(cell, 'text-right')}>{r.filled ? <EditableNum cellKey={ck(r, 'expenses')} value={r.expenses} edit={edit} /> : <span className="text-gray-300">–</span>}</td>
                 <td className={cx(cell, 'text-right')}>{r.filled ? <EditableNum cellKey={ck(r, 'cgfDonation')} value={r.cgfDonation} edit={edit} /> : ''}</td>
                 <td className={cx(cell, 'text-right')}>{r.filled ? <EditableNum cellKey={ck(r, 'attorneyPayout')} value={r.attorneyPayout} edit={edit} /> : ''}</td>
-                <td className={cx(cell, 'text-right')}>{r.filled ? <DeltaVal value={r.profits} base={b(i, 'profits')} /> : ''}</td>
+                <td className={cx(cell, 'text-right font-medium', r.filled && r.profits < 0 && 'text-[#c0392b]')}>{r.filled ? <DeltaVal value={r.profits} base={b(i, 'profits')} /> : ''}</td>
                 <td className={cx(cell, 'text-right', !r.filled && C.redItalic)}>{r.filled ? <DeltaVal value={r.revenueAccrued} base={b(i, 'revenueAccrued')} /> : '#REF!'}</td>
-                <td className={cx(cell, 'text-right')}>{r.qRevenue != null ? <DeltaVal value={r.qRevenue} base={b(i, 'qRevenue')} /> : ''}</td>
+                <td className={cx(cell, 'text-right font-medium')}>{r.qRevenue != null ? <DeltaVal value={r.qRevenue} base={b(i, 'qRevenue')} /> : ''}</td>
               </tr>
             ))}
             <tr className="font-bold">
-              <td className={cx(cell, C.lightGreen)}>Totals</td>
+              <td className={cx(cell, C.lightGreen, 'text-[12px] uppercase tracking-wide')}>Totals</td>
               <td className={cx(cell, 'text-right', C.lightGreen)}><DeltaVal value={t('cashReceived')} base={bt('cashReceived')} /></td>
               <td className={cx(cell, 'text-right', C.lightGreen)}><DeltaVal value={t('expenses')} base={bt('expenses')} /></td>
               <td className={cx(cell, 'text-right', C.lightGreen)}><DeltaVal value={t('cgfDonation')} base={bt('cgfDonation')} /></td>
@@ -453,15 +508,15 @@ const ProfitsPaidScaffold = ({ rows }) => (
   <SheetWrap>
     <table className="border-collapse">
       <tbody>
-        <tr>{['Date (UTC)', 'Description', 'Amount', 'Note'].map((h, i) => <td key={h} className={cx(cell, 'font-bold', i === 2 ? 'text-right' : '')} style={{ minWidth: i === 3 ? 320 : 110 }}>{h}</td>)}</tr>
+        <tr>{['Date (UTC)', 'Description', 'Amount', 'Note'].map((h, i) => <td key={h} className={cx(cell, C.greenHead, i === 2 ? 'text-right' : '')} style={{ minWidth: i === 3 ? 320 : 120 }}>{h}</td>)}</tr>
         {rows.map((r, i) => {
           const bg = r.highlight === 'green' ? C.lightGreen : r.highlight === 'tan' ? C.tan : '';
           return (
-            <tr key={i}>
-              <td className={cx(cell, 'font-bold')}>{r.date}</td>
-              <td className={cell}>{r.description}</td>
-              <td className={cx(cell, 'text-right')}>{fmt(r.amount)}</td>
-              <td className={cx(cell, bg)}>{r.note}</td>
+            <tr key={i} className="transition-colors hover:bg-[#f8faf5]">
+              <td className={cx(cell, 'font-medium text-cg-black')}>{r.date}</td>
+              <td className={cx(cell, 'text-gray-500')}>{r.description}</td>
+              <td className={cx(cell, 'text-right font-medium', r.amount < 0 && 'text-[#c0392b]')}>{fmt(r.amount)}</td>
+              <td className={cx(cell, bg, 'whitespace-normal text-gray-600')}>{r.note}</td>
             </tr>
           );
         })}
@@ -476,21 +531,21 @@ const ProfitsPaidScaffold = ({ rows }) => (
 const ExpensesScaffold = ({ rows, edit }) => (
   <div className="space-y-2">
     <SourceNote>Each vendor is tagged to a P&amp;L category (col O); column totals feed Cash Accounting Expenses and the P&amp;L expense lines.{edit ? ' Click a monthly cell to model a what-if — the change flows to that P&L line → NET INCOME.' : ''}</SourceNote>
-    <SheetWrap>
+    <SheetWrap maxH="70vh">
       <table className="border-collapse">
         <tbody>
           <tr>
-            <td className={cx(cell, C.greenHead)} style={{ minWidth: 160 }}>Expense Category</td>
+            <td className={cx(cell, 'sticky left-0 top-0 z-30 bg-[#f3f5ee] text-[11px] font-semibold uppercase tracking-wider text-cg-dark')} style={{ minWidth: 170 }}>Expense Category</td>
             <td className={cx(cell, C.greenHead)} style={{ minWidth: 200 }}>Label</td>
-            {MONTHS12.map((m) => <td key={m} className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 80 }}>{m}</td>)}
+            {MONTHS12.map((m) => <td key={m} className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 84 }}>{m}</td>)}
             <td className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 140 }}>P&amp;L Category</td>
           </tr>
           {rows.map((r, i) => (
-            <tr key={i} className={r.highlight ? C.yellow : ''}>
-              <td className={cx(cell, 'font-bold', r.highlight && C.yellow)}>{r.category}</td>
-              <td className={cx(cell, r.highlight && C.yellow)}>{r.label}</td>
+            <tr key={i} className={cx('group transition-colors hover:bg-[#f8faf5]', r.highlight && C.yellow)}>
+              <td className={cx(cell, 'sticky left-0 z-[5] font-medium text-cg-black transition-colors group-hover:bg-[#f8faf5]', r.highlight ? C.yellow : 'bg-white')}>{r.category}</td>
+              <td className={cx(cell, 'text-gray-500', r.highlight && C.yellow)}>{r.label}</td>
               {r.vals.map((v, k) => <td key={k} className={cx(cell, 'text-right', r.highlight && C.yellow)}><EditableNum cellKey={edit ? expKey(i, k) : null} value={v} edit={edit} /></td>)}
-              <td className={cx(cell, r.highlight && C.yellow)}>{r.pnlCat || ''}</td>
+              <td className={cx(cell, r.highlight && C.yellow)}>{r.pnlCat ? <span className="rounded-full bg-[#eef2e6] px-2 py-[1px] text-[11px] font-medium text-cg-dark">{r.pnlCat}</span> : ''}</td>
             </tr>
           ))}
         </tbody>
@@ -515,22 +570,22 @@ const PnlScaffold = ({ months, rows, baseRows }) => (
           </tr>
           {rows.map((r, i) => {
             if (r.t === 'band' || r.t === 'sub') {
-              const bandCls = r.t === 'band' ? C.blueBand : 'font-bold';
               return (
                 <tr key={i}>
-                  <td className={cx(cell, bandCls)}>{r.label}</td>
+                  <td className={cx(cell, r.t === 'band' ? C.blueBand : 'pt-3 text-[12px] font-semibold text-cg-dark/80')}>{r.label}</td>
                   {months.map((m) => <td key={m} className={cx(cell, r.t === 'band' && C.blueBand)} />)}
                   <td className={cx(cell, r.t === 'band' && C.blueBand)} />
                 </tr>
               );
             }
             const strong = r.t === 'total' || r.t === 'lineTotal' || r.t === 'grand';
-            const hl = r.t === 'grand' ? C.tan : '';
+            const grand = r.t === 'grand';
+            const hl = grand ? (r.label === 'NET INCOME' ? C.lightGreen : C.tan) : '';
             const indent = r.t === 'line' || r.t === 'lineTotal';
             const baseVals = baseRows && baseRows[i] ? baseRows[i].vals : null;
             return (
-              <tr key={i}>
-                <td className={cx(cell, indent && 'pl-6', strong && 'font-bold', hl)}>{r.label}</td>
+              <tr key={i} className={cx(!strong && 'transition-colors hover:bg-[#f8faf5]', r.t === 'lineTotal' && 'border-t border-gray-200')}>
+                <td className={cx(cell, indent && 'pl-6', strong && 'font-bold', grand && 'text-[12px] uppercase tracking-wide', hl, r.t === 'line' && 'text-cg-dark')}>{r.label}</td>
                 {r.vals.map((v, k) => <td key={k} className={cx(cell, 'text-right', strong && 'font-bold', hl)}><DeltaVal value={v || 0} base={baseVals ? baseVals[k] || 0 : undefined} /></td>)}
                 <td className={cx(cell, 'text-right font-bold', hl || C.lightGreen)}><DeltaVal value={sumColumn(r.vals)} base={baseVals ? sumColumn(baseVals) : undefined} /></td>
               </tr>
@@ -642,31 +697,37 @@ const PaymentStatusScaffold = ({ register, total, realTerms, edit }) => {
         </label>
       </div>
       {realTerms === false && (
-        <SourceNote>Payment terms aren&apos;t stored on this sheet (they live in the clients sheet / Firestore) — Terms and Days Overdue show &quot;—&quot;; reminders use the non-Net-30 default cadence.</SourceNote>
+        <SourceNote>Payment terms aren&apos;t stored on this sheet (they live in the clients sheet / Firestore) — Terms and Days Overdue show &quot;–&quot;; reminders use the non-Net-30 default cadence.</SourceNote>
       )}
-      <SheetWrap>
+      <SheetWrap maxH="65vh">
         <table className="border-collapse">
           <tbody>
             <tr>
-              <td className={cx(cell, 'font-bold underline')} style={{ minWidth: 200 }}>All 2026 Billing</td>
-              <td className={cx(cell, 'font-bold underline text-right')} style={{ minWidth: 100 }}>{fmt(total)}</td>
-              {PAYMENT_HEADERS.map((h) => <td key={h} className={cx(cell, 'font-bold underline')}>{h}</td>)}
-              {REMINDER_HEADERS.map((h) => <td key={h} className={cx(cell, C.lightGreen, 'font-bold text-center')}>{h}</td>)}
+              <td className={cx(cell, C.greenHead)} style={{ minWidth: 220 }}>All 2026 Billing</td>
+              <td className={cx(cell, C.greenHead, 'text-right')} style={{ minWidth: 110 }}>{fmt(total)}</td>
+              {PAYMENT_HEADERS.map((h) => <td key={h} className={cx(cell, C.greenHead)}>{h}</td>)}
+              {REMINDER_HEADERS.map((h) => <td key={h} className={cx(cell, C.medGreenHead, 'text-center')}>{h}</td>)}
             </tr>
             {rows.map((r, i) => (
-              <tr key={i}>
-                <td className={cell}>{r.client}</td>
+              <tr key={i} className="transition-colors hover:bg-[#f8faf5]">
+                <td className={cx(cell, 'font-medium text-cg-black')}>{r.client}</td>
                 <td className={cx(cell, 'text-right')}><EditableNum cellKey={edit ? regKey(i) : null} value={r.amount} edit={edit} /></td>
-                <td className={cell}>{r.year}</td>
+                <td className={cx(cell, 'text-gray-500')}>{r.year}</td>
                 <td className={cell}>{fmtDate(r.dateSent)}</td>
-                <td className={cx(cell, 'text-center')}>{r.paymentTerms != null ? `Net ${r.paymentTerms}` : '—'}</td>
+                <td className={cx(cell, 'text-center text-gray-500')}>{r.paymentTerms != null ? `Net ${r.paymentTerms}` : <span className="text-gray-300">–</span>}</td>
                 <td className={cell}><PaymentPill value={r.status} /></td>
-                <td className={cx(cell, 'text-right')}>{fmtDate(r.lastReminder)}</td>
+                <td className={cx(cell, 'text-right text-gray-500')}>{fmtDate(r.lastReminder)}</td>
                 <td className={cx(cell, 'text-right')}>{fmtDate(r.dateReceived)}</td>
-                <td className={cell}>{r.notes}</td>
-                <td className={cx(cell, 'text-right', r.overdue > 0 && C.redItalic)}>{r.overdue > 0 ? `${r.overdue}d` : '—'}</td>
-                <td className={cell}>{r.next ? `${r.next.name} · ${fmtDate(r.next.dueDate)}` : '—'}</td>
-                <td className={cx(cell, 'text-center')}>{r.next ? (r.due ? <span className="text-[#188038] font-semibold">Due</span> : 'Upcoming') : '—'}</td>
+                <td className={cx(cell, 'max-w-[220px] truncate text-gray-500')} title={r.notes}>{r.notes}</td>
+                <td className={cx(cell, 'text-right', r.overdue > 0 ? 'font-semibold text-[#c0392b]' : 'text-gray-300')}>{r.overdue > 0 ? `${r.overdue}d` : '–'}</td>
+                <td className={cx(cell, !r.next && 'text-gray-300')}>{r.next ? `${r.next.name} · ${fmtDate(r.next.dueDate)}` : '–'}</td>
+                <td className={cx(cell, 'text-center')}>
+                  {r.next
+                    ? (r.due
+                        ? <span className="rounded-full bg-[#e3f3e7] px-2 py-[1px] text-[11px] font-semibold text-cg-green">Due</span>
+                        : <span className="text-[12px] text-gray-400">Upcoming</span>)
+                    : <span className="text-gray-300">–</span>}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -895,7 +956,6 @@ const InvoicesTestingView = () => {
   const monthTabs = real
     ? monthKeys.map((k) => ({ key: k, label: MONTH_LABEL[k] }))
     : [...[...rolled].reverse().map((r) => ({ key: r.key, label: labelOf(r.name, r.year) })), ...monthKeys.map((k) => ({ key: k, label: MONTH_LABEL[k] }))];
-  const tabs = [...NON_MONTH_LEFT, ...monthTabs, { key: 'copy-payment-status', label: COPY_TAB_LABEL }];
 
   // Drift for the active sub-tab (Real mode only): recompute vs the sheet.
   const activeDrift = useMemo(() => {
@@ -910,7 +970,7 @@ const InvoicesTestingView = () => {
     if (monthKeys.includes(activeTab)) {
       const data = monthDataFor(activeTab);
       if (!data) return null;
-      return <MonthTab data={data} monthKey={real ? activeTab : undefined} edit={edit} realNote={real ? `${MONTH_LABEL[activeTab]} 2026 — waterfall recomputed from the live month totals through our calc chain.` : undefined} />;
+      return <MonthTab data={data} monthKey={real ? activeTab : undefined} edit={edit} />;
     }
     const ds = realDataset;
     switch (activeTab) {
@@ -934,80 +994,99 @@ const InvoicesTestingView = () => {
 
   const loadingLive = real && liveStatus === 'loading' && !liveWorkbook;
 
+  const pill = (active) => cx(
+    'rounded-full px-3.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition-colors',
+    active ? 'bg-cg-dark text-white shadow-sm' : 'text-cg-dark hover:bg-[#e4e7da] hover:text-cg-black',
+  );
+  const groupDivider = <span className="mx-1.5 h-4 w-px shrink-0 self-center bg-gray-300" />;
+  const copyTab = { key: 'copy-payment-status', label: COPY_TAB_LABEL };
+
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold text-cg-black">Invoices (testing)</h2>
-          <p className="text-sm text-cg-dark">Connected replica of the Invoices (2026) workbook — sub-tabs reference each other like the real cross-sheet formulas.</p>
+          <p className="mt-0.5 text-sm text-cg-dark/80">A connected replica of the Invoices (2026) workbook — sub-tabs reference each other like the real cross-sheet formulas.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden text-[13px]">
-            <button onClick={() => switchMode('dummy')} className={cx('px-3 py-2 font-medium', !real ? 'bg-cg-green text-white' : 'text-gray-600 hover:bg-gray-50')}>Dummy</button>
-            <button onClick={() => switchMode('real')} className={cx('px-3 py-2 font-medium border-l border-gray-300', real ? 'bg-cg-green text-white' : 'text-gray-600 hover:bg-gray-50')}>Real (live sheet)</button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {real && liveStatus === 'ready' && fetchedAt && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#cbe5d2] bg-[#f0f9f2] px-3 py-1.5 text-[12px] font-medium text-[#186a2f]" title="Reading the Google Sheet directly — every sub-tab recomputes from the live workbook.">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cg-green opacity-50" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-cg-green" />
+              </span>
+              Live · synced {fmtSyncedAt(fetchedAt)}
+            </span>
+          )}
+          <div className="inline-flex rounded-full bg-[#e2e5d6] p-[3px] text-[13px] font-medium">
+            <button onClick={() => switchMode('dummy')} className={cx('rounded-full px-4 py-1.5 transition-all', !real ? 'bg-white text-cg-black shadow-sm' : 'text-cg-dark/70 hover:text-cg-black')}>Dummy</button>
+            <button onClick={() => switchMode('real')} className={cx('rounded-full px-4 py-1.5 transition-all', real ? 'bg-white text-cg-black shadow-sm' : 'text-cg-dark/70 hover:text-cg-black')}>Live sheet</button>
           </div>
           {real && (
             <button
               onClick={() => fetchLive(true)}
               disabled={liveStatus === 'loading'}
-              className="px-3 py-2 text-[13px] font-medium rounded-lg border border-gray-300 text-cg-dark hover:bg-gray-50 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-[12px] font-medium text-cg-dark shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-40"
               title="Re-read the Google Sheet (bypasses the 5-minute server cache)"
             >
-              {liveStatus === 'loading' ? 'Refreshing…' : '↻ Refresh from sheet'}
+              <span className={cx(liveStatus === 'loading' && 'inline-block animate-spin')}>↻</span>
+              {liveStatus === 'loading' ? 'Refreshing…' : 'Refresh'}
             </button>
           )}
           {!real && (
-            <button onClick={rollOver} disabled={!next} className="px-3 py-2 text-[13px] font-medium rounded-lg border border-gray-300 text-cg-dark hover:bg-gray-50 disabled:opacity-40" title={next ? `Roll over to ${labelOf(next.name, next.year)}` : ''}>
+            <button onClick={rollOver} disabled={!next} className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-[12px] font-medium text-cg-dark shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-40" title={next ? `Roll over to ${labelOf(next.name, next.year)}` : ''}>
               + Next month{next ? ` · ${labelOf(next.name, next.year)}` : ''}
             </button>
           )}
         </div>
       </div>
 
-      {real && liveStatus === 'ready' && (
-        <div className="rounded-lg border border-[#d9ead3] bg-[#eaf7ea] px-3 py-2 text-[13px] text-cg-dark flex items-center justify-between gap-3 flex-wrap">
-          <span><span className="font-semibold">Live from the Google Sheet.</span> Every sub-tab reads the workbook directly and recomputes through our calc chain — edit the sheet, refresh, and it propagates here.</span>
-          {fetchedAt && <span className="text-[12px] text-gray-500 whitespace-nowrap">Synced {fmtSyncedAt(fetchedAt)}</span>}
-        </div>
-      )}
       {usingFallback && (
-        <div className="rounded-lg border border-[#f0c36d] bg-[#fdf6e3] px-3 py-2 text-[13px] text-[#7f6000]">
+        <div className="rounded-xl border border-[#ecd9a4] bg-[#fbf4de] px-3.5 py-2.5 text-[13px] text-[#7f6000]">
           <span className="font-semibold">Live fetch failed — showing the frozen 7/2 snapshot.</span> {liveError}
-          {' '}<button onClick={() => fetchLive(true)} className="underline font-medium">Retry</button>
+          {' '}<button onClick={() => fetchLive(true)} className="font-semibold underline underline-offset-2">Retry</button>
         </div>
       )}
       {real && editCount > 0 && (
-        <div className="sticky top-0 z-10 rounded-lg border border-[#c78a00] bg-[#fdf6e3] px-3 py-2 text-[13px] text-[#7f6000] flex items-center justify-between gap-3 flex-wrap">
-          <span>
-            <span className="font-semibold">{editCount} local edit{editCount > 1 ? 's' : ''} — sandbox only.</span>{' '}
-            Not written to the Google Sheet or anywhere else; refreshing or switching mode discards {editCount > 1 ? 'them' : 'it'}.
+        <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e6c980] bg-[#fbf4de]/95 px-3.5 py-2.5 text-[13px] text-[#7f6000] shadow-sm backdrop-blur">
+          <span className="flex items-center gap-2">
+            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9a514] px-1.5 text-[11px] font-bold text-white">{editCount}</span>
+            <span><span className="font-semibold">Sandbox — local edit{editCount > 1 ? 's' : ''} only.</span> Nothing is written to the Google Sheet; refresh or switch mode to discard.</span>
           </span>
-          <button onClick={() => setOverrides({})} className="rounded-md border border-[#c78a00] px-2.5 py-1 text-[12px] font-medium hover:bg-[#f7ecc9]">Reset all</button>
+          <button onClick={() => setOverrides({})} className="rounded-full border border-[#d9a514] px-3 py-1 text-[12px] font-semibold transition-colors hover:bg-[#f5e7bb]">Reset all</button>
         </div>
       )}
-      {real && liveStatus === 'ready' && editCount === 0 && (
-        <p className="text-[12px] text-gray-500">Tip: on the month, Cash Accounting, Expenses V2, and Payment Status tabs you can click any number to model a what-if — the effect ripples through the waterfalls, Cash summary, and P&amp;L (Revenue &amp; expenses → NET INCOME) with old→new deltas, and never touches the sheet.</p>
-      )}
 
-      <div className="flex gap-0 border-b border-gray-300 overflow-x-auto">
-        {tabs.map((tab) => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={cx('px-4 py-2 text-[13px] font-medium whitespace-nowrap border-b-2 -mb-px transition-colors', activeTab === tab.key ? 'text-[#188038] border-[#188038] bg-[#e6f4ea]' : 'text-gray-600 border-transparent hover:bg-gray-50')}>
-            {tab.label}
-          </button>
+      <div className="flex items-stretch overflow-x-auto rounded-full bg-[#eceee4] p-1.5">
+        {NON_MONTH_LEFT.map((tab) => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={pill(activeTab === tab.key)}>{tab.label}</button>
         ))}
+        {groupDivider}
+        {monthTabs.map((tab) => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={pill(activeTab === tab.key)}>{tab.label}</button>
+        ))}
+        {groupDivider}
+        <button onClick={() => setActiveTab(copyTab.key)} className={pill(activeTab === copyTab.key)} title="Frozen 06/30 backup of the register">{copyTab.label}</button>
       </div>
 
-      {activeDrift && (
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] text-gray-500">vs Google Sheet:</span>
-          <DriftChip drift={activeDrift} />
+      {!loadingLive && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {activeDrift ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-gray-400">vs Google Sheet:</span>
+              <DriftChip drift={activeDrift} />
+            </div>
+          ) : <span />}
+          {real && liveStatus === 'ready' && editCount === 0 && (
+            <p className="text-[12px] text-gray-400">Click any number on the month, Cash, Expenses, or Payment Status tabs to model a what-if — deltas ripple through to the P&amp;L, and the sheet is never touched.</p>
+          )}
         </div>
       )}
 
       {loadingLive ? (
-        <div className="flex items-center gap-2 text-sm text-gray-500 py-10 justify-center">
-          <span className="h-4 w-4 rounded-full border-2 border-gray-300 border-t-cg-green animate-spin" />
-          Reading the Google Sheet…
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-gray-200 bg-white py-16 shadow-sm">
+          <span className="h-6 w-6 animate-spin rounded-full border-2 border-gray-200 border-t-cg-green" />
+          <span className="text-sm text-gray-500">Reading the Google Sheet…</span>
         </div>
       ) : (
         renderTab()
