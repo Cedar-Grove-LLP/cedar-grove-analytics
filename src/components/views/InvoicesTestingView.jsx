@@ -16,19 +16,14 @@ import {
 } from '@/utils/invoicesCalc.mjs';
 import {
   MONTHS12,
-  EXP_ROWS,
   expenseMonthTotal,
-  PAYMENT_ROWS,
-  PAYMENT_TOTAL,
   MONTH_DATA,
   buildMonthData,
   buildRealDataset,
   FROZEN_REAL_DATASET,
   REAL_WORKBOOK,
+  DUMMY_WORKBOOK,
   deriveCashRows,
-  DUMMY_CASH_ROWS,
-  DUMMY_PNL,
-  DUMMY_PROFITS_ROWS,
 } from '@/utils/invoicesTestData.mjs';
 import {
   resolveWorkbook,
@@ -396,23 +391,8 @@ const MonthTab = ({ data, rolledFrom, monthKey, edit }) => {
 };
 
 // ===========================================================================
-// Rate Sheet
+// Rate Sheet (dummy rows live in the data layer as DUMMY_WORKBOOK.rateSheet)
 // ===========================================================================
-const RATE_LEVELS = [
-  ['A1', 'A', false], ['A1', 'B', false], ['A2', 'A', false], ['A2', 'B', false],
-  ['C1', 'A', false], ['C1', 'B', false], ['C2', 'A', false], ['C2', 'B', false],
-  ['C3', 'A', false], ['C3', 'B', false], ['C4', 'A', false], ['C4', 'B', false],
-  ['C5', 'A', false], ['C5', 'B', true], ['C6', 'A', true], ['C6', 'B', true],
-  ['P1', 'A', true], ['P1', 'B', true], ['P2', 'A', true], ['P2', 'B', true],
-];
-const DUMMY_RATE_ROWS = RATE_LEVELS.map(([level, tier, hasColin], i) => ({
-  level, tier,
-  clientRate: 500 + i * 20,
-  attorneyRate: 250 + i * 10,
-  colinRate: hasColin ? 300 + i * 10 : null,
-  salary: level.startsWith('P') ? 'Variable' : 200000 + i * 12000,
-  cravath: i % 2 === 0 && !level.startsWith('P') ? 250000 + i * 15000 : null,
-}));
 const RATE_COLS = ['', '', 'Client Rate', 'Attorney Rate', 'Colin Rate', 'Est. Annual Salary (1200 Billed Hours)', 'Cravath Total Comp'];
 const RATE_NOTES = [
   'A1 is equivalent to a Cravath first year.',
@@ -911,32 +891,31 @@ const InvoicesTestingView = () => {
     if (real && liveStatus === 'idle') fetchLive(false);
   }, [real, liveStatus, fetchLive]);
 
-  // The workbook backing Real mode: live if we have it, else the frozen snapshot.
+  // The workbook backing the current mode: dummy placeholders, or (Real mode)
+  // the live fetch with the frozen snapshot as fallback. Both are the same
+  // shape, so ONE resolver/dataset pipeline serves both — the what-if sandbox
+  // works identically on dummy and live data.
   const usingFallback = real && liveStatus === 'error';
-  const activeWorkbook = liveWorkbook || FROZEN_WORKBOOK;
+  const activeWorkbook = real ? (liveWorkbook || FROZEN_WORKBOOK) : DUMMY_WORKBOOK;
 
   // Apply sandbox overrides, then assemble the view dataset from the result.
   // resolveWorkbook is pure, so memoizing on [workbook, overrides] is safe.
   const { resolvedWorkbook, meta } = useMemo(() => {
-    if (!real) return { resolvedWorkbook: null, meta: new Map() };
     const res = resolveWorkbook(activeWorkbook, overrides);
     return { resolvedWorkbook: res.workbook, meta: res.meta };
-  }, [real, activeWorkbook, overrides]);
-  const realDataset = useMemo(
-    () => (real ? buildRealDataset(resolvedWorkbook) : FROZEN_REAL_DATASET),
-    [real, resolvedWorkbook],
-  );
+  }, [activeWorkbook, overrides]);
+  const dataset = useMemo(() => buildRealDataset(resolvedWorkbook), [resolvedWorkbook]);
   // Cached (no-override) dataset — the delta baseline for cells that change from
   // an upstream what-if edit but aren't directly editable (P&L, Cash derived).
   // Only needed once edits exist.
   const baseDataset = useMemo(
-    () => (real && editCount > 0 ? buildRealDataset(activeWorkbook) : null),
-    [real, editCount, activeWorkbook],
+    () => (editCount > 0 ? buildRealDataset(activeWorkbook) : null),
+    [editCount, activeWorkbook],
   );
-  const edit = real ? { editable: true, meta, onEdit } : null;
+  const edit = { editable: true, meta, onEdit };
 
   const monthKeys = real ? REAL_MONTH_ORDER : DUMMY_MONTH_KEYS;
-  const monthDataFor = (key) => (real ? realDataset.monthData[key] : MONTH_DATA[key]);
+  const monthDataFor = (key) => dataset.monthData[key];
 
   // Rollover (dummy only)
   const latest = rolled.length ? rolled[rolled.length - 1] : { name: 'July', year: 2026, data: MONTH_DATA.july };
@@ -970,24 +949,20 @@ const InvoicesTestingView = () => {
     if (monthKeys.includes(activeTab)) {
       const data = monthDataFor(activeTab);
       if (!data) return null;
-      return <MonthTab data={data} monthKey={real ? activeTab : undefined} edit={edit} />;
+      return <MonthTab data={data} monthKey={activeTab} edit={edit} />;
     }
-    const ds = realDataset;
+    const ds = dataset;
     switch (activeTab) {
-      case 'rate-sheet': return <RateSheetScaffold rows={real ? ds.rateSheet : DUMMY_RATE_ROWS} />;
-      case 'cash-accounting': return <CashAccountingScaffold rows={real ? ds.cashRows : DUMMY_CASH_ROWS} baseRows={baseDataset ? baseDataset.cashRows : undefined} edit={edit} />;
-      case 'profits-paid': return <ProfitsPaidScaffold rows={real ? ds.profitsRows : DUMMY_PROFITS_ROWS} />;
-      case 'expenses': return <ExpensesScaffold rows={real ? ds.expenseRows : EXP_ROWS} edit={edit} />;
-      case 'pnl': return <PnlScaffold months={(real ? ds.pnl : DUMMY_PNL).months} rows={(real ? ds.pnl : DUMMY_PNL).rows} baseRows={baseDataset ? baseDataset.pnl.rows : undefined} />;
+      case 'rate-sheet': return <RateSheetScaffold rows={ds.rateSheet} />;
+      case 'cash-accounting': return <CashAccountingScaffold rows={ds.cashRows} baseRows={baseDataset ? baseDataset.cashRows : undefined} edit={edit} />;
+      case 'profits-paid': return <ProfitsPaidScaffold rows={ds.profitsRows} />;
+      case 'expenses': return <ExpensesScaffold rows={ds.expenseRows} edit={edit} />;
+      case 'pnl': return <PnlScaffold months={ds.pnl.months} rows={ds.pnl.rows} baseRows={baseDataset ? baseDataset.pnl.rows : undefined} />;
       case 'balance-sheet': return <BalanceSheetScaffold rows={real ? ds.balanceRows.map(classifyBalanceRow) : BALANCE_ROWS} />;
       case 'payment-status':
-        return real
-          ? <PaymentStatusScaffold register={ds.paymentRows} total={ds.paymentTotal} realTerms={false} edit={edit} />
-          : <PaymentStatusScaffold register={PAYMENT_ROWS} total={PAYMENT_TOTAL} />;
+        return <PaymentStatusScaffold register={ds.paymentRows} total={ds.paymentTotal} realTerms={real ? false : undefined} edit={edit} />;
       case 'copy-payment-status':
-        return real
-          ? <PaymentStatusScaffold register={ds.copyRows} total={ds.copyTotal} realTerms={false} />
-          : <PaymentStatusScaffold register={PAYMENT_ROWS} total={PAYMENT_TOTAL} />;
+        return <PaymentStatusScaffold register={ds.copyRows} total={ds.copyTotal} realTerms={real ? false : undefined} />;
       default: return null;
     }
   };
@@ -1047,7 +1022,7 @@ const InvoicesTestingView = () => {
           {' '}<button onClick={() => fetchLive(true)} className="font-semibold underline underline-offset-2">Retry</button>
         </div>
       )}
-      {real && editCount > 0 && (
+      {editCount > 0 && (
         <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e6c980] bg-[#fbf4de]/95 px-3.5 py-2.5 text-[13px] text-[#7f6000] shadow-sm backdrop-blur">
           <span className="flex items-center gap-2">
             <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9a514] px-1.5 text-[11px] font-bold text-white">{editCount}</span>
@@ -1077,7 +1052,7 @@ const InvoicesTestingView = () => {
               <DriftChip drift={activeDrift} />
             </div>
           ) : <span />}
-          {real && liveStatus === 'ready' && editCount === 0 && (
+          {editCount === 0 && (!real || liveStatus === 'ready') && (
             <p className="text-[12px] text-gray-400">Click any number on the month, Cash, Expenses, or Payment Status tabs to model a what-if — deltas ripple through to the P&amp;L, and the sheet is never touched.</p>
           )}
         </div>

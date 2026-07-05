@@ -262,6 +262,69 @@ export const DUMMY_PNL_LINES = {
 export const DUMMY_PNL = { months: MONTHS12, rows: buildPnlRows(DUMMY_PNL_LINES, 12) };
 
 // ===========================================================================
+// DUMMY workbook — the dummy sources reshaped into the same REAL_WORKBOOK
+// structure, so Dummy mode runs through the exact same override-resolver +
+// dataset pipeline as Live mode (what-if edits behave identically).
+// ===========================================================================
+const RATE_LEVELS = [
+  ['A1', 'A', false], ['A1', 'B', false], ['A2', 'A', false], ['A2', 'B', false],
+  ['C1', 'A', false], ['C1', 'B', false], ['C2', 'A', false], ['C2', 'B', false],
+  ['C3', 'A', false], ['C3', 'B', false], ['C4', 'A', false], ['C4', 'B', false],
+  ['C5', 'A', false], ['C5', 'B', true], ['C6', 'A', true], ['C6', 'B', true],
+  ['P1', 'A', true], ['P1', 'B', true], ['P2', 'A', true], ['P2', 'B', true],
+];
+export const DUMMY_RATE_ROWS = RATE_LEVELS.map(([level, tier, hasColin], i) => ({
+  level, tier,
+  clientRate: 500 + i * 20,
+  attorneyRate: 250 + i * 10,
+  colinRate: hasColin ? 300 + i * 10 : null,
+  salary: level.startsWith('P') ? 'Variable' : 200000 + i * 12000,
+  cravath: i % 2 === 0 && !level.startsWith('P') ? 250000 + i * 15000 : null,
+}));
+
+const DUMMY_RATE_HEADERS = ['Client Rate', 'Take-Home Rate', 'Billable Earnings', '83(b) Earnings (Cash Bonus)', 'Personal Reimbursements', 'Check', 'Diff'];
+const dummyMonthEntry = (key) => {
+  const m = MONTH_DATA[key];
+  return {
+    inputs: { ...m.inputs },
+    sheet: computeMonthlyWaterfall(m.inputs), // dummy "sheet" cache == computed (no drift by construction)
+    sheetErrors: {},
+    attorneyTable: {
+      headers: DUMMY_RATE_HEADERS,
+      rows: m.rateTable.map((r) => ({ name: r.name, vals: [r.clientRate, r.takeHome, r.billableEarnings, r.earnings83b, r.personalReimb, r.check, r.diff] })),
+    },
+    matrix: { attorneys: m.attorneys, rows: m.matrix.map((r) => ({ ...r, billings: [...r.billings] })), totalRows: m.matrix.length },
+  };
+};
+
+export const DUMMY_WORKBOOK = {
+  source: 'Dummy dataset (generated placeholders)',
+  extractedOn: null,
+  months: Object.fromEntries(INDEX_KEY.map((k) => [k, dummyMonthEntry(k)])),
+  monthsExtra: { 'june-original': dummyMonthEntry('june-original') },
+  cash: Object.fromEntries(INDEX_KEY.map((k, m) => {
+    const row = DUMMY_CASH_ROWS[m];
+    return [k, {
+      inputs: { cashReceived: row.cashReceived, expenses: row.expenses, cgfDonation: row.cgfDonation, attorneyPayout: row.attorneyPayout },
+      sheet: { profits: computeCashProfits(row), revenue: row.revenueAccrued, qRevenue: null },
+    }];
+  })),
+  pnl: {
+    lines: Object.fromEntries(Object.entries(DUMMY_PNL_LINES).filter(([k]) => k !== 'consultants')),
+    consultants: DUMMY_PNL_LINES.consultants,
+    sheet: {},
+  },
+  paymentTotal: PAYMENT_TOTAL,
+  paymentRegister: PAYMENT_ROWS.map((r) => ({ ...r })),
+  paymentRegisterCopy: PAYMENT_ROWS.map((r) => ({ ...r })),
+  paymentTotalCopy: PAYMENT_TOTAL,
+  profitsPaid: DUMMY_PROFITS_ROWS,
+  rateSheet: DUMMY_RATE_ROWS,
+  expenses: EXP_ROWS.map((r) => ({ ...r, vals: [...r.vals] })),
+  balanceSheet: [], // dummy Balance Sheet stays the static scaffold in the view
+};
+
+// ===========================================================================
 // REAL dataset factory — turns a REAL_WORKBOOK-shaped object (the frozen
 // snapshot OR a live fetch from /api/invoices-workbook) into the view-ready
 // structures. Everything derived flows through the same calc chain, so live and
@@ -283,15 +346,17 @@ const realMonthDetail = (entry) => ({
   rateRows: entry.attorneyTable ? entry.attorneyTable.rows : undefined,
 });
 
-// The register has no payment-terms column (terms live in the clients sheet /
-// Firestore), so paymentTerms is null — reminder cadence falls back to the
-// non-Net-30 default and overdue math is skipped.
+// The real register has no payment-terms column (terms live in the clients
+// sheet / Firestore), so paymentTerms falls back to null — reminder cadence
+// uses the non-Net-30 default and overdue math is skipped. The dummy register
+// carries terms (and Date objects), both preserved as-is.
+const toDate = (v) => (v instanceof Date ? v : parseISO(v));
 const parseRegister = (rows) => (rows || []).map((r) => ({
   ...r,
-  dateSent: parseISO(r.dateSent),
-  lastReminder: parseISO(r.lastReminder),
-  dateReceived: parseISO(r.dateReceived),
-  paymentTerms: null,
+  dateSent: toDate(r.dateSent),
+  lastReminder: toDate(r.lastReminder),
+  dateReceived: toDate(r.dateReceived),
+  paymentTerms: r.paymentTerms ?? null,
 }));
 
 export function buildRealDataset(workbook) {
