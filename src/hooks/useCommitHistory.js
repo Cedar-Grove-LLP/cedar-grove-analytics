@@ -12,7 +12,7 @@ import { auth, waitForAuth } from "@/firebase/config";
 // list — changing the range never triggers a network request. `refresh()`
 // forces a fresh pull and busts both the localStorage and server caches.
 
-const CACHE_KEY = "cg_commit_history_v1";
+const CACHE_KEY = "cg_commit_history_v2"; // v2: cache payload gained `truncated`
 const DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function readCache(ttlMs) {
@@ -46,6 +46,7 @@ export function useCommitHistory({ ttlMs = DEFAULT_TTL_MS } = {}) {
   const [meta, setMeta] = useState({ repo: null, tokenConfigured: null });
   const [fromCache, setFromCache] = useState(false);
   const [partial, setPartial] = useState(false);
+  const [truncated, setTruncated] = useState(false);
   const didInit = useRef(false);
 
   const load = useCallback(
@@ -64,6 +65,7 @@ export function useCommitHistory({ ttlMs = DEFAULT_TTL_MS } = {}) {
           });
           setFromCache(true);
           setPartial(false); // cached payloads are always complete
+          setTruncated(cached.truncated === true);
           setLoading(false);
           return;
         }
@@ -92,14 +94,18 @@ export function useCommitHistory({ ttlMs = DEFAULT_TTL_MS } = {}) {
         setMeta({ repo: data.repo, tokenConfigured: data.tokenConfigured });
         setFromCache(false);
         setPartial(data.partial === true);
+        setTruncated(data.truncated === true);
         // Never cache a partial (failed-mid-pagination) history — it would
         // serve an incomplete list as authoritative for the whole TTL.
+        // `truncated` (hit the pagination safety cap, but every page fetched
+        // succeeded) IS still a complete, valid response, so it's cached.
         if (!data.partial) {
           writeCache({
             fetchedAt: data.fetchedAt,
             commits: data.commits,
             repo: data.repo,
             tokenConfigured: data.tokenConfigured,
+            truncated: data.truncated === true,
           });
         }
       } catch (err) {
@@ -120,5 +126,5 @@ export function useCommitHistory({ ttlMs = DEFAULT_TTL_MS } = {}) {
 
   const refresh = useCallback(() => load({ force: true }), [load]);
 
-  return { commits, loading, error, fetchedAt, meta, fromCache, partial, refresh };
+  return { commits, loading, error, fetchedAt, meta, fromCache, partial, truncated, refresh };
 }

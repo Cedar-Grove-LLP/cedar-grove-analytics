@@ -10,4 +10,5 @@ export { default as CategoryDetailView } from './CategoryDetailView';
 export { default as DownloadsView } from './DownloadsView';
 export { default as TargetsView } from './TargetsView';
 export { default as TechTeamView } from './TechTeamView';
+export { default as PracticeCompositionView } from './PracticeCompositionView';
 export { default as InvoicesTestingView } from './InvoicesTestingView';

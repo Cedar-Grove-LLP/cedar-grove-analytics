@@ -74,6 +74,7 @@ export const FirestoreDataProvider = ({ children }) => {
           employmentType: data.employmentType || 'FTE',
           // Missing flag = active (back-compat for users created before the toggle existed)
           active: data.active !== false,
+          activationDate: data.activationDate || null,
         });
 
         // Build rates map from user profile rates[] array

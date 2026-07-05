@@ -69,6 +69,11 @@ export async function GET(request) {
     // pages collected so far. Clients use this to avoid caching an incomplete
     // history as if it were complete.
     let partial = false;
+    // True when pagination hit the MAX_PAGES safety cap while GitHub still had
+    // a full page left to give (i.e. every page fetched succeeded, but there
+    // may be older commits beyond the cap). Unlike `partial`, this is a
+    // complete-and-valid response — just capped — so it's still cached.
+    let truncated = false;
 
     for (let page = 1; page <= MAX_PAGES; page++) {
       const url = `https://api.github.com/repos/${repo}/commits?per_page=${PER_PAGE}&page=${page}`;
@@ -110,7 +115,7 @@ export async function GET(request) {
         const committerMeta = gitCommit.committer || {};
         const message = (gitCommit.message || "").split("\n")[0].trim();
         commits.push({
-          sha: (c.sha || "").slice(0, 7),
+          sha: c.sha || "",
           date: authorMeta.date || committerMeta.date || null,
           author: authorMeta.name || (c.author && c.author.login) || "Unknown",
           message,
@@ -119,11 +124,17 @@ export async function GET(request) {
       }
 
       if (batch.length < PER_PAGE) break; // last page
+
+      // A full-size batch on the last page the safety cap allows means GitHub
+      // likely has more — we stopped because of MAX_PAGES, not because we
+      // ran out of commits.
+      if (page === MAX_PAGES) truncated = true;
     }
 
     return json({
       success: true,
       partial,
+      truncated,
       repo,
       total: commits.length,
       tokenConfigured: Boolean(token),

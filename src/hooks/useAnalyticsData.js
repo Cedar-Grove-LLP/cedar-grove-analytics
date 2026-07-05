@@ -19,6 +19,7 @@ import {
 } from '../utils/hiddenAttorneys.mjs';
 import { monthKeyFromDate } from '../utils/rateLookup.mjs';
 import { sortBySeniority } from '../utils/seniority.mjs';
+import { hasJoinedBy } from '@/utils/userActivation.mjs';
 
 export const useAnalyticsData = ({
   dateRange,
@@ -207,6 +208,19 @@ export const useAnalyticsData = ({
     return names;
   }, [firebaseUsers]);
 
+  // Names of attorneys who had not yet joined the firm as of the end of the
+  // selected date range. Mirrors namesWithDataInRange's all-time special case:
+  // an unbounded range means no one can be "not yet joined", so this Set is
+  // empty for dateRange === 'all-time'.
+  const notYetJoinedAttorneyNames = useMemo(() => {
+    const names = new Set();
+    const rangeEnd = dateRange === 'all-time' ? null : dateRangeInfo.endDate;
+    firebaseUsers.forEach(user => {
+      if (!hasJoinedBy(user, rangeEnd)) names.add(user.name || user.id);
+    });
+    return names;
+  }, [firebaseUsers, dateRange, dateRangeInfo]);
+
   // Names that have at least one billable/ops entry inside the selected date
   // range (global attorney filter intentionally ignored — this drives which
   // inactive attorneys are eligible to appear at all for this timeframe).
@@ -235,9 +249,10 @@ export const useAnalyticsData = ({
     // Listed in firm seniority order (unknown names trail alphabetically).
     const allNames = sortBySeniority(Array.from(names));
     return filterHiddenAttorneys(allNames).filter(name =>
-      !inactiveAttorneyNames.has(name) || namesWithDataInRange.has(name)
+      (!inactiveAttorneyNames.has(name) || namesWithDataInRange.has(name)) &&
+      (!notYetJoinedAttorneyNames.has(name) || namesWithDataInRange.has(name))
     );
-  }, [firebaseUsers, inactiveAttorneyNames, namesWithDataInRange]);
+  }, [firebaseUsers, inactiveAttorneyNames, notYetJoinedAttorneyNames, namesWithDataInRange]);
 
   // Filter billable entries based on date range and attorney filter
   const filteredBillableEntries = useMemo(() => {
@@ -536,6 +551,10 @@ export const useAnalyticsData = ({
       if (inactiveAttorneyNames.has(user.name) && !namesWithDataInRange.has(user.name)) {
         return false;
       }
+      // Not-yet-joined attorneys only show when the timeframe overlaps their data.
+      if (notYetJoinedAttorneyNames.has(user.name) && !namesWithDataInRange.has(user.name)) {
+        return false;
+      }
       return shouldIncludeAttorneyData(user.name, startDate, endDate) &&
              !isAttorneyHidden(user.name);
     });
@@ -543,7 +562,7 @@ export const useAnalyticsData = ({
     // Default per-attorney order is firm seniority, so any consumer that renders
     // this list as-is (and not via its own sort) shows staff most→least tenured.
     return sortBySeniority(visibleUserData, user => user.name || user.id);
-  }, [filteredBillableEntries, filteredOpsEntries, userMap, getRate, dateRangeInfo, userTargets, getUserRole, userEmploymentTypeMap, userEmailMap, parsedTimeOff, getDefaultTarget, firebaseUsers, globalAttorneyFilter, dateRangeMonths, inactiveAttorneyNames, namesWithDataInRange]);
+  }, [filteredBillableEntries, filteredOpsEntries, userMap, getRate, dateRangeInfo, userTargets, getUserRole, userEmploymentTypeMap, userEmailMap, parsedTimeOff, getDefaultTarget, firebaseUsers, globalAttorneyFilter, dateRangeMonths, inactiveAttorneyNames, namesWithDataInRange, notYetJoinedAttorneyNames]);
 
   // Create a separate dataset that includes hidden users for totals calculation
   const allAttorneyDataIncludingHidden = useMemo(() => {

@@ -54,8 +54,10 @@ src/
 └── utils/
     ├── calcDefinitions.mjs # Metric formula/provenance registry (drives CalcTooltip)
     ├── cohortFilter.mjs    # Overview cohort classification (pure, tested)
+    ├── commitTimeline.mjs  # Tech Team commit classifier + timeline grouping (pure, tested)
     ├── constants.js        # Colors, date range options, periods
     ├── dateHelpers.js      # Business day math, US holidays
+    ├── exportTimelineImage.js # Browser-only SVG/PNG export helpers for the Tech Team chevron timeline (not tested — browser-coupled, see Testing)
     ├── formatters.js       # Currency and number formatting
     ├── hiddenAttorneys.mjs # Attorneys hidden from UI after a date (pure, Node-importable)
     ├── paymentStatus.mjs   # Calculated client Payment Status tags — On Target/Warning/Hold (pure, tested)
@@ -74,16 +76,29 @@ src/
 ## Firestore Data Model
 
 ```
-users/{userId}/         — { name, role, email, employmentType, active,
+users/{userId}/         — { name, role, email, employmentType, active, activationDate,
                               rates:   [{ rate, takeHomeRate?, month, year }],
                               targets: [{ month, year, billableHours, opsHours, totalHours, earnings }] }
                            `active` (bool, default true when absent): toggled in the
                            User Management → Role Management admin tab. Inactive
                            attorneys are hidden from dropdowns/rows EXCEPT when the
                            selected timeframe overlaps their actual billable/ops
-                           entries (auto-derived, no tenure dates), and are excluded
-                           from forward-looking Targets + Projected Earnings. Layered
-                           on top of the legacy hiddenAttorneys.mjs date config.
+                           entries (auto-derived), and are excluded from
+                           forward-looking Targets + Projected Earnings. Layered on
+                           top of the legacy hiddenAttorneys.mjs date config.
+                           `activationDate` (optional "YYYY-MM", tenure-start month —
+                           set via <input type="month">; no day-of-month precision
+                           since nothing pro-rates a partial month of tenure):
+                           set in the same Role Management tab. Drives
+                           `hasJoinedBy` (src/utils/userActivation.mjs, also accepts
+                           a legacy "YYYY-MM-DD" defensively) — attorneys are hidden
+                           from dropdowns/rows/year-scoped admin views (same
+                           data-overlap exception as `active`) for any timeframe
+                           ending before their activation month, and it floors the
+                           custom date-range picker (at the 1st of that month) on
+                           their own user page so an out-of-tenure range can't be
+                           selected. Absent = no restriction (back-compat for
+                           existing users).
   billables/{monthDocId}  — { month, year, entries: [{ date, client, matter, hours,
                                                        earnings, adjustment,
                                                        billingCategory,
@@ -212,7 +227,7 @@ Set in `.env.local` (gitignored).
 
 ## Testing
 
-`npm test` runs Node's built-in test runner (`node --test tests/*.test.mjs`) — no test framework dependency. Tests cover the pure `.mjs` modules only (rate lookup, cohort filter, payment status tags, calc-definitions registry + call-site key coverage, audit script helpers); React components and hooks are not unit-tested (they import the Firebase client SDK at module load). Run the suite whenever touching `src/utils/*.mjs`, `scripts/`, or registry keys.
+`npm test` runs Node's built-in test runner (`node --test tests/*.test.mjs`) — no test framework dependency. Tests cover the pure `.mjs` modules only (rate lookup, cohort filter, payment status tags, calc-definitions registry + call-site key coverage, audit script helpers, Tech Team commit classifier/timeline grouping); React components and hooks are not unit-tested (they import the Firebase client SDK at module load). Run the suite whenever touching `src/utils/*.mjs`, `scripts/`, or registry keys.
 
 ## Deployment
 
@@ -222,6 +237,6 @@ Configured for Vercel. Push to `main` triggers deploy. Environment variables set
 
 - JSX components use `.jsx` extension; plain JS uses `.js`.
 - Tailwind utility classes for all styling. Custom brand colors defined in `tailwind.config.js` (`cg-black`, `cg-green`, `cg-dark`, `cg-background`).
-- Recharts for standard charts; D3 for the ops sunburst visualization.
+- Recharts for standard charts (bar/line/pie/area — anything with data-driven axes/scales); D3 for the ops sunburst visualization. Bespoke annotated infographics that aren't a standard chart type (e.g. `TechTeamChevronTimeline.jsx`'s chevron/callout timeline) use hand-built inline-styled SVG instead — neither library models that layout naturally, and the component still imports its colors from `utils/colors.js` (GRAY) rather than hardcoding hex.
 - Tables include client-side sorting and pagination.
 - Currency formatted via `Intl.NumberFormat` helpers in `formatters.js`.

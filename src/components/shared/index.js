@@ -5,3 +5,4 @@ export { default as ClientStatCard } from './ClientStatCard';
 export { default as DateRangeIndicator } from './DateRangeIndicator';
 export { default as CalcTooltip } from './CalcTooltip';
 export { default as AnnualProgressBar, AnnualStatusPill } from './AnnualProgressBar';
+export { default as PracticeAreaCard } from './PracticeAreaCard';

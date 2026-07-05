@@ -9,7 +9,7 @@ import { useAnalyticsData } from '@/hooks/useAnalyticsData';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { DateRangeDropdown, AttorneyFilterDropdown } from './shared';
-import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView, TargetsView, TechTeamView, InvoicesTestingView } from './views';
+import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView, TargetsView, TechTeamView, PracticeCompositionView, InvoicesTestingView } from './views';
 
 const TRANSACTIONS_OPS_TABS = ['transactions', 'ops'];
 const DEFAULT_DASHBOARD_DATE_RANGE = 'current-month';
@@ -101,7 +101,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   const [transactionAttorneyFilter, setTransactionAttorneyFilter] = useState('all');
 
   // View state — read initial tab from URL query param (?tab=clients)
-  const VALID_TABS = ['overview', 'attorneys', 'transactions', 'ops', 'clients', 'downloads', 'targets', 'tech-team', 'invoices-testing'];
+  const VALID_TABS = ['overview', 'attorneys', 'transactions', 'ops', 'clients', 'downloads', 'targets', 'practice-composition', 'tech-team', 'invoices-testing'];
   const defaultTab = downloadsOnly ? 'downloads' : transactionsOpsOnly ? 'transactions' : 'overview';
   const tabFromUrl = searchParams.get('tab');
   // Restricted (downloads-only / transactions+ops-only) users must not reach the
@@ -328,6 +328,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             { key: 'clients', label: 'Clients' },
             { key: 'downloads', label: 'Downloads' },
             { key: 'targets', label: 'Targets', adminOnly: true },
+            { key: 'practice-composition', label: 'Practice Composition', adminOnly: true },
             { key: 'tech-team', label: 'Tech Team' },
             { key: 'invoices-testing', label: 'Invoices (testing)', adminOnly: true },
           ].filter(tab => {
@@ -420,6 +421,15 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
         )}
 
         {selectedView === 'targets' && isAdmin && <TargetsView />}
+
+        {selectedView === 'practice-composition' && isAdmin && (
+          <PracticeCompositionView
+            dateRangeLabel={dateRangeLabel}
+            globalAttorneyFilter={effectiveAttorneyFilter}
+            allAttorneyNames={allAttorneyNames}
+            transactionData={transactionData}
+          />
+        )}
 
         {selectedView === 'tech-team' && !restrictedMode && <TechTeamView />}
 

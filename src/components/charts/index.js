@@ -7,3 +7,5 @@ export { default as ClientHoursChart } from './ClientHoursChart';
 export { default as ServiceBreadthChart } from './ServiceBreadthChart';
 export { default as MatterCategorySunburst } from './MatterCategorySunburst';
 export { default as TopDownloadsChart } from './TopDownloadsChart';
+export { default as PracticeAreaTrendChart } from './PracticeAreaTrendChart';
+export { default as TechTeamChevronTimeline } from './TechTeamChevronTimeline';

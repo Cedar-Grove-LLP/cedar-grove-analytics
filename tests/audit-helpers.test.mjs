@@ -29,6 +29,39 @@ test('buildRatesMapFromUserDoc converts month names to YYYY-MM keys', () => {
   assert.deepEqual(buildRatesMapFromUserDoc({}), {});
 });
 
+test('buildRatesMapFromUserDoc warns (but still mirrors app behavior) on an unrecognized month name', () => {
+  // getMonthNumber's fallback-to-January for a non-matching name mirrors an
+  // existing app quirk (dateHelpers.js) — this function must reproduce that
+  // exact computed value, but must not absorb it silently: the whole point
+  // of this audit tool is to surface bad source data.
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    const map = buildRatesMapFromUserDoc({
+      rates: [{ month: 'Marchh', year: 2025, rate: 300 }],
+    });
+    assert.deepEqual(Object.keys(map), ['2025-01']); // mirrors app's silent-January fallback
+    assert.equal(map['2025-01'].rate, 300);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /unrecognized month.*Marchh/);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test('buildRatesMapFromUserDoc does not warn for recognized month names', () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (msg) => warnings.push(msg);
+  try {
+    buildRatesMapFromUserDoc({ rates: [{ month: 'january', year: 2025, rate: 100 }] }); // case-insensitive match
+    assert.equal(warnings.length, 0);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 test('summarizeMonthDoc flags entry-sum vs sheetTotals mismatches', () => {
   const summary = summarizeMonthDoc('billables', '2025_January', {
     month: 'January',

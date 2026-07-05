@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from 'react';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
-import { getEntryDate } from '@/utils/dateHelpers';
+import { getEntryDate, getPSTDate } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours } from '@/utils/formatters';
 import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys.mjs';
 import { sortBySeniority } from '@/utils/seniority.mjs';
+import { hasJoinedBy } from '@/utils/userActivation.mjs';
 import { CalcTooltip } from '@/components/shared';
 
 const MAX_RANK = 19;
@@ -213,7 +214,7 @@ const ProjectedEarningsTable = () => {
 
     const levels = [...rateCard.levels].sort((a, b) => a.rank - b.rank);
 
-    const today = new Date();
+    const today = getPSTDate();
     const currentYear = today.getFullYear();
     const currentMonth = today.getMonth() + 1;
 
@@ -230,7 +231,16 @@ const ProjectedEarningsTable = () => {
       ? (completedProfitMonths.reduce((s, e) => s + Number(e.firmProfit), 0) / completedProfitMonths.length) * 12
       : 0;
 
-    const attorneys = users.filter((u) => (u.role || 'Attorney') === 'Attorney' && u.active !== false);
+    // User ids with at least one YTD billable entry this year — mirrors the
+    // namesWithDataInRange escape hatch in useAnalyticsData.js so a mis-set/
+    // future activationDate never hides an attorney whose real, already-earned
+    // YTD figures should still be aggregated and shown.
+    const userIdsWithYtdData = new Set();
+    (allBillableEntries || []).forEach((e) => {
+      if (e.year === currentYear) userIdsWithYtdData.add(e.userId);
+    });
+
+    const attorneys = users.filter((u) => (u.role || 'Attorney') === 'Attorney' && u.active !== false && (hasJoinedBy(u, today) || userIdsWithYtdData.has(u.id)));
     const visibleNames = filterHiddenAttorneys(attorneys.map((u) => u.name || u.id));
     // Firm seniority order; the Full-time / Part-time cards below preserve it
     // when they split these rows by employment type.

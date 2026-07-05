@@ -17,6 +17,7 @@ const buildEditsFromUsers = (users) => {
         role: u.role || 'Attorney',
         employmentType: u.employmentType || 'FTE',
         active: u.active !== false,
+        activationDate: u.activationDate || '',
         isDirty: false,
       };
     });
@@ -66,6 +67,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
         role: edits.role,
         employmentType: edits.employmentType,
         active: edits.active,
+        activationDate: edits.activationDate || null,
       });
 
       setRoleEdits(prev => ({
@@ -98,6 +100,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
           role: edits.role,
           employmentType: edits.employmentType,
           active: edits.active,
+          activationDate: edits.activationDate || null,
         });
       }
 
@@ -167,6 +170,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
 
       {/* Roles Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -175,13 +179,14 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employment Type</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Active</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activation Date</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {manageableUsers.map((user) => {
-              const edits = roleEdits[user.id] || { email: user.email || '', role: user.role || 'Attorney', employmentType: user.employmentType || 'FTE', active: user.active !== false, isDirty: false };
+              const edits = roleEdits[user.id] || { email: user.email || '', role: user.role || 'Attorney', employmentType: user.employmentType || 'FTE', active: user.active !== false, activationDate: user.activationDate || '', isDirty: false };
               return (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -234,6 +239,14 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
                     <span className="ml-2 text-xs text-gray-500 align-middle">{edits.active ? 'Active' : 'Inactive'}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
+                    <input
+                      type="month"
+                      value={edits.activationDate}
+                      onChange={(e) => handleChange(user.id, 'activationDate', e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    />
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
                     {edits.isDirty ? (
                       <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">Unsaved</span>
                     ) : (
@@ -264,6 +277,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
