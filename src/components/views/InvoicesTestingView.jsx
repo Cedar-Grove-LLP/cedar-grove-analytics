@@ -12,17 +12,12 @@ import {
   daysOverdue,
   isReminderDue,
   computePaymentRollup,
-  nextCalendarMonth,
 } from '@/utils/invoicesCalc.mjs';
 import {
   MONTHS12,
-  expenseMonthTotal,
-  MONTH_DATA,
-  buildMonthData,
   buildRealDataset,
   FROZEN_REAL_DATASET,
   REAL_WORKBOOK,
-  DUMMY_WORKBOOK,
   deriveCashRows,
 } from '@/utils/invoicesTestData.mjs';
 import {
@@ -39,13 +34,13 @@ import {
 const FROZEN_WORKBOOK = REAL_WORKBOOK;
 
 // ---------------------------------------------------------------------------
-// Invoices (testing) — structural + logical replica of the "Invoices (2026)"
-// workbook. Sub-tabs are CONNECTED like the real cross-sheet references; the
-// data layer lives in src/utils/invoicesTestData.mjs (pure, tested) with two
-// datasets: Dummy (placeholder inputs) and Real Jan–Jun (captured workbook
-// figures — regenerate via scripts/extract-invoices-workbook.py).
-// Everything is self-contained in this tab — no Firestore, no other dashboard
-// logic, no spreadsheet writes.
+// Invoices (testing) — a live, read-only mirror of the "Invoices (2026)" Google
+// Sheet. On mount it fetches the workbook from /api/invoices-workbook and
+// recomputes every sub-tab through the same calc chain the sheet uses; a local
+// what-if sandbox lets you edit any number and see the effect ripple across
+// tabs, purely in React state (a refresh reverts to the sheet). The frozen
+// snapshot is the fallback when a live fetch fails. Self-contained — no
+// Firestore, no other dashboard logic, and it never writes to the sheet.
 // ---------------------------------------------------------------------------
 
 const cx = (...a) => a.filter(Boolean).join(' ');
@@ -226,7 +221,7 @@ const WF_DERIVED_KEYS = new Set(['gross', 'netAccrued', 'revenueAccrued', 'cgfDo
 // Component rows of Gross / deductions — indented under their derived parent.
 const WF_INDENT_KEYS = new Set(['writeOffs', 'attorneyBillables', 'flatFee83b', 'filingFees', 'outsideCounsel', 'deferred', 'attorneyPayout', 'opEx']);
 
-const MonthTab = ({ data, rolledFrom, monthKey, edit }) => {
+const MonthTab = ({ data, monthKey, edit }) => {
   const wf = data.waterfall || computeMonthlyWaterfall(data.inputs);
   const errs = data.sheetErrors || {};
   const hasDetail = !!data.matrix;
@@ -272,7 +267,6 @@ const MonthTab = ({ data, rolledFrom, monthKey, edit }) => {
   const tot = (k) => sumColumn(matrix.map((r) => r[k]));
   return (
     <div className="space-y-6">
-      {rolledFrom && <div className="rounded-xl border border-[#cfdcee] bg-[#eef3f9] px-3.5 py-2 text-[13px] text-cg-dark"><span className="font-semibold">Rolled over from {rolledFrom}.</span> Structure cloned; inputs refreshed with new dummy data, so the waterfall recomputes.</div>}
       {Object.keys(errs).length > 0 && (
         <SourceNote>The sheet itself shows {String(Object.values(errs)[0]).split(' (')[0]} for some waterfall cells (broken IMPORTRANGE) — rendered as-is.</SourceNote>
       )}
@@ -391,7 +385,7 @@ const MonthTab = ({ data, rolledFrom, monthKey, edit }) => {
 };
 
 // ===========================================================================
-// Rate Sheet (dummy rows live in the data layer as DUMMY_WORKBOOK.rateSheet)
+// Rate Sheet
 // ===========================================================================
 const RATE_COLS = ['', '', 'Client Rate', 'Attorney Rate', 'Colin Rate', 'Est. Annual Salary (1200 Billed Hours)', 'Cravath Total Comp'];
 const RATE_NOTES = [
@@ -828,8 +822,7 @@ const NON_MONTH_LEFT = [
   { key: 'payment-status', label: 'Payment Status' },
 ];
 const MONTH_LABEL = { july: 'July', june: 'June', may: 'May', april: 'April', march: 'March', february: 'February', january: 'January', 'june-original': 'June - original' };
-const DUMMY_MONTH_KEYS = ['july', 'june', 'may', 'april', 'march', 'february', 'january', 'june-original'];
-const REAL_MONTH_ORDER = ['july', 'june', 'may', 'april', 'march', 'february', 'january', 'june-original'];
+const MONTH_ORDER = ['july', 'june', 'may', 'april', 'march', 'february', 'january', 'june-original'];
 const COPY_TAB_LABEL = '06/30 Copy of Payment Status';
 
 const fmtSyncedAt = (iso) => {
@@ -840,20 +833,17 @@ const fmtSyncedAt = (iso) => {
 };
 
 const InvoicesTestingView = () => {
-  const [mode, setMode] = useState('dummy'); // 'dummy' | 'real'
-  const [activeTab, setActiveTab] = useState('rate-sheet');
-  const [rolled, setRolled] = useState([]);
-  const real = mode === 'real';
+  const [activeTab, setActiveTab] = useState('cash-accounting');
 
-  // Live sheet mirror (Real mode). liveWorkbook holds the assembled REAL_WORKBOOK
-  // shape fetched from /api/invoices-workbook; on failure we fall back to the
-  // frozen snapshot. Nothing here is persisted.
+  // Live mirror of the Invoices (2026) sheet. liveWorkbook holds the assembled
+  // workbook fetched from /api/invoices-workbook; on failure we fall back to the
+  // frozen snapshot. Nothing here is ever written back to the sheet.
   const [liveWorkbook, setLiveWorkbook] = useState(null);
   const [liveStatus, setLiveStatus] = useState('idle'); // idle | loading | ready | error
   const [liveError, setLiveError] = useState(null);
   const [fetchedAt, setFetchedAt] = useState(null);
 
-  // Local what-if sandbox (Real mode). Overrides live only here; never persisted.
+  // Local what-if sandbox. Overrides live only in React state; never persisted.
   const [overrides, setOverrides] = useState({});
   const editCount = Object.keys(overrides).length;
   const onEdit = useCallback((cellKey, value) => {
@@ -886,17 +876,16 @@ const InvoicesTestingView = () => {
     }
   }, []);
 
-  // First switch to Real triggers a fetch (once).
+  // Fetch the sheet once on mount.
   useEffect(() => {
-    if (real && liveStatus === 'idle') fetchLive(false);
-  }, [real, liveStatus, fetchLive]);
+    if (liveStatus === 'idle') fetchLive(false);
+  }, [liveStatus, fetchLive]);
 
-  // The workbook backing the current mode: dummy placeholders, or (Real mode)
-  // the live fetch with the frozen snapshot as fallback. Both are the same
-  // shape, so ONE resolver/dataset pipeline serves both — the what-if sandbox
-  // works identically on dummy and live data.
-  const usingFallback = real && liveStatus === 'error';
-  const activeWorkbook = real ? (liveWorkbook || FROZEN_WORKBOOK) : DUMMY_WORKBOOK;
+  // The workbook backing the tab: the live fetch, or the frozen snapshot when a
+  // fetch fails. Same shape either way, so one resolver/dataset pipeline serves
+  // both, and the what-if sandbox works on whichever is showing.
+  const usingFallback = liveStatus === 'error';
+  const activeWorkbook = liveWorkbook || FROZEN_WORKBOOK;
 
   // Apply sandbox overrides, then assemble the view dataset from the result.
   // resolveWorkbook is pure, so memoizing on [workbook, overrides] is safe.
@@ -907,46 +896,24 @@ const InvoicesTestingView = () => {
   const dataset = useMemo(() => buildRealDataset(resolvedWorkbook), [resolvedWorkbook]);
   // Cached (no-override) dataset — the delta baseline for cells that change from
   // an upstream what-if edit but aren't directly editable (P&L, Cash derived).
-  // Only needed once edits exist.
   const baseDataset = useMemo(
     () => (editCount > 0 ? buildRealDataset(activeWorkbook) : null),
     [editCount, activeWorkbook],
   );
   const edit = { editable: true, meta, onEdit };
 
-  const monthKeys = real ? REAL_MONTH_ORDER : DUMMY_MONTH_KEYS;
   const monthDataFor = (key) => dataset.monthData[key];
+  const monthTabs = MONTH_ORDER.map((k) => ({ key: k, label: MONTH_LABEL[k] }));
 
-  // Rollover (dummy only)
-  const latest = rolled.length ? rolled[rolled.length - 1] : { name: 'July', year: 2026, data: MONTH_DATA.july };
-  const next = nextCalendarMonth(latest.name, latest.year);
-  const labelOf = (name, year) => (year === 2026 ? name : `${name} ${year}`);
-  const rollOver = () => {
-    if (!next) return;
-    const data = buildMonthData(latest.data.attorneys, 8 + rolled.length, expenseMonthTotal(6));
-    const key = `roll-${next.year}-${next.name.toLowerCase()}`;
-    setRolled((prev) => [...prev, { key, name: next.name, year: next.year, data, fromLabel: labelOf(latest.name, latest.year) }]);
-    setActiveTab(key);
-  };
-  const rolledMap = Object.fromEntries(rolled.map((r) => [r.key, r]));
-
-  const switchMode = (m) => { setMode(m); setActiveTab('cash-accounting'); setOverrides({}); };
-
-  const monthTabs = real
-    ? monthKeys.map((k) => ({ key: k, label: MONTH_LABEL[k] }))
-    : [...[...rolled].reverse().map((r) => ({ key: r.key, label: labelOf(r.name, r.year) })), ...monthKeys.map((k) => ({ key: k, label: MONTH_LABEL[k] }))];
-
-  // Drift for the active sub-tab (Real mode only): recompute vs the sheet.
+  // Drift for the active sub-tab: recompute vs the sheet.
   const activeDrift = useMemo(() => {
-    if (!real) return null;
-    if (monthKeys.includes(activeTab)) return monthDrift(rawMonthEntry(activeWorkbook, activeTab));
+    if (MONTH_ORDER.includes(activeTab)) return monthDrift(rawMonthEntry(activeWorkbook, activeTab));
     if (activeTab === 'cash-accounting') return cashDrift(activeWorkbook);
     return null;
-  }, [real, activeTab, activeWorkbook, monthKeys]);
+  }, [activeTab, activeWorkbook]);
 
   const renderTab = () => {
-    if (rolledMap[activeTab]) return <MonthTab data={rolledMap[activeTab].data} rolledFrom={rolledMap[activeTab].fromLabel} />;
-    if (monthKeys.includes(activeTab)) {
+    if (MONTH_ORDER.includes(activeTab)) {
       const data = monthDataFor(activeTab);
       if (!data) return null;
       return <MonthTab data={data} monthKey={activeTab} edit={edit} />;
@@ -958,16 +925,16 @@ const InvoicesTestingView = () => {
       case 'profits-paid': return <ProfitsPaidScaffold rows={ds.profitsRows} />;
       case 'expenses': return <ExpensesScaffold rows={ds.expenseRows} edit={edit} />;
       case 'pnl': return <PnlScaffold months={ds.pnl.months} rows={ds.pnl.rows} baseRows={baseDataset ? baseDataset.pnl.rows : undefined} />;
-      case 'balance-sheet': return <BalanceSheetScaffold rows={real ? ds.balanceRows.map(classifyBalanceRow) : BALANCE_ROWS} />;
+      case 'balance-sheet': return <BalanceSheetScaffold rows={ds.balanceRows.length ? ds.balanceRows.map(classifyBalanceRow) : BALANCE_ROWS} />;
       case 'payment-status':
-        return <PaymentStatusScaffold register={ds.paymentRows} total={ds.paymentTotal} realTerms={real ? false : undefined} edit={edit} />;
+        return <PaymentStatusScaffold register={ds.paymentRows} total={ds.paymentTotal} realTerms={false} edit={edit} />;
       case 'copy-payment-status':
-        return <PaymentStatusScaffold register={ds.copyRows} total={ds.copyTotal} realTerms={real ? false : undefined} />;
+        return <PaymentStatusScaffold register={ds.copyRows} total={ds.copyTotal} realTerms={false} />;
       default: return null;
     }
   };
 
-  const loadingLive = real && liveStatus === 'loading' && !liveWorkbook;
+  const loadingLive = liveStatus === 'loading' && !liveWorkbook;
 
   const pill = (active) => cx(
     'rounded-full px-3.5 py-1.5 text-[13px] font-medium whitespace-nowrap transition-colors',
@@ -984,7 +951,7 @@ const InvoicesTestingView = () => {
           <p className="mt-0.5 text-sm text-cg-dark/80">A connected replica of the Invoices (2026) workbook — sub-tabs reference each other like the real cross-sheet formulas.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          {real && liveStatus === 'ready' && fetchedAt && (
+          {liveStatus === 'ready' && fetchedAt && (
             <span className="inline-flex items-center gap-2 rounded-full border border-[#cbe5d2] bg-[#f0f9f2] px-3 py-1.5 text-[12px] font-medium text-[#186a2f]" title="Reading the Google Sheet directly — every sub-tab recomputes from the live workbook.">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cg-green opacity-50" />
@@ -993,32 +960,21 @@ const InvoicesTestingView = () => {
               Live · synced {fmtSyncedAt(fetchedAt)}
             </span>
           )}
-          <div className="inline-flex rounded-full bg-[#e2e5d6] p-[3px] text-[13px] font-medium">
-            <button onClick={() => switchMode('dummy')} className={cx('rounded-full px-4 py-1.5 transition-all', !real ? 'bg-white text-cg-black shadow-sm' : 'text-cg-dark/70 hover:text-cg-black')}>Dummy</button>
-            <button onClick={() => switchMode('real')} className={cx('rounded-full px-4 py-1.5 transition-all', real ? 'bg-white text-cg-black shadow-sm' : 'text-cg-dark/70 hover:text-cg-black')}>Live sheet</button>
-          </div>
-          {real && (
-            <button
-              onClick={() => fetchLive(true)}
-              disabled={liveStatus === 'loading'}
-              className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-[12px] font-medium text-cg-dark shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-40"
-              title="Re-read the Google Sheet (bypasses the 5-minute server cache)"
-            >
-              <span className={cx(liveStatus === 'loading' && 'inline-block animate-spin')}>↻</span>
-              {liveStatus === 'loading' ? 'Refreshing…' : 'Refresh'}
-            </button>
-          )}
-          {!real && (
-            <button onClick={rollOver} disabled={!next} className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-[12px] font-medium text-cg-dark shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-40" title={next ? `Roll over to ${labelOf(next.name, next.year)}` : ''}>
-              + Next month{next ? ` · ${labelOf(next.name, next.year)}` : ''}
-            </button>
-          )}
+          <button
+            onClick={() => fetchLive(true)}
+            disabled={liveStatus === 'loading'}
+            className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-[12px] font-medium text-cg-dark shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-40"
+            title="Re-read the Google Sheet (bypasses the 5-minute server cache)"
+          >
+            <span className={cx(liveStatus === 'loading' && 'inline-block animate-spin')}>↻</span>
+            {liveStatus === 'loading' ? 'Refreshing…' : 'Refresh from sheet'}
+          </button>
         </div>
       </div>
 
       {usingFallback && (
         <div className="rounded-xl border border-[#ecd9a4] bg-[#fbf4de] px-3.5 py-2.5 text-[13px] text-[#7f6000]">
-          <span className="font-semibold">Live fetch failed — showing the frozen 7/2 snapshot.</span> {liveError}
+          <span className="font-semibold">Live fetch failed — showing the frozen snapshot.</span> {liveError}
           {' '}<button onClick={() => fetchLive(true)} className="font-semibold underline underline-offset-2">Retry</button>
         </div>
       )}
@@ -1026,7 +982,7 @@ const InvoicesTestingView = () => {
         <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e6c980] bg-[#fbf4de]/95 px-3.5 py-2.5 text-[13px] text-[#7f6000] shadow-sm backdrop-blur">
           <span className="flex items-center gap-2">
             <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9a514] px-1.5 text-[11px] font-bold text-white">{editCount}</span>
-            <span><span className="font-semibold">Sandbox — local edit{editCount > 1 ? 's' : ''} only.</span> Nothing is written to the Google Sheet; refresh or switch mode to discard.</span>
+            <span><span className="font-semibold">Sandbox — local edit{editCount > 1 ? 's' : ''} only.</span> Nothing is written to the Google Sheet; refresh to discard.</span>
           </span>
           <button onClick={() => setOverrides({})} className="rounded-full border border-[#d9a514] px-3 py-1 text-[12px] font-semibold transition-colors hover:bg-[#f5e7bb]">Reset all</button>
         </div>
@@ -1052,7 +1008,7 @@ const InvoicesTestingView = () => {
               <DriftChip drift={activeDrift} />
             </div>
           ) : <span />}
-          {editCount === 0 && (!real || liveStatus === 'ready') && (
+          {editCount === 0 && liveStatus === 'ready' && (
             <p className="text-[12px] text-gray-400">Click any number on the month, Cash, Expenses, or Payment Status tabs to model a what-if — deltas ripple through to the P&amp;L, and the sheet is never touched.</p>
           )}
         </div>

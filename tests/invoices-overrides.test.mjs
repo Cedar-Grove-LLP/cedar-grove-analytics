@@ -10,7 +10,7 @@ import {
 } from '../src/utils/invoicesOverrides.mjs';
 import { computeMonthlyWaterfall, computeCashProfits } from '../src/utils/invoicesCalc.mjs';
 import { REAL_WORKBOOK } from '../src/utils/invoicesRealData.mjs';
-import { buildRealDataset, DUMMY_WORKBOOK, DUMMY_CASH_ROWS, MONTH_DATA, INDEX_KEY } from '../src/utils/invoicesTestData.mjs';
+import { buildRealDataset } from '../src/utils/invoicesTestData.mjs';
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const near = (a, b, eps = 0.01) => Math.abs(a - b) < eps;
@@ -157,45 +157,6 @@ test('editing an Expenses V2 cell flows (delta) to its P&L line + NET INCOME', (
   // TOTAL EXPENSES up by bump, NET INCOME down by bump
   assert.ok(near(ds.pnl.rows.find((r) => r.label === 'TOTAL EXPENSES').vals[mo], expBase + bump), 'total expenses moved');
   assert.ok(near(ds.pnl.rows.find((r) => r.label === 'NET INCOME').vals[mo], netBase - bump), 'net income dropped');
-});
-
-// ---------------------------------------------------------------------------
-// DUMMY workbook — dummy mode runs through the SAME resolver/dataset pipeline.
-// ---------------------------------------------------------------------------
-test('DUMMY_WORKBOOK dataset reproduces the legacy dummy structures', () => {
-  const ds = buildRealDataset(DUMMY_WORKBOOK);
-  // cash rows match DUMMY_CASH_ROWS for the 7 workbook months
-  INDEX_KEY.forEach((k, m) => {
-    const a = ds.cashRows[m];
-    const b = DUMMY_CASH_ROWS[m];
-    for (const f of ['cashReceived', 'expenses', 'cgfDonation', 'attorneyPayout', 'revenueAccrued']) {
-      assert.ok(near(a[f] ?? 0, b[f] ?? 0), `${k}.${f}: ${a[f]} vs ${b[f]}`);
-    }
-  });
-  // month waterfalls match the buildMonthData originals
-  for (const k of INDEX_KEY) {
-    assert.ok(near(ds.monthData[k].waterfall.firmProfits, MONTH_DATA[k].waterfall.firmProfits), `${k} firmProfits`);
-  }
-  // register keeps its payment terms (dummy has them; real register doesn't)
-  assert.ok(ds.paymentRows.every((r) => r.paymentTerms === 15 || r.paymentTerms === 30 || r.paymentTerms === null));
-  assert.ok(ds.paymentRows.some((r) => r.paymentTerms != null), 'dummy terms preserved');
-});
-
-test('DUMMY_WORKBOOK: sandbox edits propagate identically to real mode', () => {
-  const base = buildRealDataset(DUMMY_WORKBOOK);
-  const bump = 10000;
-  const { workbook, meta } = resolveWorkbook(DUMMY_WORKBOOK, {
-    [wfKey('june', 'attorneyBillables')]: DUMMY_WORKBOOK.months.june.inputs.attorneyBillables + bump,
-  });
-  const ds = buildRealDataset(workbook);
-  assert.equal(meta.get(wfKey('june', 'attorneyBillables')).state, 'edited');
-  assert.ok(near(ds.monthData.june.waterfall.revenueAccrued, base.monthData.june.waterfall.revenueAccrued + bump), 'waterfall moved');
-  assert.ok(near(ds.cashRows[5].revenueAccrued, base.cashRows[5].revenueAccrued + bump), 'cash revenue link moved');
-  // and a cash edit reaches the dummy P&L exactly like real mode
-  const res2 = resolveWorkbook(DUMMY_WORKBOOK, { [cashKey('march', 'cashReceived')]: DUMMY_WORKBOOK.cash.march.inputs.cashReceived + bump });
-  const ds2 = buildRealDataset(res2.workbook);
-  const net = (d) => d.pnl.rows.find((r) => r.label === 'NET INCOME').vals[2];
-  assert.ok(near(net(ds2), net(base) + bump), 'dummy P&L NET INCOME moved');
 });
 
 test('resolveWorkbook does not mutate the input workbook', () => {
