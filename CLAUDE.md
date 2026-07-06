@@ -126,10 +126,27 @@ invoices/all            — all client invoices in a single doc, synced from the
                            workbook's "Payment Status" sheet tab (source of truth):
                            { entryCount, syncedAt, entries: [{ client, amount, year,
                                dateSent, status ("Paid"|"Not Paid"|"Payment Initiated"),
-                               lastReminder, dateReceived, notes, sheetRowNumber }] }
+                               lastReminder, dateReceived, notes, sheetRowNumber,
+                               matchedTransactionId?,
+                               payments?: [{ transactionId, amount, date }] }] }
                            Drives the calculated client Payment Status tags
                            (utils/paymentStatus.mjs) and the admin Billing KPIs /
                            invoice-matching pages.
+                           `payments[]` is the frontend-owned payment ledger (partial +
+                           split payments): each element applies a dollar amount to this
+                           invoice from one Mercury transaction (`transactionId`) or a
+                           manual payment (null). `status`, `dateReceived`, and
+                           `matchedTransactionId` are DERIVED from the ledger by
+                           utils/invoicePayments.mjs (deriveInvoicePaymentFields) and
+                           persisted alongside it, so the tag engine / KPIs / write-back
+                           stay unchanged — an invoice is Paid only when the ledger covers
+                           the full amount (partial = still outstanding). A single
+                           transaction may appear on several invoices' ledgers (split);
+                           its unallocated remainder drives the match selector and the
+                           transactions "Unmatched Payments" filter. Legacy invoices
+                           without `payments[]` are read as one full payment (back-compat
+                           shim) — no migration needed. Apps Script `syncInvoices` must
+                           preserve `payments` (frontend-owned) across sheet re-syncs.
 
 matters/{autoId}         — name, clientName, createdAt, lastUsedAt, createdBy
                            (managed by Google Sheets Apps Script for matter dropdowns)
