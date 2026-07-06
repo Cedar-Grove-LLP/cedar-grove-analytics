@@ -244,7 +244,12 @@ export function assembleWorkbook(gridsByKey, opts = {}) {
   };
 
   MONTHS.forEach((m) => { out.months[m] = extractMonthTab(g(`month:${m}`)); });
-  Object.keys(EXTRA_MONTHS).forEach((k) => { out.monthsExtra[k] = extractMonthTab(g(`monthExtra:${k}`)); });
+  // Extra (backup) tabs are optional — skip any whose grid is empty (the tab
+  // was deleted from the workbook), so it doesn't render as an empty month.
+  Object.keys(EXTRA_MONTHS).forEach((k) => {
+    const grid = g(`monthExtra:${k}`);
+    if (grid.length) out.monthsExtra[k] = extractMonthTab(grid);
+  });
 
   const cash = g('cash');
   CASH_MONTHS.forEach((m, i) => {

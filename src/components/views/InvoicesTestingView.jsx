@@ -903,7 +903,10 @@ const InvoicesTestingView = () => {
   const edit = { editable: true, meta, onEdit };
 
   const monthDataFor = (key) => dataset.monthData[key];
-  const monthTabs = MONTH_ORDER.map((k) => ({ key: k, label: MONTH_LABEL[k] }));
+  // Only show month tabs the workbook actually has (a backup tab the firm
+  // deleted, e.g. "June - original", simply won't appear).
+  const monthTabs = MONTH_ORDER.filter((k) => dataset.monthData[k]).map((k) => ({ key: k, label: MONTH_LABEL[k] }));
+  const hasCopyTab = dataset.copyRows && dataset.copyRows.length > 0;
 
   // Drift for the active sub-tab: recompute vs the sheet.
   const activeDrift = useMemo(() => {
@@ -996,8 +999,12 @@ const InvoicesTestingView = () => {
         {monthTabs.map((tab) => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={pill(activeTab === tab.key)}>{tab.label}</button>
         ))}
-        {groupDivider}
-        <button onClick={() => setActiveTab(copyTab.key)} className={pill(activeTab === copyTab.key)} title="Frozen 06/30 backup of the register">{copyTab.label}</button>
+        {hasCopyTab && (
+          <>
+            {groupDivider}
+            <button onClick={() => setActiveTab(copyTab.key)} className={pill(activeTab === copyTab.key)} title="Frozen 06/30 backup of the register">{copyTab.label}</button>
+          </>
+        )}
       </div>
 
       {!loadingLive && (

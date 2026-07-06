@@ -84,11 +84,32 @@ function loadServiceAccount() {
   throw new Error("no service-account key configured (GOOGLE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY)");
 }
 
+// The tab name a range targets (ranges are always A1-quoted: 'Sheet Name'!A1:..).
+const rangeSheetName = (range) => {
+  const m = range.match(/^'(.+?)'!/);
+  return m ? m[1] : range.split("!")[0];
+};
+
+async function getExistingTitles(token) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKBOOK_ID}?fields=sheets.properties.title`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || `Sheets metadata error ${res.status}`);
+  return new Set((data.sheets || []).map((s) => s.properties && s.properties.title));
+}
+
 async function fetchWorkbook() {
   const key = loadServiceAccount();
   const token = await getAccessToken(key);
+
+  // Only request ranges whose tab still exists — batchGet fails the ENTIRE call
+  // if any single range names a missing sheet (e.g. a backup tab the firm has
+  // since deleted). Skipped tabs are simply absent from the assembled workbook.
+  const titles = await getExistingTitles(token);
+  const active = RANGES.filter((r) => titles.has(rangeSheetName(r.range)));
+
   const qs =
-    RANGES.map((r) => `ranges=${encodeURIComponent(r.range)}`).join("&") +
+    active.map((r) => `ranges=${encodeURIComponent(r.range)}`).join("&") +
     "&valueRenderOption=UNFORMATTED_VALUE";
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${WORKBOOK_ID}/values:batchGet?${qs}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -98,7 +119,7 @@ async function fetchWorkbook() {
   }
 
   const gridsByKey = {};
-  RANGES.forEach((r, i) => {
+  active.forEach((r, i) => {
     gridsByKey[r.key] = (data.valueRanges && data.valueRanges[i] && data.valueRanges[i].values) || [];
   });
   const fetchedAt = new Date().toISOString();
