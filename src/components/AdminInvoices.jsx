@@ -443,21 +443,25 @@ const AdminInvoices = () => {
     }));
   };
 
-  // Export the currently filtered/sorted invoices to CSV. Amount is exported
-  // as a raw number (no $) so it's spreadsheet-friendly.
+  // Export only the OUTSTANDING (unpaid) invoices from the current filtered
+  // view. Uses the same `status !== 'Paid'` predicate as the Outstanding KPI
+  // so the exported count matches the button label. Amount is a raw number
+  // (no $) so it's spreadsheet-friendly.
   const handleExportCSV = () => {
     const headers = ['Client', 'Amount', 'Year', 'Date Sent', 'Status', 'Date Received', 'Last Reminder', 'Notes'];
-    const rows = filteredAndSorted.map((inv) => [
-      inv.client || '',
-      inv.amount ?? '',
-      inv.year ?? '',
-      inv.dateSent || '',
-      inv.status || '',
-      inv.dateReceived || '',
-      inv.lastReminder || '',
-      inv.notes || '',
-    ]);
-    downloadCSV(`invoices-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    const rows = filteredAndSorted
+      .filter((inv) => inv.status !== 'Paid')
+      .map((inv) => [
+        inv.client || '',
+        inv.amount ?? '',
+        inv.year ?? '',
+        inv.dateSent || '',
+        inv.status || '',
+        inv.dateReceived || '',
+        inv.lastReminder || '',
+        inv.notes || '',
+      ]);
+    downloadCSV(`outstanding-invoices-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   const getSortIndicator = (key) => {
@@ -1050,12 +1054,12 @@ const AdminInvoices = () => {
 
               <button
                 onClick={handleExportCSV}
-                disabled={filteredAndSorted.length === 0}
+                disabled={summaryStats.outstandingCount === 0}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title="Export the filtered invoices to CSV"
+                title="Export the outstanding invoices in the current view to CSV"
               >
                 <Download className="w-4 h-4" />
-                <span>Export CSV</span>
+                <span>Export Outstanding</span>
               </button>
 
               <span className="ml-auto text-sm text-gray-500">
