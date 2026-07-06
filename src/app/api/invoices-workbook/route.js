@@ -65,21 +65,26 @@ async function getAccessToken(key) {
 }
 
 // The Sheets read uses the same service account as Firebase Admin (we reused
-// that account and shared the workbook with it). Prefer a dedicated
-// GOOGLE_SERVICE_ACCOUNT_KEY if set + valid, but fall back to the
-// FIREBASE_SERVICE_ACCOUNT_KEY that already exists in the deployment — so no
-// second env var has to be pasted correctly.
-function loadServiceAccount() {
+// that account and shared the workbook with it). We collect EVERY parseable
+// candidate key — a dedicated GOOGLE_SERVICE_ACCOUNT_KEY first, then the
+// FIREBASE_SERVICE_ACCOUNT_KEY that already exists in the deployment — and try
+// them in order at fetch time (see fetchWorkbook). Falling back only on a
+// *parse* error isn't enough: a valid-JSON key for the wrong service account
+// (one not shared on the sheet) authenticates fine but gets 403 PERMISSION_DENIED
+// on the read, so we must fall through on auth/permission failures too.
+function loadServiceAccounts() {
+  const candidates = [];
   const invalid = [];
   for (const name of ["GOOGLE_SERVICE_ACCOUNT_KEY", "FIREBASE_SERVICE_ACCOUNT_KEY"]) {
     const raw = process.env[name];
     if (!raw) continue;
     try {
-      return JSON.parse(raw);
+      candidates.push({ name, key: JSON.parse(raw) });
     } catch {
-      invalid.push(name); // malformed — try the next candidate
+      invalid.push(name); // malformed — skip, try the next candidate
     }
   }
+  if (candidates.length) return candidates;
   if (invalid.length) throw new Error(`service-account key is not valid JSON (${invalid.join(", ")})`);
   throw new Error("no service-account key configured (GOOGLE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY)");
 }
@@ -98,8 +103,9 @@ async function getExistingTitles(token) {
   return new Set((data.sheets || []).map((s) => s.properties && s.properties.title));
 }
 
-async function fetchWorkbook() {
-  const key = loadServiceAccount();
+// Read the workbook with one specific service-account key. Throws on any
+// token/permission/API failure so the caller can try the next candidate.
+async function fetchWorkbookWithKey(key) {
   const token = await getAccessToken(key);
 
   // Only request ranges whose tab still exists — batchGet fails the ENTIRE call
@@ -129,6 +135,23 @@ async function fetchWorkbook() {
     profitHighlights: PROFIT_HIGHLIGHTS,
   });
   return { workbook, fetchedAt };
+}
+
+async function fetchWorkbook() {
+  const candidates = loadServiceAccounts();
+  let lastErr = null;
+  for (const { name, key } of candidates) {
+    try {
+      return await fetchWorkbookWithKey(key);
+    } catch (err) {
+      // A valid-JSON key for the wrong account authenticates but 403s on the
+      // read — fall through to the next candidate instead of failing outright.
+      lastErr = err;
+      const msg = String((err && err.message) || err);
+      console.warn(`invoices-workbook: read via ${name} failed, trying next candidate:`, msg);
+    }
+  }
+  throw lastErr || new Error("no usable service-account key");
 }
 
 export async function GET(request) {
