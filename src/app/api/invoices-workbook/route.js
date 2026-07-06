@@ -64,16 +64,28 @@ async function getAccessToken(key) {
   return data.access_token;
 }
 
-async function fetchWorkbook() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
-  if (!raw) throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY is not configured");
-  let key;
-  try {
-    key = JSON.parse(raw);
-  } catch {
-    throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON");
+// The Sheets read uses the same service account as Firebase Admin (we reused
+// that account and shared the workbook with it). Prefer a dedicated
+// GOOGLE_SERVICE_ACCOUNT_KEY if set + valid, but fall back to the
+// FIREBASE_SERVICE_ACCOUNT_KEY that already exists in the deployment — so no
+// second env var has to be pasted correctly.
+function loadServiceAccount() {
+  const invalid = [];
+  for (const name of ["GOOGLE_SERVICE_ACCOUNT_KEY", "FIREBASE_SERVICE_ACCOUNT_KEY"]) {
+    const raw = process.env[name];
+    if (!raw) continue;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      invalid.push(name); // malformed — try the next candidate
+    }
   }
+  if (invalid.length) throw new Error(`service-account key is not valid JSON (${invalid.join(", ")})`);
+  throw new Error("no service-account key configured (GOOGLE_SERVICE_ACCOUNT_KEY or FIREBASE_SERVICE_ACCOUNT_KEY)");
+}
 
+async function fetchWorkbook() {
+  const key = loadServiceAccount();
   const token = await getAccessToken(key);
   const qs =
     RANGES.map((r) => `ranges=${encodeURIComponent(r.range)}`).join("&") +
