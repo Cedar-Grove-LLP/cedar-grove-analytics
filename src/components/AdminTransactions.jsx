@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge } from '@/utils/statusStyles';
 import { downloadCSV } from '@/utils/csv';
+import { allocatedByTransaction, transactionRemaining, PAYMENT_EPSILON } from '@/utils/invoicePayments.mjs';
 
 const FILTER_OPTIONS = [
   { key: 'all', label: 'All Transactions' },
@@ -22,7 +23,7 @@ const AdminTransactions = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const [transactions, setTransactions] = useState([]);
-  const [matchedTxnIds, setMatchedTxnIds] = useState(() => new Set());
+  const [invoiceEntries, setInvoiceEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
@@ -34,22 +35,16 @@ const AdminTransactions = () => {
 
   const fetchTransactions = useCallback(async () => {
     try {
-      // Load transactions plus the invoices doc so we can flag which payments
-      // are already matched to an invoice (drives the "Unmatched Payments"
-      // filter). matchedTransactionId is set by the invoices dashboard.
+      // Load transactions plus the invoices doc so we can tell how much of
+      // each payment is still unallocated (drives the "Unmatched Payments"
+      // filter). Payment ledgers are written by the invoices dashboard.
       const [snapshot, invoicesSnap] = await Promise.all([
         getDocs(collection(db, 'transactions')),
         getDoc(doc(db, 'invoices', 'all')),
       ]);
       const docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       setTransactions(docs);
-
-      const entries = invoicesSnap.exists() ? (invoicesSnap.data().entries || []) : [];
-      const matched = new Set();
-      for (const inv of entries) {
-        if (inv.matchedTransactionId) matched.add(inv.matchedTransactionId);
-      }
-      setMatchedTxnIds(matched);
+      setInvoiceEntries(invoicesSnap.exists() ? (invoicesSnap.data().entries || []) : []);
     } catch (err) {
       console.error('Error fetching transactions:', err);
     } finally {
@@ -119,6 +114,10 @@ const AdminTransactions = () => {
     downloadCSV(`transactions-${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
+  // How much of each payment has been applied to invoices — a payment with
+  // any amount still unallocated counts as "unmatched".
+  const allocatedMap = useMemo(() => allocatedByTransaction(invoiceEntries), [invoiceEntries]);
+
   const filteredAndSorted = useMemo(() => {
     let items = transactions;
 
@@ -127,8 +126,11 @@ const AdminTransactions = () => {
     } else if (filter === 'payments') {
       items = items.filter((t) => t.amount > 0);
     } else if (filter === 'unmatched') {
-      // Incoming payments not yet matched to any invoice.
-      items = items.filter((t) => t.amount > 0 && !matchedTxnIds.has(t.id));
+      // Incoming payments with money still to allocate (includes partially
+      // applied split payments).
+      items = items.filter(
+        (t) => t.amount > 0 && transactionRemaining(t.id, t.amount, allocatedMap) > PAYMENT_EPSILON
+      );
     }
 
     // Counterparty name search (case-insensitive substring)
@@ -176,7 +178,7 @@ const AdminTransactions = () => {
     });
 
     return items;
-  }, [transactions, matchedTxnIds, filter, nameFilter, startDate, endDate, sortConfig]);
+  }, [transactions, allocatedMap, filter, nameFilter, startDate, endDate, sortConfig]);
 
   const summaryStats = useMemo(() => {
     const expenses = transactions.filter((t) => t.amount < 0);
