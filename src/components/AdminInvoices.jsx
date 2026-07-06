@@ -11,6 +11,14 @@ import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge, getMatchTypeBadge } from '@/utils/statusStyles';
 import { downloadCSV } from '@/utils/csv';
+import {
+  readPayments,
+  deriveInvoicePaymentFields,
+  allocatedByTransaction,
+  transactionRemaining,
+  PAYMENT_EPSILON,
+  PAYMENT_STATE,
+} from '@/utils/invoicePayments.mjs';
 import { parseInvoiceDate } from '@/utils/paymentStatus.mjs';
 
 const MONTH_NAMES = [
@@ -70,8 +78,8 @@ const AdminInvoices = () => {
   const [sortConfig, setSortConfig] = useState({ key: 'dateSent', direction: 'desc' });
   const [clientsData, setClientsData] = useState([]);
   const [matchSelections, setMatchSelections] = useState({});
+  const [amountInputs, setAmountInputs] = useState({});
   const [savingAlias, setSavingAlias] = useState(null);
-  const [confirmedMatches, setConfirmedMatches] = useState({});
   const [markingPaid, setMarkingPaid] = useState(null);
   const [editingDateRow, setEditingDateRow] = useState(null);
   const [editDateValue, setEditDateValue] = useState('');
@@ -352,7 +360,7 @@ const AdminInvoices = () => {
       const snap = await getDoc(doc(db, 'invoices', 'all'));
       const current = snap.exists() ? (snap.data().entries || []) : [];
       const updated = current.map((inv) =>
-        invoiceKey(inv) === targetKey ? updater(inv) : inv
+        invoiceKey(inv) === targetKey ? updater(inv, current) : inv
       );
       await setDoc(doc(db, 'invoices', 'all'), { entries: updated }, { merge: true });
       setInvoices(updated);
@@ -389,23 +397,16 @@ const AdminInvoices = () => {
     }
   };
 
-  // Restore confirmed matches from persisted matchedTransactionId on invoice entries
-  useEffect(() => {
-    if (invoices.length === 0 || transactions.length === 0) return;
-    const txnMap = new Map(transactions.map((t) => [t.id, t]));
-    const restored = {};
-    for (const inv of invoices) {
-      if (inv.matchedTransactionId) {
-        const txn = txnMap.get(inv.matchedTransactionId);
-        if (txn) {
-          restored[inv.sheetRowNumber] = { txn, matchType: 'confirmed' };
-        }
-      }
-    }
-    if (Object.keys(restored).length > 0) {
-      setConfirmedMatches(restored);
-    }
-  }, [invoices, transactions]);
+  // Fast lookup of a transaction by id — used to render the counterparty on
+  // each applied payment chip and to resolve match selections.
+  const txnById = useMemo(
+    () => new Map(transactions.map((t) => [t.id, t])),
+    [transactions]
+  );
+
+  // How much of each transaction is already applied across ALL invoices, so a
+  // split payment's remaining balance can bound further allocations.
+  const allocatedMap = useMemo(() => allocatedByTransaction(invoices), [invoices]);
 
   const handleLogout = async () => {
     await signOut();
@@ -424,15 +425,18 @@ const AdminInvoices = () => {
   // Export only the outstanding (unpaid) invoices from the current filtered
   // view. Amount is a raw number for spreadsheet use.
   const handleExportCSV = () => {
-    const headers = ['Client', 'Amount', 'Year', 'Date Sent', 'Status', 'Date Received', 'Last Reminder', 'Notes'];
+    const headers = ['Client', 'Amount', 'Amount Paid', 'Balance', 'Year', 'Date Sent', 'Status', 'Date Received', 'Last Reminder', 'Notes'];
     const rows = filteredAndSorted
-      .filter((inv) => inv.status !== 'Paid')
-      .map((inv) => [
+      .map((inv) => ({ inv, d: deriveInvoicePaymentFields(inv) }))
+      .filter(({ d }) => !d.isPaid)
+      .map(({ inv, d }) => [
         inv.client || '',
         inv.amount ?? '',
+        d.amountPaid,
+        d.balance,
         inv.year ?? '',
         inv.dateSent || '',
-        inv.status || '',
+        d.paymentState === 'partial' ? 'Partial' : (inv.status || 'Outstanding'),
         inv.dateReceived || '',
         inv.lastReminder || '',
         inv.notes || '',
@@ -537,19 +541,20 @@ const AdminInvoices = () => {
   // "previously paid as". Derived from every invoice with a matched Mercury
   // transaction, across the full book (not just the filtered view).
   const paidAsByClient = useMemo(() => {
-    const txnById = new Map(transactions.map((t) => [t.id, t]));
     const map = {};
     for (const inv of invoices) {
-      if (!inv.matchedTransactionId) continue;
-      const txn = txnById.get(inv.matchedTransactionId);
-      const cp = txn && txn.counterpartyName ? txn.counterpartyName.trim() : '';
-      if (!cp) continue;
       const key = (inv.client || '').toLowerCase();
-      if (!map[key]) map[key] = new Set();
-      map[key].add(cp);
+      for (const p of readPayments(inv)) {
+        if (!p.transactionId) continue;
+        const txn = txnById.get(p.transactionId);
+        const cp = txn && txn.counterpartyName ? txn.counterpartyName.trim() : '';
+        if (!cp) continue;
+        if (!map[key]) map[key] = new Set();
+        map[key].add(cp);
+      }
     }
     return map;
-  }, [invoices, transactions]);
+  }, [invoices, txnById]);
 
   // Counterparty names a client paid under, excluding names identical to the
   // client name (those add no information).
@@ -567,15 +572,6 @@ const AdminInvoices = () => {
   const matchCandidates = useMemo(() => {
     const candidateMap = {};
 
-    // Transactions already matched to an invoice — hidden from every
-    // selector so one payment can't be matched to two invoices. Scans the
-    // full invoices list (not filteredAndSorted) so a match made under a
-    // different month/status filter is still excluded.
-    const matchedTxnIds = new Set();
-    for (const inv of invoices) {
-      if (inv.matchedTransactionId) matchedTxnIds.add(inv.matchedTransactionId);
-    }
-
     for (const inv of filteredAndSorted) {
       const clientLower = (inv.client || '').toLowerCase();
       const invSentDate = parseDateSent(inv.dateSent, inv.year);
@@ -583,8 +579,9 @@ const AdminInvoices = () => {
       const seenTxnIds = new Set();
 
       for (const txn of transactions) {
-        // Skip transactions already matched to another invoice
-        if (matchedTxnIds.has(txn.id)) continue;
+        // Skip transactions with nothing left to allocate. A split payment
+        // stays suggestible (to other invoices) until fully applied.
+        if (transactionRemaining(txn.id, txn.amount, allocatedMap) <= PAYMENT_EPSILON) continue;
         // Only consider payments in the window [invoice sent, +90 days].
         // A payment can't predate the invoice, and capping at 90 days keeps
         // very old invoices from accumulating dozens of coincidental matches.
@@ -640,89 +637,109 @@ const AdminInvoices = () => {
     }
 
     return candidateMap;
-  }, [filteredAndSorted, transactions, aliases, invoices]);
+  }, [filteredAndSorted, transactions, aliases, allocatedMap]);
 
-  // Confirm a match: save alias + persist match on the invoice + mark as Paid
-  const handleConfirmMatch = async (invoice, transactionId) => {
-    const txn = transactions.find((t) => t.id === transactionId);
-    if (!txn) return;
+  // Write the derived back-compat fields (status/dateReceived/matchedTransactionId)
+  // for a ledger so downstream consumers stay in sync.
+  const withDerivedFields = (inv, payments) => {
+    const derived = deriveInvoicePaymentFields({ ...inv, payments });
+    return {
+      ...inv,
+      payments,
+      status: derived.status,
+      dateReceived: derived.dateReceived != null ? derived.dateReceived : '',
+      matchedTransactionId: derived.matchedTransactionId != null ? derived.matchedTransactionId : null,
+    };
+  };
 
-    const cpLower = (txn.counterpartyName || '').toLowerCase();
-    if (!cpLower) return;
+  // Apply a payment to an invoice — a full or partial amount from a matched
+  // Mercury transaction (transactionId set) or a manual payment (null). The
+  // amount is capped to the invoice's remaining balance and, for a matched
+  // txn, to that transaction's unallocated remainder — computed against a
+  // FRESH read inside the serialized write so concurrent split allocations
+  // can't over-apply. Saves the counterparty→client alias on a real match.
+  const handleApplyPayment = async (invoice, transactionId, rawAmount) => {
+    const txn = transactionId ? txnById.get(transactionId) : null;
+    const requested = Math.round((parseFloat(rawAmount) + Number.EPSILON) * 100) / 100;
+    if (!requested || requested <= 0) return;
 
-    setSavingAlias(invoice.sheetRowNumber);
-
+    const rowKey = invoice.sheetRowNumber;
+    setSavingAlias(rowKey);
     try {
-      // Build updated aliases (add client to array if not already present)
-      const updatedAliases = { ...aliases };
-      const existing = updatedAliases[cpLower] || [];
-      if (!existing.includes(invoice.client)) {
-        updatedAliases[cpLower] = [...existing, invoice.client];
+      // Save the alias (counterparty name → client) on a real match.
+      let aliasWrite = null;
+      if (txn) {
+        const cpLower = (txn.counterpartyName || '').toLowerCase();
+        if (cpLower) {
+          const existing = aliases[cpLower] || [];
+          if (!existing.includes(invoice.client)) {
+            const updatedAliases = { ...aliases, [cpLower]: [...existing, invoice.client] };
+            aliasWrite = setDoc(doc(db, 'clientAliases', 'all'), { aliases: updatedAliases });
+            setAliases(updatedAliases);
+          }
+        }
       }
 
-      // Persist the alias and the single-row invoice change. The invoice write
-      // goes through updateInvoiceEntry (fresh read + serialized) so a rapid
-      // sequence of matches can't clobber each other. Match by stable natural
-      // key — sheetRowNumber may shift between syncs.
-      await Promise.all([
-        setDoc(doc(db, 'clientAliases', 'all'), { aliases: updatedAliases }),
-        updateInvoiceEntry(invoice, (inv) => ({
-          ...inv,
-          matchedTransactionId: transactionId,
-          status: 'Paid',
-          dateReceived: txn.postedAt || txn.createdAt || inv.dateReceived,
-        })),
-      ]);
-
-      // Update local state
-      setAliases(updatedAliases);
-      setConfirmedMatches((prev) => ({
-        ...prev,
-        [invoice.sheetRowNumber]: { txn, matchType: 'alias' },
-      }));
-      setMatchSelections((prev) => {
-        const next = { ...prev };
-        delete next[invoice.sheetRowNumber];
-        return next;
+      const invoiceWrite = updateInvoiceEntry(invoice, (inv, all) => {
+        const payments = readPayments(inv);
+        const { balance } = deriveInvoicePaymentFields(inv);
+        let applied = Math.min(requested, balance);
+        if (txn) {
+          const remaining = transactionRemaining(txn.id, txn.amount, allocatedByTransaction(all));
+          applied = Math.min(applied, remaining);
+        }
+        applied = Math.round((applied + Number.EPSILON) * 100) / 100;
+        if (applied <= 0) return inv; // nothing left to apply
+        payments.push({
+          transactionId: txn ? txn.id : null,
+          amount: applied,
+          date: txn ? (txn.postedAt || txn.createdAt || null) : new Date().toLocaleDateString('en-US'),
+        });
+        return withDerivedFields(inv, payments);
       });
+
+      await Promise.all([aliasWrite, invoiceWrite].filter(Boolean));
+
+      setMatchSelections((prev) => { const n = { ...prev }; delete n[rowKey]; return n; });
+      setAmountInputs((prev) => { const n = { ...prev }; delete n[rowKey]; return n; });
     } catch (err) {
-      console.error('Error saving match:', err);
+      console.error('Error applying payment:', err);
     } finally {
       setSavingAlias(null);
     }
   };
 
-  // Dismiss a confirmed match: clear persisted match and revert status
-  const handleDismissMatch = async (sheetRowNumber) => {
+  // Remove one applied payment (identified by txn/amount/date) from an
+  // invoice's ledger, freeing that money to be applied elsewhere.
+  const handleRemovePayment = async (invoice, payment) => {
+    const sig = (p) => `${p.transactionId}|${p.amount}|${p.date}`;
+    const target = sig(payment);
     try {
-      // Resolve the target invoice by sheetRowNumber for the current in-memory
-      // list, then let updateInvoiceEntry match by stable natural key on a
-      // fresh read so row shifts between fetch and write don't touch the wrong
-      // entry and concurrent edits aren't clobbered.
-      const target = invoices.find((inv) => inv.sheetRowNumber === sheetRowNumber);
-      if (target) {
-        await updateInvoiceEntry(target, (inv) => {
-          const { matchedTransactionId, ...rest } = inv;
-          return { ...rest, status: '', dateReceived: '' };
-        });
-      }
+      await updateInvoiceEntry(invoice, (inv) => {
+        const payments = readPayments(inv);
+        const idx = payments.findIndex((p) => sig(p) === target);
+        if (idx >= 0) payments.splice(idx, 1);
+        return withDerivedFields(inv, payments);
+      });
     } catch (err) {
-      console.error('Error removing match:', err);
+      console.error('Error removing payment:', err);
     }
-
-    setConfirmedMatches((prev) => {
-      const next = { ...prev };
-      delete next[sheetRowNumber];
-      return next;
-    });
   };
 
-  // Manually mark an invoice as paid without a matched transaction
+  // Manually mark an invoice fully paid — applies a manual payment for the
+  // remaining balance (no matched transaction).
   const handleMarkPaid = async (invoice) => {
     try {
       setMarkingPaid(invoice.sheetRowNumber);
       const today = new Date().toLocaleDateString('en-US');
-      await updateInvoiceEntry(invoice, (inv) => ({ ...inv, status: 'Paid', dateReceived: today }));
+      await updateInvoiceEntry(invoice, (inv) => {
+        const payments = readPayments(inv);
+        const { balance } = deriveInvoicePaymentFields(inv);
+        if (balance > PAYMENT_EPSILON) {
+          payments.push({ transactionId: null, amount: balance, date: today });
+        }
+        return withDerivedFields(inv, payments);
+      });
     } catch (err) {
       console.error('Error marking invoice as paid:', err);
     } finally {
@@ -730,11 +747,13 @@ const AdminInvoices = () => {
     }
   };
 
-  // Revert a manually-marked paid invoice back to outstanding
+  // Revert an invoice to outstanding — clears the entire payment ledger.
   const handleUnmarkPaid = async (invoice) => {
     try {
       setMarkingPaid(invoice.sheetRowNumber);
-      await updateInvoiceEntry(invoice, (inv) => ({ ...inv, status: '', dateReceived: '' }));
+      await updateInvoiceEntry(invoice, (inv) => ({
+        ...inv, payments: [], status: '', dateReceived: '', matchedTransactionId: null,
+      }));
     } catch (err) {
       console.error('Error unmarking invoice:', err);
     } finally {
@@ -784,66 +803,97 @@ const AdminInvoices = () => {
   };
 
 
-  // Render the match cell for a given invoice row
+  // Label for one applied payment: counterparty (or "Manual"), amount, date.
+  const paymentLabel = (p) => {
+    const txn = p.transactionId ? txnById.get(p.transactionId) : null;
+    const who = txn ? (txn.counterpartyName || 'Unknown') : 'Manual';
+    return `${who} — ${formatCurrency(p.amount)} — ${formatTxnDate(p.date)}`;
+  };
+
+  // Remaining amount a matched candidate transaction still has to allocate.
+  const candidateRemaining = (txn) => transactionRemaining(txn.id, txn.amount, allocatedMap);
+
+  // Render the match cell for a given invoice row — applied payments (each
+  // removable) plus, while a balance remains, an apply control.
   const renderMatchCell = (inv) => {
     const rowKey = inv.sheetRowNumber;
-
-    // Show confirmed match
-    if (confirmedMatches[rowKey]) {
-      const { txn } = confirmedMatches[rowKey];
-      return (
-        <div className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-          <span className="text-xs text-green-700 truncate max-w-[180px]">
-            {txn.counterpartyName} — {formatCurrency(txn.amount)} — {formatTxnDate(txn.postedAt || txn.createdAt)}
-          </span>
-          <button
-            onClick={() => handleDismissMatch(rowKey)}
-            className="text-gray-400 hover:text-gray-600 flex-shrink-0"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      );
-    }
-
+    const { payments, balance } = deriveInvoicePaymentFields(inv);
     const candidates = matchCandidates[rowKey] || [];
-    if (candidates.length === 0) {
-      return <span className="text-gray-400 text-xs">No matches</span>;
-    }
-
     const selectedTxnId = matchSelections[rowKey];
+    const selectedTxn = selectedTxnId ? txnById.get(selectedTxnId) : null;
 
     return (
-      <div className="flex items-center gap-1">
-        <select
-          value={selectedTxnId || ''}
-          onChange={(e) =>
-            setMatchSelections((prev) => ({
-              ...prev,
-              [rowKey]: e.target.value || undefined,
-            }))
-          }
-          className="text-xs border border-gray-200 rounded px-2 py-1 bg-white max-w-[240px] focus:outline-none focus:ring-1 focus:ring-gray-300"
-        >
-          <option value="">
-            Select match... ({candidates.length})
-          </option>
-          {candidates.map((c) => (
-            <option key={c.txn.id} value={c.txn.id}>
-              {c.txn.counterpartyName || 'Unknown'} — {formatCurrency(c.txn.amount)} — {formatTxnDate(c.txn.postedAt || c.txn.createdAt)} ({c.matchType})
-            </option>
-          ))}
-        </select>
-        {selectedTxnId && (
-          <button
-            onClick={() => handleConfirmMatch(inv, selectedTxnId)}
-            disabled={savingAlias === rowKey}
-            className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 transition-colors flex-shrink-0"
-            title="Confirm match and save alias"
-          >
-            <Check className="w-3.5 h-3.5" />
-          </button>
+      <div className="flex flex-col gap-1.5">
+        {payments.map((p, i) => (
+          <div key={`${p.transactionId}-${p.date}-${i}`} className="flex items-center gap-1.5">
+            <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
+            <span className="text-xs text-green-700 truncate max-w-[200px]">{paymentLabel(p)}</span>
+            <button
+              onClick={() => handleRemovePayment(inv, p)}
+              className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+              title="Remove this payment"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ))}
+
+        {balance > PAYMENT_EPSILON && (
+          candidates.length === 0 && payments.length === 0 ? (
+            <span className="text-gray-400 text-xs">No matches</span>
+          ) : (
+            <div className="flex items-center gap-1 flex-wrap">
+              <select
+                value={selectedTxnId || ''}
+                onChange={(e) => {
+                  const id = e.target.value || undefined;
+                  setMatchSelections((prev) => ({ ...prev, [rowKey]: id }));
+                  // Default the amount to the smaller of the balance and the
+                  // selected payment's unallocated remainder.
+                  const txn = id ? txnById.get(id) : null;
+                  const def = txn ? Math.min(balance, candidateRemaining(txn)) : balance;
+                  setAmountInputs((prev) => ({ ...prev, [rowKey]: def > 0 ? String(def) : '' }));
+                }}
+                className="text-xs border border-gray-200 rounded px-2 py-1 bg-white max-w-[240px] focus:outline-none focus:ring-1 focus:ring-gray-300"
+              >
+                <option value="">Select payment… ({candidates.length})</option>
+                {candidates.map((c) => {
+                  const rem = candidateRemaining(c.txn);
+                  const remLabel = Math.abs(rem - c.txn.amount) > PAYMENT_EPSILON ? ` — ${formatCurrency(rem)} left` : '';
+                  return (
+                    <option key={c.txn.id} value={c.txn.id}>
+                      {c.txn.counterpartyName || 'Unknown'} — {formatCurrency(c.txn.amount)} — {formatTxnDate(c.txn.postedAt || c.txn.createdAt)}{remLabel} ({c.matchType})
+                    </option>
+                  );
+                })}
+              </select>
+              {selectedTxnId && (
+                <>
+                  <div className="flex items-center border border-gray-200 rounded px-1.5 py-1 bg-white">
+                    <span className="text-xs text-gray-400">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      max={selectedTxn ? Math.min(balance, candidateRemaining(selectedTxn)) : balance}
+                      value={amountInputs[rowKey] ?? ''}
+                      onChange={(e) => setAmountInputs((prev) => ({ ...prev, [rowKey]: e.target.value }))}
+                      className="w-20 text-xs focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleApplyPayment(inv, selectedTxnId, amountInputs[rowKey])}
+                    disabled={savingAlias === rowKey}
+                    className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 transition-colors flex-shrink-0"
+                    title="Apply this payment"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
+              <span className="text-xs text-gray-500">balance {formatCurrency(balance)}</span>
+            </div>
+          )
         )}
       </div>
     );
@@ -1084,7 +1134,9 @@ const AdminInvoices = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredAndSorted.map((inv, idx) => (
+                    {filteredAndSorted.map((inv, idx) => {
+                      const derived = deriveInvoicePaymentFields(inv);
+                      return (
                       <tr key={`${inv.client}-${inv.sheetRowNumber}-${idx}`} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 text-sm text-gray-900 max-w-[250px]">
                           <div className="truncate">{inv.client}</div>
@@ -1112,12 +1164,18 @@ const AdminInvoices = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <span
-                              className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(inv.status)}`}
-                            >
-                              {inv.status || '—'}
-                            </span>
-                            {inv.status !== 'Paid' ? (
+                            {derived.paymentState === 'partial' ? (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-700">
+                                Partial · {formatCurrency(derived.amountPaid)} of {formatCurrency(inv.amount || 0)}
+                              </span>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(inv.status)}`}
+                              >
+                                {inv.status || '—'}
+                              </span>
+                            )}
+                            {derived.paymentState === 'unpaid' ? (
                               <button
                                 onClick={() => handleMarkPaid(inv)}
                                 disabled={markingPaid === inv.sheetRowNumber}
@@ -1131,12 +1189,12 @@ const AdminInvoices = () => {
                                 )}
                                 <span>Mark Paid</span>
                               </button>
-                            ) : !confirmedMatches[inv.sheetRowNumber] && !inv.matchedTransactionId ? (
+                            ) : (
                               <button
                                 onClick={() => handleUnmarkPaid(inv)}
                                 disabled={markingPaid === inv.sheetRowNumber}
                                 className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
-                                title="Revert to outstanding"
+                                title="Revert to outstanding (clears all applied payments)"
                               >
                                 {markingPaid === inv.sheetRowNumber ? (
                                   <div className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
@@ -1144,7 +1202,7 @@ const AdminInvoices = () => {
                                   <X className="w-3 h-3" />
                                 )}
                               </button>
-                            ) : null}
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -1236,7 +1294,8 @@ const AdminInvoices = () => {
                           {inv.notes || '—'}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                     {filteredAndSorted.length === 0 && (
                       <tr>
                         <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
