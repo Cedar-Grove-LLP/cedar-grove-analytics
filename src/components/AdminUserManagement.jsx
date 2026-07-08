@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, Users, UserPlus, Shield } from 'lucide-react';
+import { ArrowLeft, LogOut, Users, UserPlus, Shield, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useUsers } from '@/hooks/useFirestoreData';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
@@ -12,11 +12,13 @@ import { sortBySeniority } from '@/utils/seniority.mjs';
 import RoleManagementTab from '@/components/admin/RoleManagementTab';
 import AddUserTab from '@/components/admin/AddUserTab';
 import ManageAdminsTab from '@/components/admin/ManageAdminsTab';
+import PermissionsTab from '@/components/admin/PermissionsTab';
 
 const TABS = [
   { key: 'roles', label: 'Role Management', icon: Users },
   { key: 'add-user', label: 'Add User', icon: UserPlus },
   { key: 'admins', label: 'Manage Admins', icon: Shield },
+  { key: 'permissions', label: 'Permissions', icon: ShieldCheck },
 ];
 
 const AdminUserManagement = () => {
@@ -139,6 +141,9 @@ const AdminUserManagement = () => {
         )}
         {activeTab === 'admins' && (
           <ManageAdminsTab />
+        )}
+        {activeTab === 'permissions' && (
+          <PermissionsTab users={users} allUsers={allUsers} />
         )}
       </div>
     </div>

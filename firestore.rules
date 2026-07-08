@@ -1,0 +1,264 @@
+rules_version = '2';
+
+// Cedar Grove Analytics — Firestore Security Rules
+//
+// This is the authoritative access-control boundary: the app is a
+// browser-to-Firestore SPA, so every read/write not explicitly allowed here
+// is denied by default (terminal catch-all at the bottom). All server-side
+// writes (the Apps Script timesheet/drive-downloads/time-off sync, the
+// scripts/ Node maintenance scripts, and the /api/sync-transactions Route
+// Handler) authenticate as a service account, which is not subject to these
+// rules — so locking a collection to `write: if false` here does not break
+// those pipelines.
+//
+// Fixes (2026-security-audit):
+//   SEC-002 — users/{userId} previously allowed any authenticated user to
+//             write any other user's rates/targets/role/email. Writes now
+//             require isAdmin().
+//   SEC-003 — the previous terminal rule was `allow read: if request.auth
+//             != null`, granting every signed-in identity read access to
+//             every collection. Replaced with explicit per-collection rules
+//             and a deny-by-default terminal match.
+//   SEC-007 — `downloads/{*}` previously allowed unauthenticated `create`.
+//             That (unused, vestigial) collection has no rule below, so it
+//             now falls through to the deny-by-default terminal match.
+//   SEC-016 — the `permissions/{email}` collection replaces the hardcoded
+//             partial-admin / downloads-access / transactions-ops-access
+//             email allowlists that used to live only in source (see
+//             src/utils/{partialAdminAccess,downloadsAccess,
+//             transactionsOpsAccess}.js). Enforcing the same flags here
+//             (not just client-side) closes the gap those allowlists left:
+//             previously nothing stopped a signed-in user from reading
+//             elevated-access collections directly via the SDK regardless
+//             of what the React UI computed.
+//
+// Incidental fixes (unavoidable side effects of replacing the catch-all):
+//   SEC-006 — legacy `attorneys/{*}` had no explicit rule here, so it now
+//             denies by default instead of `read, write: if request.auth
+//             != null`.
+//   SEC-017 — admin/permission/self lookups below consistently lower-case
+//             both the token email and the document id.
+//
+// Out of scope (left unchanged / not attempted here): SEC-001, 004, 005,
+// 009-015, 018-025, and the finer-grained "which admin sub-role can see
+// which tab" questions raised elsewhere in the audit — see CLAUDE.md /
+// the security audit report for those.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email is string;
+    }
+
+    function emailLower() {
+      return request.auth.token.email.lower();
+    }
+
+    // Full admin: document existence in admins/{email} (lower-cased id).
+    function isAdmin() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/admins/$(emailLower()));
+    }
+
+    // Elevated, non-full-admin flags now live in permissions/{email}
+    // instead of hardcoded source arrays (SEC-016). Guarded with exists()
+    // first so a user with no permissions doc evaluates to false rather
+    // than erroring.
+    function permissionFlag(field) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/permissions/$(emailLower())) &&
+        get(/databases/$(database)/documents/permissions/$(emailLower())).data[field] == true;
+    }
+
+    function isPartialAdmin() {
+      return permissionFlag('partialAdmin');
+    }
+
+    function hasDownloadsAccess() {
+      return permissionFlag('downloadsAccess');
+    }
+
+    function hasTransactionsOpsAccess() {
+      return permissionFlag('transactionsOpsAccess');
+    }
+
+    // Any of the elevated roles FirestoreDataContext still fetches the
+    // full firm-wide dataset for (mirrors the client-side gate in
+    // src/context/FirestoreDataContext.js — see SEC-008 fix). Includes
+    // isPartialAdmin() because partial admins can reach admin-only routes
+    // like /clients/[clientName] and /billing-summaries directly (those
+    // pages use requireAdmin without denyPartialAdmin).
+    function hasFullDataAccess() {
+      return isAdmin() || isPartialAdmin() || hasDownloadsAccess() || hasTransactionsOpsAccess();
+    }
+
+    // True when `resource` is the caller's own users/{userId} document
+    // (matched by the profile's email field, not the doc id, since doc ids
+    // are display names — see FirestoreSchema.md).
+    function isOwnUserDoc() {
+      return signedIn() &&
+        resource.data.email is string &&
+        resource.data.email.lower() == emailLower();
+    }
+
+    // Same check, but for rules on a users/{userId}/** subcollection where
+    // `resource` is the subdocument, not the parent profile — look the
+    // parent up explicitly.
+    function isOwnUserId(userId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.email is string &&
+        get(/databases/$(database)/documents/users/$(userId)).data.email.lower() == emailLower();
+    }
+
+    // ------------------------------------------------------------------
+    // users/{userId} — profile doc holds name/role/email/employmentType
+    // plus embedded rates[]/targets[] arrays (billing rate + utilization
+    // target history). Written only via the admin User Management UI
+    // (RoleManagementTab / AddUserTab), both full-admin-only routes.
+    // ------------------------------------------------------------------
+    match /users/{userId} {
+      // isOwnUserDoc() first: it's a free check against the already-loaded
+      // `resource`, whereas hasFullDataAccess() costs one or two extra
+      // document reads (admins/permissions). || short-circuits, so putting
+      // the free check first avoids those reads for the common case of an
+      // attorney reading their own profile.
+      allow read: if isOwnUserDoc() || hasFullDataAccess();
+      allow write: if isAdmin();
+
+      // Per-month entry docs. Populated only by the out-of-repo Apps
+      // Script sync (service-account auth, bypasses these rules) — the
+      // app itself never writes here.
+      match /billables/{monthDocId} {
+        allow read: if isOwnUserId(userId) || hasFullDataAccess();
+        allow write: if false;
+      }
+      match /ops/{monthDocId} {
+        allow read: if isOwnUserId(userId) || hasFullDataAccess();
+        allow write: if false;
+      }
+      match /eightThreeB/{monthDocId} {
+        allow read: if isOwnUserId(userId) || hasFullDataAccess();
+        allow write: if false;
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // admins/{email} — doc existence = full admin. Only a full admin may
+    // grant/revoke admin (a partial admin must never be able to promote
+    // themself or anyone else). Self-`get` is allowed so AuthContext's own
+    // "am I an admin" check works before isAdmin() would otherwise apply.
+    // ------------------------------------------------------------------
+    match /admins/{email} {
+      // Free self-check first (see the users/{userId} comment above for why).
+      allow get: if (signedIn() && email == emailLower()) || isAdmin();
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // permissions/{email} — replaces the hardcoded partialAdmin /
+    // downloadsAccess / transactionsOpsAccess allowlists (SEC-016).
+    // Self-`get` mirrors the admins/{email} pattern so AuthContext can
+    // resolve its own flags on sign-in.
+    // ------------------------------------------------------------------
+    match /permissions/{email} {
+      // Free self-check first (see the users/{userId} comment above for why).
+      allow get: if (signedIn() && email == emailLower()) || isAdmin();
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Firm-wide analytics data — fetched in bulk only by
+    // FirestoreDataContext, gated behind a single hasFullDataAccess()
+    // check there (SEC-008). All four collections below use that same
+    // predicate — not just isAdmin() — so they stay in sync with the
+    // client's single fetch branch; a narrower per-collection rule would
+    // desync and break the Promise.all with a permission-denied error for
+    // partial-admin / downloads-access / transactions-ops-access users.
+    // ------------------------------------------------------------------
+    match /clients/{docId} {
+      allow read: if hasFullDataAccess();
+      allow write: if false; // synced externally
+    }
+
+    match /monthlyMetrics/{docId} {
+      allow read: if hasFullDataAccess();
+      allow write: if false; // synced externally
+    }
+
+    match /rateCard/{docId} {
+      allow read: if hasFullDataAccess();
+      allow write: if false; // maintained via out-of-repo Admin SDK scripts
+    }
+
+    match /driveDownloads/{docId} {
+      allow read: if hasFullDataAccess();
+      allow write: if false; // synced externally
+    }
+
+    // timeOff/all is needed by every signed-in user's own attorney page
+    // (OOO/holiday-adjusted utilization targets — see
+    // dateHelpers.getMonthProRateFraction) and contains no billing/salary
+    // data, just holiday dates and OOO ranges, so it's readable firm-wide
+    // rather than gated behind hasFullDataAccess().
+    match /timeOff/{docId} {
+      allow read: if signedIn();
+      allow write: if false; // synced externally
+    }
+
+    // ------------------------------------------------------------------
+    // Admin-tool collections — gated to match the app's existing
+    // requireAdmin / denyPartialAdmin routing (see ProtectedRoute usage
+    // in src/app/admin/**/page.js) rather than introducing new
+    // restrictions beyond what each admin page already assumes.
+    // ------------------------------------------------------------------
+    match /matters/{matterId} {
+      allow read: if isAdmin() || isPartialAdmin();
+      allow write: if isAdmin() || isPartialAdmin();
+    }
+
+    match /invoices/{docId} {
+      // Read is hasFullDataAccess(), NOT just isAdmin()||isPartialAdmin():
+      // FirestoreDataContext.js bulk-fetches invoices/all inside the same
+      // Promise.all as clients/monthlyMetrics/rateCard/driveDownloads,
+      // gated by the single hasFullAccess flag (also true for
+      // hasDownloadsAccess/hasTransactionsOpsAccess users). A narrower
+      // read rule here denies that read and fails the whole Promise.all
+      // for a downloads-only or transactions-ops-only user. Write stays
+      // narrower — only AdminInvoices.jsx (admin/partial-admin route)
+      // writes this collection.
+      allow read: if hasFullDataAccess();
+      allow write: if isAdmin() || isPartialAdmin();
+    }
+
+    match /clientAliases/{docId} {
+      allow read: if isAdmin() || isPartialAdmin();
+      allow write: if isAdmin() || isPartialAdmin();
+    }
+
+    // Mercury bank transactions — read by AdminTransactions/AdminInvoices
+    // (admin + partial-admin pages); written only by /api/sync-transactions
+    // via the Firebase Admin SDK, which bypasses these rules.
+    match /transactions/{txnId} {
+      allow read: if isAdmin() || isPartialAdmin();
+      allow write: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // Deny-by-default terminal match (SEC-003). Anything not explicitly
+    // allowed above — including the legacy attorneys/{*} collection
+    // (SEC-006) and the unused downloads/{*} collection (SEC-007) — is
+    // denied.
+    // ------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

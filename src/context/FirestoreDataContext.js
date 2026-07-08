@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { db, waitForAuth } from '@/firebase/config';
 import { useAuth } from './AuthContext';
 import { normalizeBillableEntry, normalizeOpsEntry } from '@/hooks/useFirestoreData';
@@ -31,7 +31,7 @@ export const FirestoreDataProvider = ({ children }) => {
 
   const lastFetchedAt = useRef(null);
   const fetchInProgress = useRef(false);
-  const { user, isAuthorized } = useAuth();
+  const { user, isAuthorized, isAdmin, isPartialAdmin, hasDownloadsAccess, hasTransactionsOpsAccess, userEmail } = useAuth();
 
   const fetchAllData = useCallback(async (force = false, silent = false) => {
     if (fetchInProgress.current) return;
@@ -45,14 +45,35 @@ export const FirestoreDataProvider = ({ children }) => {
     try {
       await waitForAuth();
 
-      // Fetch users, clients, downloads, monthly metrics, invoices, rate card, and time off in parallel
+      // Admins, partial admins (who can reach admin-only routes like
+      // /clients/[clientName] and /billing-summaries directly), and the two
+      // firm-wide restricted dashboards (downloads-only, transactions+ops-
+      // only) need the full firm dataset. A plain attorney only needs their
+      // own profile + their own time entries — fetching every attorney's
+      // billing rates, targets, clients, and time entries into every
+      // signed-in user's browser regardless of role was SEC-008 in the
+      // security audit. firestore.rules enforces the matching boundary
+      // server-side (hasFullDataAccess() there mirrors this flag exactly).
+      const hasFullAccess = isAdmin || isPartialAdmin || hasDownloadsAccess || hasTransactionsOpsAccess;
+
+      // A plain user only ever needs their own profile doc, looked up by
+      // email (doc IDs are display names, not emails) instead of listing
+      // every user in the firm.
+      const usersQuery = hasFullAccess
+        ? collection(db, 'users')
+        : query(collection(db, 'users'), where('email', '==', userEmail || '__no-match__'));
+
+      // Fetch users, clients, downloads, monthly metrics, invoices, rate
+      // card, and time off in parallel. Everything except users/timeOff is
+      // admin/elevated-access-only — skip those reads entirely for a plain
+      // user rather than issuing requests firestore.rules would reject.
       const [usersSnap, clientsDoc, downloadsSnap, monthlyMetricsDoc, invoicesDoc, rateCardDoc, timeOffDoc] = await Promise.all([
-        getDocs(collection(db, 'users')),
-        getDoc(doc(db, 'clients', 'all')),
-        getDocs(collection(db, 'driveDownloads')),
-        getDoc(doc(db, 'monthlyMetrics', 'all')),
-        getDoc(doc(db, 'invoices', 'all')),
-        getDoc(doc(db, 'rateCard', 'all')),
+        getDocs(usersQuery),
+        hasFullAccess ? getDoc(doc(db, 'clients', 'all')) : Promise.resolve(null),
+        hasFullAccess ? getDocs(collection(db, 'driveDownloads')) : Promise.resolve(null),
+        hasFullAccess ? getDoc(doc(db, 'monthlyMetrics', 'all')) : Promise.resolve(null),
+        hasFullAccess ? getDoc(doc(db, 'invoices', 'all')) : Promise.resolve(null),
+        hasFullAccess ? getDoc(doc(db, 'rateCard', 'all')) : Promise.resolve(null),
         getDoc(doc(db, 'timeOff', 'all')),
       ]);
 
@@ -347,12 +368,12 @@ export const FirestoreDataProvider = ({ children }) => {
         });
       });
 
-      // Process clients
-      const clientList = clientsDoc.exists() ? (clientsDoc.data().clients || []) : [];
+      // Process clients (skipped/null for a plain, non-elevated user — see hasFullAccess above)
+      const clientList = clientsDoc?.exists() ? (clientsDoc.data().clients || []) : [];
 
       // Process download events — flatten all month docs into a single array
       const downloadEvents = [];
-      downloadsSnap.docs.forEach(doc => {
+      (downloadsSnap?.docs || []).forEach(doc => {
         const data = doc.data();
         const events = data.events || [];
         events.forEach(event => {
@@ -371,11 +392,11 @@ export const FirestoreDataProvider = ({ children }) => {
         });
       });
 
-      const monthlyMetricsList = monthlyMetricsDoc.exists() ? (monthlyMetricsDoc.data().entries || []) : [];
+      const monthlyMetricsList = monthlyMetricsDoc?.exists() ? (monthlyMetricsDoc.data().entries || []) : [];
 
-      const invoiceList = invoicesDoc.exists() ? (invoicesDoc.data().entries || []) : [];
+      const invoiceList = invoicesDoc?.exists() ? (invoicesDoc.data().entries || []) : [];
 
-      const rateCardData = rateCardDoc.exists() ? rateCardDoc.data() : null;
+      const rateCardData = rateCardDoc?.exists() ? rateCardDoc.data() : null;
 
       // Out-of-office + firm holidays (optional; enrichment only — absent until the sync ships)
       const timeOffData = timeOffDoc.exists() ? timeOffDoc.data() : null;
@@ -401,7 +422,7 @@ export const FirestoreDataProvider = ({ children }) => {
       if (!silent) setLoading(false);
       fetchInProgress.current = false;
     }
-  }, []);
+  }, [isAdmin, isPartialAdmin, hasDownloadsAccess, hasTransactionsOpsAccess, userEmail]);
 
   // Fetch on auth
   useEffect(() => {

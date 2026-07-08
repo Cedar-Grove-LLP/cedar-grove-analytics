@@ -24,7 +24,7 @@ Open [http://localhost:3000](http://localhost:3000) and sign in with a `@cedargr
 
 ### Required environment variables
 
-All vars are client-side (`NEXT_PUBLIC_` prefix). Pull values from Vercel or another dev:
+Client-side (`NEXT_PUBLIC_` prefix). Pull values from Vercel or another dev:
 
 - `NEXT_PUBLIC_FIREBASE_API_KEY`
 - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
@@ -32,6 +32,12 @@ All vars are client-side (`NEXT_PUBLIC_` prefix). Pull values from Vercel or ano
 - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
+
+Server-only, used by `/api/sync-transactions` and `scripts/*.mjs` (never exposed to the browser):
+
+- `FIREBASE_SERVICE_ACCOUNT_KEY` — Firebase Admin SDK service-account JSON
+- `MERCURY_API_TOKEN` — Mercury Bank API bearer token
+- `MERCURY_ACCOUNT_ID` — Mercury account ID to sync transactions from
 
 ## Scripts
 

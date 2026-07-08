@@ -25,6 +25,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [permissions, setPermissions] = useState(null);
   const [loading, setLoading] = useState(true);
   const isSigningIn = useRef(false);
 
@@ -36,7 +37,7 @@ export const AuthProvider = ({ children }) => {
 
   const checkAdminStatus = async (email) => {
     if (!email) return false;
-    
+
     try {
       const adminDoc = await getDoc(doc(db, 'admins', email.toLowerCase()));
       return adminDoc.exists();
@@ -46,20 +47,39 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Elevated, non-full-admin access flags (partial admin, downloads-only,
+  // transactions+ops-only dashboards) — read from permissions/{email}
+  // instead of the hardcoded email allowlists that used to live in
+  // src/utils/{partialAdminAccess,downloadsAccess,transactionsOpsAccess}.js.
+  // See SEC-016 in the security audit; firestore.rules enforces the same
+  // flags server-side via isPartialAdmin() / hasDownloadsAccess() /
+  // hasTransactionsOpsAccess().
+  const checkPermissions = async (email) => {
+    if (!email) return null;
+
+    try {
+      const permissionsDoc = await getDoc(doc(db, 'permissions', email.toLowerCase()));
+      return permissionsDoc.exists() ? permissionsDoc.data() : null;
+    } catch (error) {
+      console.error('Error checking permissions:', error);
+      return null;
+    }
+  };
+
   // Check if user is authorized (either from allowed domain or is an admin)
   const checkAuthorization = async (email) => {
-    if (!email) return { isAuthorized: false, isAdmin: false };
-    
-    // Check if from allowed domain
-    if (isAllowedDomain(email)) {
-      // Also check if they happen to be an admin
-      const adminStatus = await checkAdminStatus(email);
-      return { isAuthorized: true, isAdmin: adminStatus };
-    }
-    
-    // If not from allowed domain, check if they're an admin
-    const adminStatus = await checkAdminStatus(email);
-    return { isAuthorized: adminStatus, isAdmin: adminStatus };
+    if (!email) return { isAuthorized: false, isAdmin: false, permissions: null };
+
+    const [adminStatus, permissionsData] = await Promise.all([
+      checkAdminStatus(email),
+      checkPermissions(email),
+    ]);
+
+    // Authorized if from the allowed domain, or if manually granted admin
+    // (e.g. an external account added via Manage Admins).
+    const authorized = isAllowedDomain(email) || adminStatus;
+
+    return { isAuthorized: authorized, isAdmin: adminStatus, permissions: permissionsData };
   };
 
   useEffect(() => {
@@ -70,16 +90,18 @@ export const AuthProvider = ({ children }) => {
       }
 
       setUser(firebaseUser);
-      
+
       if (firebaseUser && !firebaseUser.isAnonymous) {
-        const { isAuthorized: authorized, isAdmin: admin } = await checkAuthorization(firebaseUser.email);
+        const { isAuthorized: authorized, isAdmin: admin, permissions: perms } = await checkAuthorization(firebaseUser.email);
         setIsAuthorized(authorized);
         setIsAdmin(admin);
+        setPermissions(perms);
       } else {
         setIsAuthorized(false);
         setIsAdmin(false);
+        setPermissions(null);
       }
-      
+
       setLoading(false);
     });
 
@@ -96,13 +118,14 @@ export const AuthProvider = ({ children }) => {
       });
       
       const result = await signInWithPopup(auth, provider);
-      
-      const { isAuthorized: authorized, isAdmin: admin } = await checkAuthorization(result.user.email);
-      
+
+      const { isAuthorized: authorized, isAdmin: admin, permissions: perms } = await checkAuthorization(result.user.email);
+
       // Now update state after sign-in is complete
       setUser(result.user);
       setIsAuthorized(authorized);
       setIsAdmin(admin);
+      setPermissions(perms);
       isSigningIn.current = false;
       
       return { 
@@ -133,6 +156,7 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       setIsAuthorized(false);
       setIsAdmin(false);
+      setPermissions(null);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -146,9 +170,9 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{
       user,
       isAdmin,
-      isPartialAdmin: isPartialAdminEmail(userEmail),
-      hasDownloadsAccess: hasDownloadsAccessEmail(userEmail),
-      hasTransactionsOpsAccess: hasTransactionsOpsAccessEmail(userEmail),
+      isPartialAdmin: isPartialAdminEmail(permissions),
+      hasDownloadsAccess: hasDownloadsAccessEmail(permissions),
+      hasTransactionsOpsAccess: hasTransactionsOpsAccessEmail(permissions),
       isAuthorized,
       loading,
       signInWithGoogle,

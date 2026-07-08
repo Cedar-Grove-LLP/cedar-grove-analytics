@@ -1,7 +1,6 @@
 import { getAdminDb, getAdminAuth } from "@/firebase/admin";
 
 const MERCURY_BASE_URL = "https://api.mercury.com/api/v1";
-const ACCOUNT_ID = "51275c28-043f-11f0-a6df-2b58241f41a4";
 const PAGE_LIMIT = 500;
 const ALLOWED_EMAIL_DOMAIN = "cedargrovellp.com";
 
@@ -84,6 +83,13 @@ export async function POST(request) {
       { status: 500 }
     );
   }
+  const accountId = process.env.MERCURY_ACCOUNT_ID;
+  if (!accountId) {
+    return Response.json(
+      { success: false, error: "MERCURY_ACCOUNT_ID is not configured" },
+      { status: 500 }
+    );
+  }
 
   try {
     // Fetch all transactions with pagination
@@ -92,7 +98,7 @@ export async function POST(request) {
     let hasMore = true;
 
     while (hasMore) {
-      const url = `${MERCURY_BASE_URL}/account/${ACCOUNT_ID}/transactions?limit=${PAGE_LIMIT}&offset=${offset}`;
+      const url = `${MERCURY_BASE_URL}/account/${accountId}/transactions?limit=${PAGE_LIMIT}&offset=${offset}`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${mercuryToken}` },
       });

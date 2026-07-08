@@ -1,9 +1,7 @@
-// Emails with downloads-only dashboard access (can view the Downloads tab on the main dashboard)
-const DOWNLOADS_ACCESS_EMAILS = [
-  'michael@cedargrovellp.com',
-];
-
-export function hasDownloadsAccessEmail(email) {
-  if (!email) return false;
-  return DOWNLOADS_ACCESS_EMAILS.includes(email.toLowerCase());
+// Downloads-only dashboard access is granted via the `permissions/{email}`
+// Firestore collection (Admin → User Management → Permissions tab),
+// enforced server-side by firestore.rules' hasDownloadsAccess() helper —
+// not a hardcoded email list. See SEC-016 in the security audit.
+export function hasDownloadsAccessEmail(permissionsData) {
+  return permissionsData?.downloadsAccess === true;
 }
