@@ -188,7 +188,13 @@ const AdminInvoices = () => {
         const monthName = MONTH_NAMES[priorMonth.getMonth()];
         const year = priorMonth.getFullYear();
         const subjectQuery = `Cedar Grove LLP - Invoice (${monthName} ${year}) (${inv.client})`;
-        found = await searchAndExtract(`in:sent subject:"${subjectQuery}"`);
+        // Match the outbound invoice email in ANY mailbox: it's always sent
+        // from the firm domain to the client. `from:cedargrovellp.com` finds it
+        // in the original sender's Sent AND in a CC'd colleague's Inbox (so any
+        // recipient — not just the sender — can remind), while excluding the
+        // client's inbound replies (from the client), which carry a To: header
+        // pointing back at the firm and would misaddress the reminder.
+        found = await searchAndExtract(`from:cedargrovellp.com subject:"${subjectQuery}"`);
       }
 
       // 2. Try emailId as message ID
