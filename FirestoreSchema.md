@@ -480,6 +480,8 @@ The "Payment Status" sheet has a summary header in row 1 (skipped during sync) a
       lastReminder: "1/6/2026",           // string | null — date of last payment reminder
       dateReceived: "2/9/2026",           // string | null — date payment was received
       notes: "Not reminder until end of feb", // string | null — freeform notes
+      matchedTransactionId: "mercury-id", // string | null — Mercury payment allocated to this invoice
+      matchedPaymentAmount: 4115.00,       // number | null — amount of that payment allocated here
       sheetRowNumber: 9                    // number — original row in the spreadsheet (for debugging)
     }
     // ... one object per invoice row
@@ -496,6 +498,8 @@ The "Payment Status" sheet has a summary header in row 1 (skipped during sync) a
 - `lastReminder`: Date a payment reminder was last sent. May be `M/D` or `M/D/YYYY` format, or null if no reminder was sent.
 - `dateReceived`: Date payment was received. May be `M/D` or `M/D/YYYY` format, or null if not yet paid.
 - `notes`: Freeform notes (e.g., payment method details, follow-up instructions). May be null.
+- `matchedTransactionId`: App-managed Mercury transaction ID. The same transaction ID may appear on multiple invoice entries when one payment covers multiple invoices.
+- `matchedPaymentAmount`: App-managed allocation from the matched payment to this invoice. New matches store the invoice amount; legacy matches without this field fall back to `amount` when calculating a payment's used and remaining balance.
 - `sheetRowNumber`: The actual row number in the spreadsheet (1-indexed). Used for debugging and tracing back to the source data.
 - A single client may have multiple entries in the array (one per billing period or invoice sent).
 
@@ -511,7 +515,7 @@ Google Sheet ("Payment Status" tab) → Apps Script → Firestore
 ```
 
 - **Sync trigger**: Manual — run `syncInvoices()` or `forceSyncInvoices()` from Apps Script.
-- **Strategy**: Full overwrite. The entire `invoices/all` document is replaced with the parsed entries array and metadata in a single write.
+- **Strategy**: The sheet rows are refreshed as a batch, but the sync must merge app-managed fields (`matchedTransactionId`, `matchedPaymentAmount`, reminder state) by the invoice natural key before replacing `entries`. A raw full overwrite would erase payment allocations and reminder history.
 - **Cost per sync**: 1 write.
 
 ---
