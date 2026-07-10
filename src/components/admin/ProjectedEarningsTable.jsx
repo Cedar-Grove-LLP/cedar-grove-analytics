@@ -65,10 +65,18 @@ const sumTotals = (list) =>
       ytdEarnings: acc.ytdEarnings + r.ytdEarnings,
       ytdHours: acc.ytdHours + r.ytdHours,
       projectedHours: acc.projectedHours + r.projectedHours,
+      projectedEarnings: acc.projectedEarnings + r.projectedEarnings,
       profitShare: acc.profitShare + r.profitShare,
       totalProjectedEarnings: acc.totalProjectedEarnings + r.totalProjectedEarnings,
     }),
-    { ytdEarnings: 0, ytdHours: 0, projectedHours: 0, profitShare: 0, totalProjectedEarnings: 0 }
+    {
+      ytdEarnings: 0,
+      ytdHours: 0,
+      projectedHours: 0,
+      projectedEarnings: 0,
+      profitShare: 0,
+      totalProjectedEarnings: 0,
+    }
   );
 
 // One card (green title bar + table) per employment group, mirroring the
@@ -80,46 +88,68 @@ const EarningsCard = ({ title, rows, togglePromote }) => {
   return (
     <div className="bg-white rounded-lg shadow overflow-x-auto">
       <div className="bg-cg-green text-white px-4 py-3 font-semibold">{title}</div>
-      <table className="w-full text-sm border-collapse">
+      <table className="w-full min-w-[1380px] table-fixed text-xs border-collapse [&_th]:!px-2 [&_td]:!px-2">
+        {/* Both employment groups use the same column grid. Without explicit
+            widths, each table sizes itself from its own currency values, so
+            the Full-time headers wrap while the shorter Part-time values do
+            not. Narrow viewports scroll horizontally instead of reflowing. */}
+        <colgroup>
+          <col className="w-[175px]" />
+          <col className="w-[110px]" />
+          <col className="w-[145px]" />
+          <col className="w-[75px]" />
+          <col className="w-[140px]" />
+          <col className="w-[140px]" />
+          <col className="w-[145px]" />
+          <col className="w-[185px]" />
+          <col className="w-[140px]" />
+          <col className="w-[125px]" />
+        </colgroup>
         <thead className="bg-gray-100 text-gray-700">
           <tr>
-            <th className="px-3 py-2 text-left font-semibold">Attorney</th>
-            <th className="px-3 py-2 text-right font-semibold">
-              <span className="inline-flex items-center gap-1">
+            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Attorney</th>
+            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 Current Rate
                 <CalcTooltip calcKey="billingRate" position="bottom" />
               </span>
             </th>
-            <th className="px-3 py-2 text-center font-semibold">Level (Now → EOY)</th>
-            <th className="px-3 py-2 text-center font-semibold">Promote</th>
-            <th className="px-3 py-2 text-right font-semibold">
-              <span className="inline-flex items-center gap-1">
+            <th className="px-3 py-2 text-center font-semibold whitespace-nowrap">Level (Now → EOY)</th>
+            <th className="px-3 py-2 text-center font-semibold whitespace-nowrap">Promote</th>
+            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 YTD Client Hours
                 <CalcTooltip calcKey="billableHours" position="bottom" />
               </span>
             </th>
-            <th className="px-3 py-2 text-right font-semibold">
-              <span className="inline-flex items-center gap-1">
+            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 YTD Earnings
                 <CalcTooltip calcKey="earnings" position="bottom" />
               </span>
             </th>
-            <th className="px-3 py-2 text-right font-semibold">
-              <span className="inline-flex items-center gap-1">
-                Proj. Hours
+            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                Proj. Client Hours
                 <CalcTooltip calcKey="projectedHours" position="bottom" />
               </span>
             </th>
-            <th className="px-3 py-2 text-right font-semibold">
-              <span className="inline-flex items-center gap-1">
-                Profit Share
+            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                Proj. Client Earnings
+                <CalcTooltip calcKey="projectedEarnings" position="bottom" />
+              </span>
+            </th>
+            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                Proj. Profit Share
                 <CalcTooltip calcKey="partnerProfitShare" position="bottom" align="right" />
               </span>
             </th>
-            <th className="px-3 py-2 text-right font-semibold">
-              <span className="inline-flex items-center gap-1">
-                Proj. Earnings
-                <CalcTooltip calcKey="projectedEarnings" position="bottom" align="right" />
+            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                Proj. Total
+                <CalcTooltip calcKey="projectedEarningsTotal" position="bottom" align="right" />
               </span>
             </th>
           </tr>
@@ -166,6 +196,7 @@ const EarningsCard = ({ title, rows, togglePromote }) => {
               <td className="px-3 py-2 text-right text-gray-900">{formatHours(r.ytdHours)}</td>
               <td className="px-3 py-2 text-right text-gray-900">{formatCurrency(r.ytdEarnings)}</td>
               <td className="px-3 py-2 text-right text-gray-700">{formatHours(r.projectedHours)}</td>
+              <td className="px-3 py-2 text-right text-gray-700">{formatCurrency(r.projectedEarnings)}</td>
               <td className="px-3 py-2 text-right text-gray-700">
                 {r.isPartner ? formatCurrency(r.profitShare) : <span className="text-gray-400">—</span>}
               </td>
@@ -182,6 +213,7 @@ const EarningsCard = ({ title, rows, togglePromote }) => {
             <td className="px-3 py-2 text-right text-cg-black">{formatHours(totals.ytdHours)}</td>
             <td className="px-3 py-2 text-right text-cg-black">{formatCurrency(totals.ytdEarnings)}</td>
             <td className="px-3 py-2 text-right text-cg-black">{formatHours(totals.projectedHours)}</td>
+            <td className="px-3 py-2 text-right text-cg-black">{formatCurrency(totals.projectedEarnings)}</td>
             <td className="px-3 py-2 text-right text-cg-black">{formatCurrency(totals.profitShare)}</td>
             <td className="px-3 py-2 text-right text-cg-black">{formatCurrency(totals.totalProjectedEarnings)}</td>
           </tr>
@@ -384,7 +416,7 @@ const ProjectedEarningsTable = () => {
           Apr 1 (Q2) and Oct 1 (Q4). Colin Van Loon uses the Colin rate column.
           Part-time attorneys skip the rate card — their stored rate is held flat all year.
           Partners (Sam McClure 95%, Colin Van Loon 5%) also receive a share of the predicted
-          full-year firm profit, added into their Proj. Earnings total.
+          full-year firm profit, added into their Proj. Total.
         </p>
         <p className="text-xs text-gray-500 mt-1">
           As of {MONTH_LABELS[currentMonth - 1]} {today.getDate()}, {currentYear}.
