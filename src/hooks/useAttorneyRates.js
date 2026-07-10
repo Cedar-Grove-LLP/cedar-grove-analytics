@@ -33,9 +33,10 @@ export function useAttorneyRates() {
     return findRate(allRates[userName], monthKey);
   }, [allRates]);
 
-  // Like getRate, but reports whether a rate actually existed for the
-  // requested month (exact or backward fallback) so callers can warn on
-  // gaps instead of treating a missing rate as a silent $0.
+  // Like getRate, but reports whether a usable rate resolved for the
+  // requested month (exact, backward fallback, or the retrospective
+  // earliest-rate fallback for pre-history months) so callers can warn on
+  // real gaps instead of treating a missing rate as a silent $0.
   const getRateInfo = useCallback((userName, date) => {
     const requestedMonthKey = monthKeyFromDate(date);
     if (!userName || !allRates[userName] || !requestedMonthKey) {

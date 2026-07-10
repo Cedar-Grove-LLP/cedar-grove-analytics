@@ -944,7 +944,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} />
                     <Tooltip content={<CustomChartTooltip />} />
-                    <Bar dataKey="billableHours" fill={CHART.ops} name="Hours" />
+                    <Bar dataKey="billableHours" fill={CHART.billable} name="Hours" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -960,7 +960,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 12 }} />
                     <Tooltip content={<CustomChartTooltip />} />
-                    <Bar dataKey="hours" fill={CHART.ops} name="Hours" />
+                    <Bar dataKey="hours" fill={CHART.billable} name="Hours" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

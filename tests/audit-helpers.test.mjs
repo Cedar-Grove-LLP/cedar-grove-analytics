@@ -140,10 +140,22 @@ test('windowStats uses app rate fallback and reports missing-rate months', () =>
   assert.equal(withRates.gross, 1200);
   assert.deepEqual(withRates.missingRateMonthKeys, []);
 
-  // Only-2026 rates → hours counted, gross $0, months reported missing.
-  const withoutRates = windowStats(
+  // Only-2026 rates → pre-history months bill retrospectively at the
+  // earliest stored rate (same fallback the app uses), nothing missing.
+  const retrospective = windowStats(
     { billableDocs, opsDocs },
     { '2026-01': { rate: 300 } },
+    new Date(2025, 0, 1),
+    new Date(2025, 2, 12, 23, 59, 59)
+  );
+  assert.equal(retrospective.billableHours, 6);
+  assert.equal(retrospective.gross, 6 * 300);
+  assert.deepEqual(retrospective.missingRateMonthKeys, []);
+
+  // No usable rates at all → hours counted, gross $0, months reported missing.
+  const withoutRates = windowStats(
+    { billableDocs, opsDocs },
+    {},
     new Date(2025, 0, 1),
     new Date(2025, 2, 12, 23, 59, 59)
   );

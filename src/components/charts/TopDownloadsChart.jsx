@@ -51,7 +51,7 @@ const TopDownloadsChart = ({ data, mode = 'files', title }) => {
             tick={{ fontSize: 12 }}
           />
           <Tooltip content={<DownloadTooltip />} />
-          <Bar dataKey="downloads" fill={CHART.ops} name="Downloads" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="downloads" fill={CHART.accent} name="Downloads" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

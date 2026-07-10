@@ -736,7 +736,7 @@ const ClientDetailView = ({ clientName }) => {
                     <Line
                       type="monotone"
                       dataKey="billableHours"
-                      stroke={CHART.ops}
+                      stroke={CHART.billable}
                       strokeWidth={2}
                       name="Billable Hours"
                       dot={{ r: 4 }}
@@ -744,7 +744,7 @@ const ClientDetailView = ({ clientName }) => {
                     <Line
                       type="monotone"
                       dataKey="projectedBillable"
-                      stroke={CHART.ops}
+                      stroke={CHART.billable}
                       strokeWidth={2}
                       strokeDasharray="5 5"
                       name="Projected (current period)"
@@ -767,7 +767,7 @@ const ClientDetailView = ({ clientName }) => {
                     <YAxis allowDecimals={false} domain={[0, (dataMax) => Math.ceil(dataMax / 10) * 10]} ticks={Array.from({ length: Math.ceil(Math.max(...attorneyBreakdown.slice(0, 8).map(a => a.billableHours || 0)) / 10) + 1 }, (_, i) => i * 10)} />
                     <Tooltip content={<CustomChartTooltip />} />
                     <Legend />
-                    <Bar dataKey="billableHours" fill={CHART.ops} name="Billable Hours" />
+                    <Bar dataKey="billableHours" fill={CHART.billable} name="Billable Hours" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

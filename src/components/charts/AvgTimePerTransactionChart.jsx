@@ -15,7 +15,7 @@ const AvgTimePerTransactionChart = ({ data, title = "Average Time per Transactio
           <XAxis type="number" />
           <YAxis dataKey="type" type="category" width={150} />
           <Tooltip content={<CustomTooltip sourceNote={getSourceNote('avgHoursPerTransaction')} />} />
-          <Bar dataKey="avgHours" fill={CHART.ops} name="Avg Hours" />
+          <Bar dataKey="avgHours" fill={CHART.billable} name="Avg Hours" />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -21,16 +21,50 @@ test('backward fallback picks the nearest prior month', () => {
   assert.equal(info.sourceMonthKey, '2026-01');
 });
 
-test('2025 lookup against 2026-only rates reports found:false, never a silent rate', () => {
-  // The headline bug: missing 2025 rates rendered as $0 with no signal.
+test('pre-history lookup bills retrospectively at the earliest stored rate', () => {
+  // 2024/2025 hours under a rates[] array that starts in 2026 used to bill
+  // at a flagged $0; they now use the earliest known rate, marked
+  // retrospective so callers can distinguish it from a real backward match.
   const info = findRateInfo(rates2026, '2025-01');
   assert.deepEqual(info, {
-    rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: '2025-01',
+    rate: 300, found: true, retrospective: true,
+    sourceMonthKey: '2026-01', requestedMonthKey: '2025-01',
   });
+  assert.equal(findRateInfo(rates2026, '2025-12').rate, 300);
 });
 
-test('no forward fallback exists', () => {
-  assert.equal(findRateInfo(rates2026, '2025-12').found, false);
+test('retrospective fallback skips leading zero-rate entries', () => {
+  const map = { '2026-01': { rate: 0 }, '2026-03': { rate: 275 } };
+  const info = findRateInfo(map, '2025-06');
+  assert.equal(info.rate, 275);
+  assert.equal(info.retrospective, true);
+  assert.equal(info.sourceMonthKey, '2026-03');
+});
+
+test('retrospective fallback never applies mid-history (backward-only there)', () => {
+  // A prior month exists but holds rate 0 → still a flagged miss, the
+  // earliest-rate fallback must not paper over mid-history gaps.
+  const map = { '2026-01': { rate: 0 }, '2026-05': { rate: 350 } };
+  assert.equal(findRateInfo(map, '2026-03').found, false);
+});
+
+test('a zero-rate entry AT the earliest stored key is a miss, not a forward-looking "retrospective"', () => {
+  // Regression: requesting the earliest key itself (which holds a falsy
+  // rate) must not fall into the retrospective branch and forward-look to a
+  // LATER month's nonzero rate — that's a real forward peek mislabeled as
+  // "retrospective", not the "bill at the earliest known rate" the feature
+  // intends. It must report found:false exactly like any other mid-history
+  // zero-rate gap.
+  const map = { '2025-01': { rate: 0 }, '2026-06': { rate: 400 } };
+  assert.deepEqual(findRateInfo(map, '2025-01'), {
+    rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: '2025-01',
+  });
+  // A month genuinely BEFORE the whole history still gets the retrospective
+  // fallback to the earliest known nonzero rate (skipping the leading $0).
+  assert.deepEqual(findRateInfo(map, '2024-06'), {
+    rate: 400, found: true, retrospective: true,
+    sourceMonthKey: '2026-06', requestedMonthKey: '2024-06',
+  });
 });
 
 test('findRate stays behavior-identical to findRateInfo().rate', () => {

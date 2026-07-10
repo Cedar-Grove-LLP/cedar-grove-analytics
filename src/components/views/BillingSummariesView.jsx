@@ -16,8 +16,16 @@ import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { getEntryDate } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours, formatDate } from '@/utils/formatters';
 import { sortBySeniority } from '@/utils/seniority.mjs';
+import { downloadCSV } from '@/utils/csv';
 import { CalcTooltip } from '../shared';
 import MonthlyAttorneyBillables from './MonthlyAttorneyBillables';
+
+// A row belongs on a bill if it carries hours OR a manual month-end
+// Adjustment ($) — pure adjustment rows have client + date, 0 hours
+// (Sam McClure only; `adjustment` is 0 everywhere else). Pure predicate with
+// no closure over component state, so it lives at module scope rather than
+// being recreated every render.
+const isBillableRow = (entry) => entry.billableHours > 0 || (entry.adjustment || 0) !== 0;
 
 const BillingSummariesView = () => {
   const { data: allEntries, loading: entriesLoading, error: entriesError } = useAllBillableEntries();
@@ -45,26 +53,26 @@ const BillingSummariesView = () => {
   // Get all available months from entries
   const availableMonths = useMemo(() => {
     if (!allEntries) return [];
-    
+
     const monthSet = new Set();
     allEntries.forEach(entry => {
-      if (entry.billableHours > 0) {
+      if (isBillableRow(entry)) {
         const entryDate = getEntryDate(entry);
         const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
         monthSet.add(monthKey);
       }
     });
-    
+
     return Array.from(monthSet).sort().reverse();
   }, [allEntries]);
 
   // Get clients with billable entries in the selected month
   const clientsInMonth = useMemo(() => {
     if (!allEntries || !selectedMonth) return [];
-    
+
     const clientSet = new Set();
     allEntries.forEach(entry => {
-      if (entry.billableHours > 0) {
+      if (isBillableRow(entry)) {
         const entryDate = getEntryDate(entry);
         const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
         if (monthKey === selectedMonth) {
@@ -73,32 +81,33 @@ const BillingSummariesView = () => {
         }
       }
     });
-    
+
     return Array.from(clientSet).sort();
   }, [allEntries, selectedMonth]);
 
   // Filter entries for selected month and client
   const filteredEntries = useMemo(() => {
     if (!allEntries || !selectedMonth || !selectedClient) return [];
-    
+
     return allEntries
       .filter(entry => {
-        if (entry.billableHours <= 0) return false;
-        
+        if (!isBillableRow(entry)) return false;
+
         const entryDate = getEntryDate(entry);
         const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
         if (monthKey !== selectedMonth) return false;
-        
+
         const clientName = entry.client || 'Unknown';
         if (clientName !== selectedClient) return false;
-        
+
         return true;
       })
       .map(entry => {
         const entryDate = getEntryDate(entry);
         const attorneyName = userMap[entry.userId] || entry.userId;
         const billableHours = entry.billableHours || 0;
-        
+        const adjustment = entry.adjustment || 0;
+
         // Rate for this attorney and month; found:false means these hours
         // bill at $0 (no usable rate) and must be flagged, not hidden.
         const { rate, found: rateFound } = getRateInfo(attorneyName, entryDate);
@@ -109,7 +118,10 @@ const BillingSummariesView = () => {
           rate,
           rateMissing: !rateFound && billableHours > 0,
           billableHours,
-          grossBillables: rate * billableHours,
+          adjustment,
+          // Mirrors the sheet's Billables Earnings construction: the manual
+          // month-end adjustment is part of the client's final bill.
+          amount: rate * billableHours + adjustment,
           date: entryDate,
           category: entry.billingCategory || entry.category || 'Other',
           notes: entry.notes || '',
@@ -117,6 +129,13 @@ const BillingSummariesView = () => {
       })
       .sort((a, b) => a.date - b.date);
   }, [allEntries, selectedMonth, selectedClient, getRateInfo, userMap]);
+
+  // Only show the Adjustment column when the selection actually has one
+  // (McClure months) — every other bill keeps the familiar layout.
+  const hasAdjustments = useMemo(
+    () => filteredEntries.some(entry => entry.adjustment !== 0),
+    [filteredEntries]
+  );
 
   // Attorneys in the rendered selection whose hours bill at $0 because no
   // usable rate covers the month — mirrors the Overview's admin banner so
@@ -138,9 +157,10 @@ const BillingSummariesView = () => {
     return filteredEntries.reduce(
       (acc, entry) => ({
         hours: acc.hours + entry.billableHours,
-        grossBillables: acc.grossBillables + entry.grossBillables,
+        adjustment: acc.adjustment + entry.adjustment,
+        amount: acc.amount + entry.amount,
       }),
-      { hours: 0, grossBillables: 0 }
+      { hours: 0, adjustment: 0, amount: 0 }
     );
   }, [filteredEntries]);
 
@@ -156,28 +176,30 @@ const BillingSummariesView = () => {
   const exportToCSV = () => {
     if (filteredEntries.length === 0) return;
 
-    const headers = ['Date', 'Attorney', 'Rate', 'Hours', 'Amount', 'Category', 'Notes'];
+    const headers = hasAdjustments
+      ? ['Date', 'Attorney', 'Rate', 'Hours', 'Adjustment', 'Amount', 'Category', 'Notes']
+      : ['Date', 'Attorney', 'Rate', 'Hours', 'Amount', 'Category', 'Notes'];
     const rows = filteredEntries.map(entry => [
       entry.date.toLocaleDateString(),
       entry.attorneyName,
       entry.rate,
       entry.billableHours,
-      entry.grossBillables.toFixed(2),
+      ...(hasAdjustments ? [entry.adjustment.toFixed(2)] : []),
+      entry.amount.toFixed(2),
       entry.category,
-      `"${(entry.notes || '').replace(/"/g, '""')}"`,
+      entry.notes || '',
     ]);
 
     // Add totals row
-    rows.push(['', '', '', totals.hours.toFixed(1), totals.grossBillables.toFixed(2), '', '']);
+    rows.push([
+      '', '', '',
+      totals.hours.toFixed(1),
+      ...(hasAdjustments ? [totals.adjustment.toFixed(2)] : []),
+      totals.amount.toFixed(2),
+      '', '',
+    ]);
 
-    const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `billing-summary-${selectedClient.replace(/\s+/g, '-')}-${selectedMonth}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadCSV(`billing-summary-${selectedClient.replace(/\s+/g, '-')}-${selectedMonth}.csv`, headers, rows);
   };
 
   if (loading) {
@@ -313,11 +335,16 @@ const BillingSummariesView = () => {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-cg-dark text-sm font-medium inline-flex items-center gap-1">
                   Total Billables
-                  <CalcTooltip calcKey="grossBillables" position="bottom" />
+                  <CalcTooltip calcKey="billingSummaryAmount" position="bottom" />
                 </span>
                 <DollarSign className="w-5 h-5 text-green-500" />
               </div>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(totals.grossBillables)}</div>
+              <div className="text-2xl font-bold text-green-600">{formatCurrency(totals.amount)}</div>
+              {hasAdjustments && (
+                <div className="text-xs text-gray-500 mt-1">
+                  includes {formatCurrency(totals.adjustment)} in adjustments
+                </div>
+              )}
             </div>
           </div>
 
@@ -369,10 +396,18 @@ const BillingSummariesView = () => {
                           <CalcTooltip calcKey="billableHours" position="bottom" align="right" />
                         </span>
                       </th>
+                      {hasAdjustments && (
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <span className="inline-flex items-center gap-1">
+                            Adjustment
+                            <CalcTooltip calcKey="entryAdjustment" position="bottom" align="right" />
+                          </span>
+                        </th>
+                      )}
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <span className="inline-flex items-center gap-1">
                           Amount
-                          <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+                          <CalcTooltip calcKey="billingSummaryAmount" position="bottom" align="right" />
                         </span>
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -402,8 +437,13 @@ const BillingSummariesView = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
                           {formatHours(entry.billableHours)}h
                         </td>
+                        {hasAdjustments && (
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${entry.adjustment < 0 ? 'text-red-600' : entry.adjustment > 0 ? 'text-gray-900' : 'text-gray-400'}`}>
+                            {entry.adjustment !== 0 ? formatCurrency(entry.adjustment) : '—'}
+                          </td>
+                        )}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
-                          {formatCurrency(entry.grossBillables)}
+                          {formatCurrency(entry.amount)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <span className="inline-flex px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
@@ -426,8 +466,13 @@ const BillingSummariesView = () => {
                       <td className="px-6 py-4 text-sm font-bold text-gray-900 text-right">
                         {formatHours(totals.hours)}h
                       </td>
+                      {hasAdjustments && (
+                        <td className={`px-6 py-4 text-sm font-bold text-right ${totals.adjustment < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                          {formatCurrency(totals.adjustment)}
+                        </td>
+                      )}
                       <td className="px-6 py-4 text-sm font-bold text-green-600 text-right">
-                        {formatCurrency(totals.grossBillables)}
+                        {formatCurrency(totals.amount)}
                       </td>
                       <td colSpan={2}></td>
                     </tr>
