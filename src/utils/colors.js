@@ -9,14 +9,18 @@ export const CHART_COLORS = [
   '#488f31', '#de425b', '#69b3a2', '#404080', '#f4a261',
 ];
 
+const GREEN_600 = '#16a34a';
+
 // Named chart colors for specific, consistent series assignments.
 // Billable is always green and ops always grey — any chart pairing the two
-// must keep that assignment. `accent` is the brand-green for single-series
-// charts that aren't billable/ops-coded (downloads, transactions, …).
+// must keep that assignment. `accent` is the same brand-green for
+// single-series charts that aren't billable/ops-coded (downloads,
+// transactions, …) — references GREEN_600 rather than repeating the literal
+// so the two can't silently drift apart.
 export const CHART = {
-  billable:  '#16a34a', // green-600 - matches Time Split green
+  billable:  GREEN_600, // matches Time Split green
   ops:       '#7A7B6E', // GRAY[500] - warm grey
-  accent:    '#16a34a', // green-600 - generic single-series accent
+  accent:    GREEN_600, // generic single-series accent
   secondary: '#FFBB28', // CHART_COLORS[2] - amber
   tertiary:  '#FF8042', // CHART_COLORS[3] - orange
   purple:    '#8B5CF6', // violet-500, metadata series

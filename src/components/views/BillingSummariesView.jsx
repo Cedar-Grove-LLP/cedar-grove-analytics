@@ -16,8 +16,16 @@ import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { getEntryDate } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours, formatDate } from '@/utils/formatters';
 import { sortBySeniority } from '@/utils/seniority.mjs';
+import { downloadCSV } from '@/utils/csv';
 import { CalcTooltip } from '../shared';
 import MonthlyAttorneyBillables from './MonthlyAttorneyBillables';
+
+// A row belongs on a bill if it carries hours OR a manual month-end
+// Adjustment ($) — pure adjustment rows have client + date, 0 hours
+// (Sam McClure only; `adjustment` is 0 everywhere else). Pure predicate with
+// no closure over component state, so it lives at module scope rather than
+// being recreated every render.
+const isBillableRow = (entry) => entry.billableHours > 0 || (entry.adjustment || 0) !== 0;
 
 const BillingSummariesView = () => {
   const { data: allEntries, loading: entriesLoading, error: entriesError } = useAllBillableEntries();
@@ -41,11 +49,6 @@ const BillingSummariesView = () => {
   const [selectedClient, setSelectedClient] = useState('');
 
   const loading = entriesLoading || ratesLoading;
-
-  // A row belongs on a bill if it carries hours OR a manual month-end
-  // Adjustment ($) — pure adjustment rows have client + date, 0 hours
-  // (Sam McClure only; `adjustment` is 0 everywhere else).
-  const isBillableRow = (entry) => entry.billableHours > 0 || (entry.adjustment || 0) !== 0;
 
   // Get all available months from entries
   const availableMonths = useMemo(() => {
@@ -184,7 +187,7 @@ const BillingSummariesView = () => {
       ...(hasAdjustments ? [entry.adjustment.toFixed(2)] : []),
       entry.amount.toFixed(2),
       entry.category,
-      `"${(entry.notes || '').replace(/"/g, '""')}"`,
+      entry.notes || '',
     ]);
 
     // Add totals row
@@ -196,14 +199,7 @@ const BillingSummariesView = () => {
       '', '',
     ]);
 
-    const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `billing-summary-${selectedClient.replace(/\s+/g, '-')}-${selectedMonth}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadCSV(`billing-summary-${selectedClient.replace(/\s+/g, '-')}-${selectedMonth}.csv`, headers, rows);
   };
 
   if (loading) {
