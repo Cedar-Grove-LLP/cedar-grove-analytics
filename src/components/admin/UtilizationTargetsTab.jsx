@@ -257,23 +257,39 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
           const userActuals = actuals[u.id] || {};
           const cap = capacity[u.id] || { fractions: EMPTY_FRACTIONS, future: EMPTY_FUTURE };
 
-          // Cumulative actual + variance across the elapsed (non-future) months.
-          let sumActClient = 0;
-          let sumActOps = 0;
-          let sumDClient = 0;
-          let sumDOps = 0;
+          // Period projection: actual-to-date plus the unelapsed,
+          // capacity-adjusted portion of the target for each started month,
+          // and the full editable target for every future month.
+          let projectedClient = 0;
+          let projectedOps = 0;
           let hasElapsed = false;
+          let hasFutureProjection = false;
           visibleMonths.forEach(m => {
-            if (cap.future[m.idx]) return;
+            const cell = userMatrix[m.idx] || {};
+            const monthTargetClient = parseFloat(cell.client) || 0;
+            const monthTargetOps = parseFloat(cell.ops) || 0;
+            if (cap.future[m.idx]) {
+              projectedClient += monthTargetClient;
+              projectedOps += monthTargetOps;
+              // An explicitly entered zero is still a meaningful projection;
+              // only untouched/blank future target cells leave the summary
+              // without projection data.
+              if (Number.isFinite(parseFloat(cell.client)) || Number.isFinite(parseFloat(cell.ops))) {
+                hasFutureProjection = true;
+              }
+              return;
+            }
+
             hasElapsed = true;
             const act = userActuals[m.idx] || { client: 0, ops: 0 };
-            const cell = userMatrix[m.idx] || {};
-            const frac = cap.fractions[m.idx];
-            sumActClient += act.client;
-            sumActOps += act.ops;
-            sumDClient += act.client - (parseFloat(cell.client) || 0) * frac;
-            sumDOps += act.ops - (parseFloat(cell.ops) || 0) * frac;
+            const elapsedFraction = Math.min(1, Math.max(0, cap.fractions[m.idx] || 0));
+            projectedClient += act.client + monthTargetClient * (1 - elapsedFraction);
+            projectedOps += act.ops + monthTargetOps * (1 - elapsedFraction);
           });
+
+          const targetClient = sumBillable(userMatrix, visibleMonths);
+          const targetOps = sumOps(userMatrix, visibleMonths);
+          const hasProjectedSummary = hasElapsed || hasFutureProjection;
 
           const gray = 'text-gray-600';
           // Actual row cells: logged hours (blank for future months).
@@ -296,17 +312,24 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
             const dOps = act.ops - (parseFloat(cell.ops) || 0) * frac;
             return [deltaCellValue(dClient), deltaCellValue(dOps), deltaCellValue(dClient + dOps)];
           };
-          // Cumulative summary trios — blank when no month has elapsed (e.g. a
-          // fully-future year) so the summary matches the blank per-month cells.
-          const actualSummary = hasElapsed
+          // The summary is intentionally different from the per-month Actual
+          // cells: it includes the remaining target projection for the current
+          // month and targets for future months. Its variance is projection
+          // minus the full period target (row 2 minus row 1), which is also the
+          // sum of actual minus capacity-prorated target for elapsed months.
+          const projectedSummary = hasProjectedSummary
             ? [
-                { text: formatHours(sumActClient), className: gray },
-                { text: formatHours(sumActOps), className: gray },
-                { text: formatHours(sumActClient + sumActOps), className: 'text-gray-700' },
+                { text: formatHours(projectedClient), className: `${gray} italic` },
+                { text: formatHours(projectedOps), className: `${gray} italic` },
+                { text: formatHours(projectedClient + projectedOps), className: 'text-gray-700 italic' },
               ]
             : [EMPTY_CELL, EMPTY_CELL, EMPTY_CELL];
-          const deltaSummary = hasElapsed
-            ? [deltaCellValue(sumDClient), deltaCellValue(sumDOps), deltaCellValue(sumDClient + sumDOps)]
+          const deltaSummary = hasProjectedSummary
+            ? [
+                deltaCellValue(projectedClient - targetClient),
+                deltaCellValue(projectedOps - targetOps),
+                deltaCellValue((projectedClient + projectedOps) - (targetClient + targetOps)),
+              ]
             : [EMPTY_CELL, EMPTY_CELL, EMPTY_CELL];
 
           return (
@@ -375,7 +398,7 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
                 </td>
               </tr>
 
-              <MetricRow label="Actual" visibleMonths={visibleMonths} showMonthTotals={showMonthTotals} cell={actualCell} summary={actualSummary} />
+              <MetricRow label="Actual / Proj." visibleMonths={visibleMonths} showMonthTotals={showMonthTotals} cell={actualCell} summary={projectedSummary} />
               <MetricRow
                 label={(
                   <span className="inline-flex items-center gap-1">
