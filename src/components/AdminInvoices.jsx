@@ -81,6 +81,61 @@ function invoiceKey(inv) {
   return `${client}|${amount}|${dateSent}|${year}`;
 }
 
+// TODO(team): confirm which address to CC on the third/final reminder.
+// The Invoice Reminders System doc says "Please CC Sam on the third reminder
+// email." Left blank until the team confirms Sam's address — while empty, no
+// Cc header is added, so drafts still work; fill this in to enable the CC.
+const SAM_CC_EMAIL = '';
+
+// Ordinal labels for the three sequential reminders.
+const REMINDER_ORDINALS = ['1st', '2nd', '3rd'];
+
+// Sequential reminder email bodies, one per escalation stage (see the Invoice
+// Reminders System doc — the single source of truth for this copy):
+//   stage 0 → First reminder   (~16 days after the invoice, or day 31 for Net 30)
+//   stage 1 → Second reminder  (14 days after the first)
+//   stage 2+ → Third reminder  (final; CC Sam) — reused for any further nudges
+// `stage` is the count of reminders already drafted for this invoice, so the
+// body returned is the NEXT one to send.
+function buildReminderBody(stage, { greeting, invoiceMonthLabel, dueDateStr, senderFirstName }) {
+  if (stage <= 0) {
+    return [
+      `${greeting}, hope you are doing well.`,
+      ``,
+      `I wanted to follow up on the status of your payment for the ${invoiceMonthLabel} invoice, which was due on ${dueDateStr}.`,
+      ``,
+      `Please let us know if you have already processed the payment. We may have missed it on our end. Otherwise, we ask that you do so at your earliest convenience.`,
+      ``,
+      `As always, please let us know if you have any questions.`,
+      ``,
+      `Best,`,
+      senderFirstName,
+    ].join('\n');
+  }
+  if (stage === 1) {
+    return [
+      `${greeting},`,
+      `Following up on our note below regarding your past due invoice. The payment for the ${invoiceMonthLabel} invoice was due on ${dueDateStr}.`,
+      ``,
+      `Please let us know if you have already processed the payment and we will be sure to check our records again.`,
+      ``,
+      `Otherwise, we ask that you send payment as soon as possible.`,
+      ``,
+      `Best,`,
+      senderFirstName,
+    ].join('\n');
+  }
+  return [
+    `${greeting},`,
+    `Following up regarding the ${invoiceMonthLabel} invoice. The payment was due on ${dueDateStr} and we have sent multiple reminders but have not received the payment.`,
+    ``,
+    `Please provide us with an update on the timing of your payment. We ask that you send the amount due no later than the end of this week.`,
+    ``,
+    `Best,`,
+    senderFirstName,
+  ].join('\n');
+}
+
 const AdminInvoices = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -110,6 +165,8 @@ const AdminInvoices = () => {
   const [draftSuccess, setDraftSuccess] = useState({});
   const [draftError, setDraftError] = useState(null);
   const [draftErrorMsg, setDraftErrorMsg] = useState(null);
+  const [checkingSends, setCheckingSends] = useState(false);
+  const [checkSendsResult, setCheckSendsResult] = useState(null);
 
   const connectGmail = async () => {
     const provider = new GoogleAuthProvider();
@@ -246,21 +303,15 @@ const AdminInvoices = () => {
       // Sender's first name
       const senderFirstName = user?.displayName?.split(' ')[0] || '';
 
-      const body = [
-        `${greeting}, hope you are doing well.`,
-        ``,
-        `I wanted to follow up on the status of your payment for the ${invoiceMonthLabel} invoice, which was due on ${dueDateStr}.`,
-        ``,
-        `Please let us know if you have already processed the payment. We may have missed it on our end. Otherwise, we ask that you do so at your earliest convenience.`,
-        ``,
-        `As always, please let us know if you have any questions.`,
-        ``,
-        `Best,`,
-        senderFirstName,
-      ].join('\n');
+      // Pick the reminder body by how many have already been drafted for this
+      // invoice (persisted on the entry). Stage 2+ is the final reminder, which
+      // CCs Sam per the Invoice Reminders System doc.
+      const stage = inv.remindersSent || 0;
+      const body = buildReminderBody(stage, { greeting, invoiceMonthLabel, dueDateStr, senderFirstName });
 
       const rawLines = [
         `To: ${to}`,
+        ...(stage >= 2 && SAM_CC_EMAIL ? [`Cc: ${SAM_CC_EMAIL}`] : []),
         `Subject: ${replySubject}`,
         `In-Reply-To: ${messageId}`,
         `References: ${messageId}`,
@@ -292,7 +343,27 @@ const AdminInvoices = () => {
       );
 
       if (!draftRes.ok) throw new Error(`Failed to create draft: ${draftRes.status}`);
-      setDraftSuccess((prev) => ({ ...prev, [inv.sheetRowNumber]: true }));
+      const draftJson = await draftRes.json().catch(() => ({}));
+      const draftId = draftJson?.id || null;
+
+      // Do NOT increment the reminder count here — a draft is not a send. Record
+      // a `pendingReminder` on the entry (natural-key merge, so it survives
+      // Apps Script sheet re-syncs like matchedTransactionId). The count only
+      // advances once the service account confirms the draft was actually sent
+      // (see /api/check-reminder-sends + docs/reminder-send-detection.md).
+      // senderEmail is the mailbox the draft lives in — the account we impersonate
+      // to look for the sent message.
+      setDraftSuccess((prev) => ({ ...prev, [inv.sheetRowNumber]: REMINDER_ORDINALS[Math.min(stage, 2)] }));
+      await updateInvoiceEntry(inv, (i) => ({
+        ...i,
+        pendingReminder: {
+          draftId,
+          threadId,
+          senderEmail: gmailEmail || user?.email || '',
+          stage,
+          createdAt: new Date().toISOString(),
+        },
+      }));
     } catch (err) {
       console.error('Error creating reminder draft:', err);
       setDraftError(inv.sheetRowNumber);
@@ -348,6 +419,39 @@ const AdminInvoices = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Ask the server (service account) whether any pending reminder drafts have
+  // actually been sent; on confirmation it increments remindersSent server-side,
+  // so we refetch to pick up the new counts. `silent` suppresses the result
+  // banner for the automatic on-load poll.
+  const checkReminderSends = useCallback(async ({ silent = false } = {}) => {
+    if (!auth.currentUser) return;
+    setCheckingSends(true);
+    if (!silent) setCheckSendsResult(null);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await fetch('/api/check-reminder-sends', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (!silent || data.confirmed > 0) setCheckSendsResult({ type: 'success', ...data });
+        if (data.confirmed > 0) await fetchData();
+      } else if (!silent) {
+        setCheckSendsResult({ type: 'error', message: data.error || 'Check failed' });
+      }
+    } catch (err) {
+      if (!silent) setCheckSendsResult({ type: 'error', message: err.message });
+    } finally {
+      setCheckingSends(false);
+    }
+  }, [fetchData]);
+
+  // One automatic poll on load so counts advance without a manual click.
+  useEffect(() => {
+    checkReminderSends({ silent: true });
+  }, [checkReminderSends]);
 
   const refetchTransactions = useCallback(async () => {
     try {
@@ -961,13 +1065,37 @@ const AdminInvoices = () => {
                 : 'Connect Gmail to create reminder email drafts directly in the invoice thread.'}
             </p>
           </div>
-          <button
-            onClick={connectGmail}
-            className="px-4 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors flex-shrink-0"
-          >
-            {gmailToken ? 'Switch Account' : 'Connect Gmail'}
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => checkReminderSends({})}
+              disabled={checkingSends}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50"
+              title="Ask the service account whether any pending reminder drafts have been sent, and advance their counts"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${checkingSends ? 'animate-spin' : ''}`} />
+              {checkingSends ? 'Checking…' : 'Check sends'}
+            </button>
+            <button
+              onClick={connectGmail}
+              className="px-4 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              {gmailToken ? 'Switch Account' : 'Connect Gmail'}
+            </button>
+          </div>
         </div>
+        {checkSendsResult && (
+          <div
+            className={`mt-2 rounded-lg px-4 py-2 text-xs ${
+              checkSendsResult.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}
+          >
+            {checkSendsResult.type === 'success'
+              ? `Checked ${checkSendsResult.checked ?? 0} pending draft(s): ${checkSendsResult.confirmed ?? 0} sent, ${checkSendsResult.stillPending ?? 0} awaiting, ${checkSendsResult.discarded ?? 0} discarded.`
+              : checkSendsResult.message}
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
@@ -1231,10 +1359,17 @@ const AdminInvoices = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                           {inv.status === 'Paid' ? (
                             <span className="text-gray-400 text-xs">—</span>
-                          ) : draftSuccess[inv.sheetRowNumber] ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-green-50 text-green-700">
-                              <CheckCircle className="w-3.5 h-3.5" />
-                              Draft Created
+                          ) : inv.pendingReminder || draftSuccess[inv.sheetRowNumber] ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-50 text-amber-700"
+                              title={
+                                inv.pendingReminder?.createdAt
+                                  ? `${REMINDER_ORDINALS[Math.min(inv.pendingReminder.stage || 0, 2)]} reminder draft created ${inv.pendingReminder.createdAt.slice(0, 10)} — count advances once the send is confirmed`
+                                  : 'Draft created — count advances once the send is confirmed'
+                              }
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              Awaiting send
                             </span>
                           ) : (
                             <button
@@ -1260,10 +1395,15 @@ const AdminInvoices = () => {
                               ) : (
                                 <>
                                   <Send className="w-3.5 h-3.5" />
-                                  Remind
+                                  {REMINDER_ORDINALS[Math.min(inv.remindersSent || 0, 2)]} Reminder
                                 </>
                               )}
                             </button>
+                          )}
+                          {(inv.remindersSent || 0) > 0 && (
+                            <div className="mt-1 text-[10px] text-gray-400">
+                              {inv.remindersSent} sent{inv.lastReminderSentAt ? ` · ${String(inv.lastReminderSentAt).slice(0, 10)}` : ''}
+                            </div>
                           )}
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-500 max-w-[200px] truncate">
