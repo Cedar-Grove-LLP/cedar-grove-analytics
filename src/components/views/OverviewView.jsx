@@ -235,9 +235,9 @@ const OverviewView = ({
           <KpiTitle label="Time Split" calcKey="timeSplitPct" icon={<Clock className="w-5 h-5 text-purple-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-baseline gap-1.5">
-              <div className="text-3xl font-bold text-gray-600">{billablePercentage}%</div>
+              <div className="text-3xl font-bold text-green-600">{billablePercentage}%</div>
               <div className="text-xl text-gray-400">/</div>
-              <div className="text-3xl font-bold text-green-600">{opsPercentage}%</div>
+              <div className="text-3xl font-bold text-gray-600">{opsPercentage}%</div>
             </div>
           </div>
           <div className="text-sm text-gray-600 text-center">Billable / Ops</div>
@@ -256,7 +256,7 @@ const OverviewView = ({
         </div>
 
         <div className="bg-white p-4 rounded-lg shadow aspect-square flex flex-col justify-between">
-          <KpiTitle label="Total Ops" calcKey="opsHours" icon={<Users className="w-5 h-5 text-orange-500" />} />
+          <KpiTitle label="Total Ops" calcKey="opsHours" icon={<Users className="w-5 h-5 text-gray-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-3xl font-bold text-gray-900">{formatHours(cohortMetrics.ops)}h</div>
           </div>

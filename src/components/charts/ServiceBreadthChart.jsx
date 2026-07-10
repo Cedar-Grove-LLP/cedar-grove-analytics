@@ -19,7 +19,7 @@ const ServiceBreadthChart = ({ data, title = "Service Breadth (Unique Transactio
           <XAxis dataKey="name" angle={-15} textAnchor="end" height={100} />
           <YAxis />
           <Tooltip content={<CustomTooltip sourceNote={SOURCE_NOTE} />} />
-          <Bar dataKey="uniqueTransactions" fill={CHART.ops} name="Unique Transaction Types" />
+          <Bar dataKey="uniqueTransactions" fill={CHART.accent} name="Unique Transaction Types" />
         </BarChart>
       </ResponsiveContainer>
     </div>

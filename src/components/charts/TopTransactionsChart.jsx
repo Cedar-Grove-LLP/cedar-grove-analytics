@@ -16,7 +16,7 @@ const TopTransactionsChart = ({ data, title = "Top Transaction Types by Time" })
           <YAxis />
           <Tooltip content={<CustomTooltip sourceNote={getSourceNote('billableHours')} />} />
           <Legend />
-          <Bar dataKey="totalHours" fill={CHART.ops} name="Total Hours" />
+          <Bar dataKey="totalHours" fill={CHART.billable} name="Total Hours" />
         </BarChart>
       </ResponsiveContainer>
     </div>

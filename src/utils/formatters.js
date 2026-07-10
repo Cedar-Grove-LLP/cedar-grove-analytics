@@ -19,13 +19,13 @@ export const formatCurrency = (amount) => {
   }).format(amount);
 };
 
-// Format hours - round to .1, omit .0 decimals
+// Format hours - round to .1, omit .0 decimals, thousands separators (1,234.5)
 export const formatHours = (hours) => {
   const rounded = Math.round(hours * 10) / 10;
   if (rounded === Math.floor(rounded)) {
-    return Math.floor(rounded).toString();
+    return Math.floor(rounded).toLocaleString('en-US');
   }
-  return rounded.toFixed(1);
+  return rounded.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 };
 
 // Build a human phrase for the OOO/holiday context behind a pro-rated target,

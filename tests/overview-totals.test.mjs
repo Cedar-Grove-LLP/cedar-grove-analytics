@@ -73,20 +73,31 @@ test('Total Billables > 0 when rates exist for the entry months', () => {
   assert.ok(total > 0);
 });
 
-test('2026-only rates: totals are $0 AND every entry month reports found:false (no silent $0)', () => {
+test('2026-only rates: 2025 entries bill retrospectively at the earliest rate, no warning', () => {
+  // Previously these months billed at a flagged $0; the retrospective
+  // fallback now applies each attorney's earliest stored rate backward.
   const attorneyData = aggregate(entries, rates2026Only);
   const total = attorneyData.reduce((acc, a) => acc + a.grossBillables, 0);
-  assert.equal(total, 0);
+  assert.equal(total, 10 * 400 + 8 * 300 + 6 * 250);
 
-  // The warning path: each (user, month) must be detectable as a missing rate.
-  const warnings = entries.map((entry) =>
+  const infos = entries.map((entry) =>
     findRateInfo(rates2026Only[entry.userId], monthKeyFromDate(entry.date))
   );
-  assert.ok(warnings.every((w) => w.found === false));
+  assert.ok(infos.every((i) => i.found === true && i.retrospective === true));
   assert.deepEqual(
-    warnings.map((w) => w.requestedMonthKey),
+    infos.map((i) => i.requestedMonthKey),
     ['2025-01', '2025-02', '2025-03']
   );
+});
+
+test('attorneys with no usable rates at all still warn (found:false, $0)', () => {
+  const noRates = { 'Colin van Loon': {}, 'Michael Ohta': {}, 'Valery Uscanga': {} };
+  const attorneyData = aggregate(entries, noRates);
+  assert.equal(attorneyData.reduce((acc, a) => acc + a.grossBillables, 0), 0);
+  const infos = entries.map((entry) =>
+    findRateInfo(noRates[entry.userId], monthKeyFromDate(entry.date))
+  );
+  assert.ok(infos.every((i) => i.found === false));
 });
 
 test('entries under orphan/mis-keyed IDs do not aggregate and are classified ORPHANED', () => {

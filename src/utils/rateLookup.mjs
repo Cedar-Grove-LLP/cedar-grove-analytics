@@ -37,18 +37,23 @@ export function monthKeyFromDate(date) {
 }
 
 /**
- * Look up the rate for a month key with backward-only fallback: an exact
- * match wins, otherwise the most recent prior month's rate is used. There
- * is deliberately no forward fallback — a lookup before the earliest stored
- * rate reports found: false (and rate 0) so callers can surface the gap
- * instead of silently billing at $0.
+ * Look up the rate for a month key: an exact match wins, otherwise the most
+ * recent prior month's rate is used (backward fallback). A lookup that
+ * precedes the attorney's ENTIRE rate history — no prior month exists at
+ * all — falls back retrospectively to their earliest stored nonzero rate,
+ * flagged `retrospective: true`, so pre-history entries (e.g. 2024 hours
+ * under a rates[] array that starts in 2025) bill at the first known rate
+ * instead of a silent $0.
  *
  * `found` means "a usable (nonzero) rate was resolved": a fallback entry
  * that exists but holds rate 0/undefined still bills these hours at $0, so
  * it reports found: false — otherwise the missing-rate warning would stay
- * silent for exactly the silent-$0 case it exists to expose.
+ * silent for exactly the silent-$0 case it exists to expose. The
+ * retrospective fallback applies only when NO prior month key exists; a
+ * mid-history gap landing on a rate-0 entry still reports found: false.
  *
- * Returns { rate, found, sourceMonthKey, requestedMonthKey }.
+ * Returns { rate, found, sourceMonthKey, requestedMonthKey } plus
+ * retrospective: true on the earliest-rate path.
  */
 export function findRateInfo(ratesMap, monthKey) {
   const miss = { rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: monthKey };
@@ -70,7 +75,21 @@ export function findRateInfo(ratesMap, monthKey) {
     }
   }
 
-  const fallbackRate = fallbackKey ? (ratesMap[fallbackKey]?.rate || 0) : 0;
+  if (!fallbackKey) {
+    // Requested month precedes the whole rate history — bill retrospectively
+    // at the earliest stored nonzero rate.
+    const earliestKey = sortedKeys.find((key) => ratesMap[key]?.rate);
+    if (!earliestKey) return miss;
+    return {
+      rate: ratesMap[earliestKey].rate,
+      found: true,
+      retrospective: true,
+      sourceMonthKey: earliestKey,
+      requestedMonthKey: monthKey,
+    };
+  }
+
+  const fallbackRate = ratesMap[fallbackKey]?.rate || 0;
   if (!fallbackRate) return miss;
   return {
     rate: fallbackRate,

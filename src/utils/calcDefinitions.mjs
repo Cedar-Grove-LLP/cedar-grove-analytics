@@ -192,9 +192,19 @@ export const CALC_DEFINITIONS = Object.freeze({
   grossBillables: {
     label: 'Gross Billables',
     formula: 'Σ (billing rate × hours) per entry',
-    inputs: ['billing rate (admin-entered, matched to the entry month with backward fallback)', 'per-row entry hours'],
+    inputs: ['billing rate (admin-entered, matched to the entry month with backward fallback, retrospective before the earliest stored rate)', 'per-row entry hours'],
     source: SOURCE.COMPUTED,
-    notes: ["The billing rate is NOT the sheet's 'Rate' cell (that is take-home pay). Entries with no stored rate bill at $0 and raise the Overview warning."],
+    notes: ["The billing rate is NOT the sheet's 'Rate' cell (that is take-home pay). Entries with no usable stored rate bill at $0 and raise the Overview warning."],
+  },
+  billingSummaryAmount: {
+    label: 'Amount (billing summary)',
+    formula: 'billing rate × hours + manual Adjustment ($) on the row',
+    inputs: ['billing rate (admin-entered)', 'per-row entry hours', 'per-row Adjustment ($) values (Sam McClure only, 0 elsewhere)'],
+    source: SOURCE.COMPUTED,
+    notes: [
+      "Mirrors the sheet's Billables Earnings construction (Hours × Rate + Adjustment) using the admin-entered client billing rate — NOT the sheet's take-home Rate cell — so the client's bill includes month-end adjustments.",
+      'A pure adjustment row (client + date, 0 hours) contributes only its adjustment.',
+    ],
   },
   totalBillablesAttorney: {
     label: 'Total Billables (firm-wide)',
@@ -367,7 +377,7 @@ export const CALC_DEFINITIONS = Object.freeze({
   },
   billingRate: {
     label: 'Billing Rate',
-    formula: "the attorney's stored rate for the entry month, falling back to the most recent prior month",
+    formula: "the attorney's stored rate for the entry month, falling back to the most recent prior month — or, for months before their earliest stored rate, retrospectively to that earliest rate",
     inputs: ['admin User Management rates'],
     source: SOURCE.ADMIN_ENTERED,
     notes: [`The sheet's take-home Rate cell — ${SHEET_RATE_CELL_REF} — is NOT this billing rate.`],

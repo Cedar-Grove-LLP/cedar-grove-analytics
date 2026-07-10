@@ -326,8 +326,9 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             { key: 'transactions', label: 'Transactions' },
             { key: 'ops', label: 'Ops' },
             { key: 'clients', label: 'Clients' },
-            { key: 'downloads', label: 'Downloads' },
+            // Targets (utilization) sits before Downloads by user request.
             { key: 'targets', label: 'Targets', adminOnly: true },
+            { key: 'downloads', label: 'Downloads' },
             { key: 'practice-composition', label: 'Practice Composition', adminOnly: true },
             { key: 'tech-team', label: 'Tech Team' },
             { key: 'invoices-testing', label: 'Invoices (testing)', adminOnly: true },

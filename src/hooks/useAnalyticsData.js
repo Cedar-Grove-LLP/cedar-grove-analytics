@@ -1239,8 +1239,10 @@ export const useAnalyticsData = ({
   // One pass over the in-range billable entries computes both the gross
   // billables total (rate × hours — includes hidden users) AND the
   // missing-rate warnings: attorneys whose hours bill at $0 because no
-  // usable rate covers those months (no exact match, and no prior month
-  // holding a nonzero rate to fall back to). Surfaced as an explicit warning
+  // usable rate covers those months. Months before an attorney's earliest
+  // stored rate bill retrospectively at that earliest rate (see
+  // rateLookup.mjs), so the warning now fires only for mid-history gaps and
+  // attorneys with no usable rates at all. Surfaced as an explicit warning
   // instead of silently understating every rate × hours figure.
   const grossBillablesInfo = useMemo(() => {
     const rateInfoCache = new Map(); // `${userName}|${monthKey}` -> { rate, found }
