@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw, Search, Download } from 'lucide-react';
+import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw, Search, Download, AlertTriangle, ExternalLink } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { db, auth } from '@/firebase/config';
@@ -12,6 +12,20 @@ import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge, getMatchTypeBadge } from '@/utils/statusStyles';
 import { downloadCSV } from '@/utils/csv';
 import { parseInvoiceDate } from '@/utils/paymentStatus.mjs';
+import {
+  buildPaymentAllocations,
+  canFullyAllocateInvoice,
+  centsToAmount,
+  invoiceAllocationCents,
+  MIN_REMAINING_CENTS,
+  toCents,
+} from '@/utils/paymentAllocations.mjs';
+import {
+  buildHistoricalPaidAs,
+  normalizePaymentIdentity,
+  recommendInvoicesForPayment,
+  recommendPaymentForInvoice,
+} from '@/utils/paymentRecommendations.mjs';
 
 // Company-suffix / stopword tokens that carry no identifying signal. These
 // appear across many client names ("Inc.", "LLC", "The …"), so matching on
@@ -63,6 +77,13 @@ function formatTxnDate(dateStr) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function formatTxnFullDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 /**
  * Stable natural key for an invoice, independent of sheetRowNumber.
  *
@@ -81,6 +102,61 @@ function invoiceKey(inv) {
   return `${client}|${amount}|${dateSent}|${year}`;
 }
 
+// TODO(team): confirm which address to CC on the third/final reminder.
+// The Invoice Reminders System doc says "Please CC Sam on the third reminder
+// email." Left blank until the team confirms Sam's address — while empty, no
+// Cc header is added, so drafts still work; fill this in to enable the CC.
+const SAM_CC_EMAIL = '';
+
+// Ordinal labels for the three sequential reminders.
+const REMINDER_ORDINALS = ['1st', '2nd', '3rd'];
+
+// Sequential reminder email bodies, one per escalation stage (see the Invoice
+// Reminders System doc — the single source of truth for this copy):
+//   stage 0 → First reminder   (~16 days after the invoice, or day 31 for Net 30)
+//   stage 1 → Second reminder  (14 days after the first)
+//   stage 2+ → Third reminder  (final; CC Sam) — reused for any further nudges
+// `stage` is the count of reminders already drafted for this invoice, so the
+// body returned is the NEXT one to send.
+function buildReminderBody(stage, { greeting, invoiceMonthLabel, dueDateStr, senderFirstName }) {
+  if (stage <= 0) {
+    return [
+      `${greeting}, hope you are doing well.`,
+      ``,
+      `I wanted to follow up on the status of your payment for the ${invoiceMonthLabel} invoice, which was due on ${dueDateStr}.`,
+      ``,
+      `Please let us know if you have already processed the payment. We may have missed it on our end. Otherwise, we ask that you do so at your earliest convenience.`,
+      ``,
+      `As always, please let us know if you have any questions.`,
+      ``,
+      `Best,`,
+      senderFirstName,
+    ].join('\n');
+  }
+  if (stage === 1) {
+    return [
+      `${greeting},`,
+      `Following up on our note below regarding your past due invoice. The payment for the ${invoiceMonthLabel} invoice was due on ${dueDateStr}.`,
+      ``,
+      `Please let us know if you have already processed the payment and we will be sure to check our records again.`,
+      ``,
+      `Otherwise, we ask that you send payment as soon as possible.`,
+      ``,
+      `Best,`,
+      senderFirstName,
+    ].join('\n');
+  }
+  return [
+    `${greeting},`,
+    `Following up regarding the ${invoiceMonthLabel} invoice. The payment was due on ${dueDateStr} and we have sent multiple reminders but have not received the payment.`,
+    ``,
+    `Please provide us with an update on the timing of your payment. We ask that you send the amount due no later than the end of this week.`,
+    ``,
+    `Best,`,
+    senderFirstName,
+  ].join('\n');
+}
+
 const AdminInvoices = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -94,6 +170,9 @@ const AdminInvoices = () => {
   const [sortConfig, setSortConfig] = useState({ key: 'dateSent', direction: 'desc' });
   const [clientsData, setClientsData] = useState([]);
   const [matchSelections, setMatchSelections] = useState({});
+  const manuallySelectedRowsRef = useRef(new Set());
+  const autoSelectedRowsRef = useRef(new Map());
+  const [invoicesView, setInvoicesView] = useState('invoices');
   const [savingAlias, setSavingAlias] = useState(null);
   const [confirmedMatches, setConfirmedMatches] = useState({});
   const [markingPaid, setMarkingPaid] = useState(null);
@@ -110,6 +189,8 @@ const AdminInvoices = () => {
   const [draftSuccess, setDraftSuccess] = useState({});
   const [draftError, setDraftError] = useState(null);
   const [draftErrorMsg, setDraftErrorMsg] = useState(null);
+  const [checkingSends, setCheckingSends] = useState(false);
+  const [checkSendsResult, setCheckSendsResult] = useState(null);
 
   const connectGmail = async () => {
     const provider = new GoogleAuthProvider();
@@ -246,21 +327,15 @@ const AdminInvoices = () => {
       // Sender's first name
       const senderFirstName = user?.displayName?.split(' ')[0] || '';
 
-      const body = [
-        `${greeting}, hope you are doing well.`,
-        ``,
-        `I wanted to follow up on the status of your payment for the ${invoiceMonthLabel} invoice, which was due on ${dueDateStr}.`,
-        ``,
-        `Please let us know if you have already processed the payment. We may have missed it on our end. Otherwise, we ask that you do so at your earliest convenience.`,
-        ``,
-        `As always, please let us know if you have any questions.`,
-        ``,
-        `Best,`,
-        senderFirstName,
-      ].join('\n');
+      // Pick the reminder body by how many have already been drafted for this
+      // invoice (persisted on the entry). Stage 2+ is the final reminder, which
+      // CCs Sam per the Invoice Reminders System doc.
+      const stage = inv.remindersSent || 0;
+      const body = buildReminderBody(stage, { greeting, invoiceMonthLabel, dueDateStr, senderFirstName });
 
       const rawLines = [
         `To: ${to}`,
+        ...(stage >= 2 && SAM_CC_EMAIL ? [`Cc: ${SAM_CC_EMAIL}`] : []),
         `Subject: ${replySubject}`,
         `In-Reply-To: ${messageId}`,
         `References: ${messageId}`,
@@ -292,7 +367,27 @@ const AdminInvoices = () => {
       );
 
       if (!draftRes.ok) throw new Error(`Failed to create draft: ${draftRes.status}`);
-      setDraftSuccess((prev) => ({ ...prev, [inv.sheetRowNumber]: true }));
+      const draftJson = await draftRes.json().catch(() => ({}));
+      const draftId = draftJson?.id || null;
+
+      // Do NOT increment the reminder count here — a draft is not a send. Record
+      // a `pendingReminder` on the entry (natural-key merge, so it survives
+      // Apps Script sheet re-syncs like matchedTransactionId). The count only
+      // advances once the service account confirms the draft was actually sent
+      // (see /api/check-reminder-sends + docs/reminder-send-detection.md).
+      // senderEmail is the mailbox the draft lives in — the account we impersonate
+      // to look for the sent message.
+      setDraftSuccess((prev) => ({ ...prev, [inv.sheetRowNumber]: REMINDER_ORDINALS[Math.min(stage, 2)] }));
+      await updateInvoiceEntry(inv, (i) => ({
+        ...i,
+        pendingReminder: {
+          draftId,
+          threadId,
+          senderEmail: gmailEmail || user?.email || '',
+          stage,
+          createdAt: new Date().toISOString(),
+        },
+      }));
     } catch (err) {
       console.error('Error creating reminder draft:', err);
       setDraftError(inv.sheetRowNumber);
@@ -349,6 +444,39 @@ const AdminInvoices = () => {
     fetchData();
   }, [fetchData]);
 
+  // Ask the server (service account) whether any pending reminder drafts have
+  // actually been sent; on confirmation it increments remindersSent server-side,
+  // so we refetch to pick up the new counts. `silent` suppresses the result
+  // banner for the automatic on-load poll.
+  const checkReminderSends = useCallback(async ({ silent = false } = {}) => {
+    if (!auth.currentUser) return;
+    setCheckingSends(true);
+    if (!silent) setCheckSendsResult(null);
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const res = await fetch('/api/check-reminder-sends', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (!silent || data.confirmed > 0) setCheckSendsResult({ type: 'success', ...data });
+        if (data.confirmed > 0) await fetchData();
+      } else if (!silent) {
+        setCheckSendsResult({ type: 'error', message: data.error || 'Check failed' });
+      }
+    } catch (err) {
+      if (!silent) setCheckSendsResult({ type: 'error', message: err.message });
+    } finally {
+      setCheckingSends(false);
+    }
+  }, [fetchData]);
+
+  // One automatic poll on load so counts advance without a manual click.
+  useEffect(() => {
+    checkReminderSends({ silent: true });
+  }, [checkReminderSends]);
+
   const refetchTransactions = useCallback(async () => {
     try {
       const txnSnap = await getDocs(collection(db, 'transactions'));
@@ -382,7 +510,7 @@ const AdminInvoices = () => {
       const snap = await getDoc(doc(db, 'invoices', 'all'));
       const current = snap.exists() ? (snap.data().entries || []) : [];
       const updated = current.map((inv) =>
-        invoiceKey(inv) === targetKey ? updater(inv) : inv
+        invoiceKey(inv) === targetKey ? updater(inv, current) : inv
       );
       await setDoc(doc(db, 'invoices', 'all'), { entries: updated }, { merge: true });
       setInvoices(updated);
@@ -432,9 +560,7 @@ const AdminInvoices = () => {
         }
       }
     }
-    if (Object.keys(restored).length > 0) {
-      setConfirmedMatches(restored);
-    }
+    setConfirmedMatches(restored);
   }, [invoices, transactions]);
 
   const handleLogout = async () => {
@@ -590,6 +716,87 @@ const AdminInvoices = () => {
     return Array.from(set).filter((n) => n.toLowerCase() !== clientLower);
   };
 
+  // Allocation is derived across the entire invoice book, not merely the
+  // visible filters. That prevents a hidden invoice from making a payment look
+  // as though it has more capacity than it really does.
+  const paymentAllocations = useMemo(
+    () => buildPaymentAllocations(transactions, invoices),
+    [transactions, invoices]
+  );
+
+  const historicalPaidAs = useMemo(
+    () => buildHistoricalPaidAs(invoices, transactions),
+    [invoices, transactions]
+  );
+
+  const paymentRecommendations = useMemo(() => {
+    const result = {};
+    for (const invoice of filteredAndSorted) {
+      if (invoice.status === 'Paid') continue;
+      result[invoice.sheetRowNumber] = recommendPaymentForInvoice({
+        invoice,
+        transactions,
+        allocations: paymentAllocations,
+        aliases,
+        historicalPaidAs,
+      });
+    }
+    return result;
+  }, [filteredAndSorted, transactions, paymentAllocations, aliases, historicalPaidAs]);
+
+  // Preselect only a unique strong recommendation. Track automatic and manual
+  // choices separately so allocation changes can clear a stale auto-choice,
+  // while a user's explicit selection is never overwritten on rerender.
+  useEffect(() => {
+    setMatchSelections((previous) => {
+      const next = { ...previous };
+      let changed = false;
+
+      for (const [rowKey, transactionId] of autoSelectedRowsRef.current) {
+        const current = paymentRecommendations[rowKey];
+        if (current?.status !== 'recommended' || current.candidate.transactionId !== transactionId) {
+          if (next[rowKey] === transactionId) delete next[rowKey];
+          autoSelectedRowsRef.current.delete(rowKey);
+          changed = true;
+        }
+      }
+
+      for (const [rowKey, result] of Object.entries(paymentRecommendations)) {
+        if (result.status !== 'recommended' || manuallySelectedRowsRef.current.has(rowKey)) continue;
+        if (Object.prototype.hasOwnProperty.call(next, rowKey)) continue;
+        next[rowKey] = result.candidate.transactionId;
+        autoSelectedRowsRef.current.set(rowKey, result.candidate.transactionId);
+        changed = true;
+      }
+
+      return changed ? next : previous;
+    });
+  }, [paymentRecommendations]);
+
+  const unmatchedPayments = useMemo(() => transactions
+    .map((transaction) => ({ transaction, allocation: paymentAllocations[transaction.id] }))
+    .filter(({ allocation }) => allocation && allocation.remainingCents >= MIN_REMAINING_CENTS)
+    .sort((a, b) => new Date(b.transaction.postedAt || b.transaction.createdAt || 0)
+      - new Date(a.transaction.postedAt || a.transaction.createdAt || 0)),
+  [transactions, paymentAllocations]);
+
+  // For each unmatched payment, the outstanding invoices it could settle.
+  // Computed over the full invoice book (not the filtered table) so candidates
+  // aren't hidden by the active status/name filters.
+  const paymentInvoiceCandidates = useMemo(() => {
+    const result = {};
+    for (const { transaction, allocation } of unmatchedPayments) {
+      result[transaction.id] = recommendInvoicesForPayment({
+        payment: transaction,
+        invoices,
+        allocation,
+        aliases,
+        historicalPaidAs,
+      });
+    }
+    return result;
+  }, [unmatchedPayments, invoices, aliases, historicalPaidAs]);
+
   // -------------------------------------------------------
   // Matching logic: for each invoice, find candidate
   // transactions ranked by alias > name > amount
@@ -597,28 +804,26 @@ const AdminInvoices = () => {
   const matchCandidates = useMemo(() => {
     const candidateMap = {};
 
-    // Transactions already matched to an invoice — hidden from every
-    // selector so one payment can't be matched to two invoices. Scans the
-    // full invoices list (not filteredAndSorted) so a match made under a
-    // different month/status filter is still excluded.
-    const matchedTxnIds = new Set();
-    for (const inv of invoices) {
-      if (inv.matchedTransactionId) matchedTxnIds.add(inv.matchedTransactionId);
-    }
-
     for (const inv of filteredAndSorted) {
       const clientLower = (inv.client || '').toLowerCase();
       const invSentDate = parseDateSent(inv.dateSent, inv.year);
       const candidates = [];
       const seenTxnIds = new Set();
+      const strongTransactionIds = new Set(
+        (paymentRecommendations[inv.sheetRowNumber]?.candidates || [])
+          .map((candidate) => candidate.transactionId)
+      );
 
       for (const txn of transactions) {
-        // Skip transactions already matched to another invoice
-        if (matchedTxnIds.has(txn.id)) continue;
+        // A payment remains selectable after its first match while its unused
+        // balance can cover this invoice in full. Partial invoice payments are
+        // intentionally outside this iteration.
+        const allocation = paymentAllocations[txn.id];
+        if (!canFullyAllocateInvoice(allocation, inv.amount)) continue;
         // Only consider payments in the window [invoice sent, +90 days].
         // A payment can't predate the invoice, and capping at 90 days keeps
         // very old invoices from accumulating dozens of coincidental matches.
-        if (invSentDate) {
+        if (invSentDate && !strongTransactionIds.has(txn.id)) {
           const txnDate = txn.postedAt ? new Date(txn.postedAt) : txn.createdAt ? new Date(txn.createdAt) : null;
           if (txnDate) {
             if (txnDate < invSentDate) continue;
@@ -632,6 +837,10 @@ const AdminInvoices = () => {
         // 1. Alias match
         const aliasClients = aliases[cpLower];
         if (aliasClients && aliasClients.includes(inv.client)) {
+          matchTypes.push('alias');
+        }
+        const knownPaidAs = historicalPaidAs[normalizePaymentIdentity(inv.client)];
+        if (knownPaidAs?.has(normalizePaymentIdentity(cpName)) && !matchTypes.includes('alias')) {
           matchTypes.push('alias');
         }
 
@@ -654,7 +863,7 @@ const AdminInvoices = () => {
         }
 
         // 3. Amount match
-        if (txn.amount === inv.amount) {
+        if (toCents(txn.amount) === toCents(inv.amount)) {
           matchTypes.push('amount');
         }
 
@@ -662,7 +871,7 @@ const AdminInvoices = () => {
           seenTxnIds.add(txn.id);
           // Use the highest priority match type
           const bestType = matchTypes[0];
-          candidates.push({ txn, matchType: bestType });
+          candidates.push({ txn, matchType: bestType, allocation });
         }
       }
 
@@ -674,7 +883,7 @@ const AdminInvoices = () => {
     }
 
     return candidateMap;
-  }, [filteredAndSorted, transactions, aliases, invoices]);
+  }, [filteredAndSorted, transactions, aliases, paymentAllocations, historicalPaidAs, paymentRecommendations]);
 
   // Confirm a match: save alias + persist match on the invoice + mark as Paid
   const handleConfirmMatch = async (invoice, transactionId) => {
@@ -700,12 +909,19 @@ const AdminInvoices = () => {
       // key — sheetRowNumber may shift between syncs.
       await Promise.all([
         setDoc(doc(db, 'clientAliases', 'all'), { aliases: updatedAliases }),
-        updateInvoiceEntry(invoice, (inv) => ({
-          ...inv,
-          matchedTransactionId: transactionId,
-          status: 'Paid',
-          dateReceived: txn.postedAt || txn.createdAt || inv.dateReceived,
-        })),
+        updateInvoiceEntry(invoice, (inv, currentInvoices) => {
+          const freshAllocation = buildPaymentAllocations([txn], currentInvoices)[transactionId];
+          if (!canFullyAllocateInvoice(freshAllocation, inv.amount)) {
+            throw new Error('This payment no longer has enough unmatched balance for the invoice.');
+          }
+          return {
+            ...inv,
+            matchedTransactionId: transactionId,
+            matchedPaymentAmount: centsToAmount(toCents(inv.amount)),
+            status: 'Paid',
+            dateReceived: txn.postedAt || txn.createdAt || inv.dateReceived,
+          };
+        }),
       ]);
 
       // Update local state
@@ -736,7 +952,7 @@ const AdminInvoices = () => {
       const target = invoices.find((inv) => inv.sheetRowNumber === sheetRowNumber);
       if (target) {
         await updateInvoiceEntry(target, (inv) => {
-          const { matchedTransactionId, ...rest } = inv;
+          const { matchedTransactionId, matchedPaymentAmount, ...rest } = inv;
           return { ...rest, status: '', dateReceived: '' };
         });
       }
@@ -825,15 +1041,26 @@ const AdminInvoices = () => {
     // Show confirmed match
     if (confirmedMatches[rowKey]) {
       const { txn } = confirmedMatches[rowKey];
+      const allocation = paymentAllocations[txn.id];
+      const invoiceAllocation = centsToAmount(invoiceAllocationCents(inv));
       return (
-        <div className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-          <span className="text-xs text-green-700 truncate max-w-[180px]">
-            {txn.counterpartyName} — {formatCurrency(txn.amount)} — {formatTxnDate(txn.postedAt || txn.createdAt)}
-          </span>
+        <div className="flex items-start gap-2">
+          <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <div className="text-xs text-green-700 truncate max-w-[220px]">
+              {txn.counterpartyName} — {formatCurrency(invoiceAllocation)} of {formatCurrency(txn.amount)} — {formatTxnDate(txn.postedAt || txn.createdAt)}
+            </div>
+            {allocation && allocation.remainingCents >= MIN_REMAINING_CENTS ? (
+              <div className="text-[10px] font-medium text-amber-600">
+                Overpaid {formatCurrency(centsToAmount(allocation.remainingCents))}
+              </div>
+            ) : (
+              <div className="text-[10px] text-gray-500">Payment fully matched</div>
+            )}
+          </div>
           <button
             onClick={() => handleDismissMatch(rowKey)}
-            className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+            className="text-gray-400 hover:text-gray-600 flex-shrink-0 mt-0.5"
           >
             <X className="w-3 h-3" />
           </button>
@@ -842,6 +1069,7 @@ const AdminInvoices = () => {
     }
 
     const candidates = matchCandidates[rowKey] || [];
+    const recommendation = paymentRecommendations[rowKey];
     if (candidates.length === 0) {
       return <span className="text-gray-400 text-xs">No matches</span>;
     }
@@ -849,36 +1077,55 @@ const AdminInvoices = () => {
     const selectedTxnId = matchSelections[rowKey];
 
     return (
-      <div className="flex items-center gap-1">
-        <select
-          value={selectedTxnId || ''}
-          onChange={(e) =>
-            setMatchSelections((prev) => ({
-              ...prev,
-              [rowKey]: e.target.value || undefined,
-            }))
-          }
-          className="text-xs border border-gray-200 rounded px-2 py-1 bg-white max-w-[240px] focus:outline-none focus:ring-1 focus:ring-gray-300"
-        >
-          <option value="">
-            Select match... ({candidates.length})
-          </option>
-          {candidates.map((c) => (
-            <option key={c.txn.id} value={c.txn.id}>
-              {c.txn.counterpartyName || 'Unknown'} — {formatCurrency(c.txn.amount)} — {formatTxnDate(c.txn.postedAt || c.txn.createdAt)} ({c.matchType})
-            </option>
-          ))}
-        </select>
-        {selectedTxnId && (
-          <button
-            onClick={() => handleConfirmMatch(inv, selectedTxnId)}
-            disabled={savingAlias === rowKey}
-            className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 transition-colors flex-shrink-0"
-            title="Confirm match and save alias"
-          >
-            <Check className="w-3.5 h-3.5" />
-          </button>
+      <div className="space-y-1.5">
+        {recommendation?.status === 'recommended' && (
+          <div className="flex items-start gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-800">
+            <CheckCircle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+            <span>
+              Recommended payment found — exact amount + {recommendation.candidate.matchType === 'paid-as' ? 'known paid-as name' : 'exact client name'}
+            </span>
+          </div>
         )}
+        {recommendation?.status === 'ambiguous' && (
+          <div className="flex items-start gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-800">
+            <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+            <span>{recommendation.candidates.length} equally strong payments found — select one manually</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1">
+          <select
+            value={selectedTxnId || ''}
+            onChange={(e) => {
+              const key = String(rowKey);
+              manuallySelectedRowsRef.current.add(key);
+              autoSelectedRowsRef.current.delete(key);
+              setMatchSelections((prev) => ({
+                ...prev,
+                [rowKey]: e.target.value || undefined,
+              }));
+            }}
+            className="text-xs border border-gray-200 rounded px-2 py-1 bg-white max-w-[240px] focus:outline-none focus:ring-1 focus:ring-gray-300"
+          >
+            <option value="">
+              Select match... ({candidates.length})
+            </option>
+            {candidates.map((c) => (
+              <option key={c.txn.id} value={c.txn.id}>
+                {c.txn.counterpartyName || 'Unknown'} — {formatCurrency(c.txn.amount)} payment — {formatCurrency(centsToAmount(c.allocation.remainingCents))} remaining — {formatTxnDate(c.txn.postedAt || c.txn.createdAt)} ({c.matchType})
+              </option>
+            ))}
+          </select>
+          {selectedTxnId && (
+            <button
+              onClick={() => handleConfirmMatch(inv, selectedTxnId)}
+              disabled={savingAlias === rowKey}
+              className="p-1 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 transition-colors flex-shrink-0"
+              title="Confirm match and save alias"
+            >
+              <Check className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     );
   };
@@ -961,13 +1208,37 @@ const AdminInvoices = () => {
                 : 'Connect Gmail to create reminder email drafts directly in the invoice thread.'}
             </p>
           </div>
-          <button
-            onClick={connectGmail}
-            className="px-4 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors flex-shrink-0"
-          >
-            {gmailToken ? 'Switch Account' : 'Connect Gmail'}
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => checkReminderSends({})}
+              disabled={checkingSends}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50"
+              title="Ask the service account whether any pending reminder drafts have been sent, and advance their counts"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${checkingSends ? 'animate-spin' : ''}`} />
+              {checkingSends ? 'Checking…' : 'Check sends'}
+            </button>
+            <button
+              onClick={connectGmail}
+              className="px-4 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            >
+              {gmailToken ? 'Switch Account' : 'Connect Gmail'}
+            </button>
+          </div>
         </div>
+        {checkSendsResult && (
+          <div
+            className={`mt-2 rounded-lg px-4 py-2 text-xs ${
+              checkSendsResult.type === 'success'
+                ? 'bg-green-50 border border-green-200 text-green-700'
+                : 'bg-red-50 border border-red-200 text-red-700'
+            }`}
+          >
+            {checkSendsResult.type === 'success'
+              ? `Checked ${checkSendsResult.checked ?? 0} pending draft(s): ${checkSendsResult.confirmed ?? 0} sent, ${checkSendsResult.stillPending ?? 0} awaiting, ${checkSendsResult.discarded ?? 0} discarded.`
+              : checkSendsResult.message}
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
@@ -1014,6 +1285,145 @@ const AdminInvoices = () => {
                 </div>
               </div>
             </div>
+
+            {/* View toggle: the invoices table, or the unmatched-payment matcher. */}
+            <div className="mb-4 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setInvoicesView('invoices')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  invoicesView === 'invoices'
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Invoices
+              </button>
+              <button
+                type="button"
+                onClick={() => setInvoicesView('unmatched')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  invoicesView === 'unmatched'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Unmatched payments ({unmatchedPayments.length})
+              </button>
+              {invoicesView === 'unmatched' && unmatchedPayments.length > 0 && (
+                <span className="ml-auto text-sm font-semibold text-amber-700">
+                  {formatCurrency(centsToAmount(unmatchedPayments.reduce(
+                    (sum, item) => sum + item.allocation.remainingCents, 0
+                  )))} available to match
+                </span>
+              )}
+            </div>
+
+            {invoicesView === 'unmatched' && (
+              <div className="mb-6 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm">
+                <div>
+                  {unmatchedPayments.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-sm text-gray-500">All incoming payments are fully matched.</p>
+                  ) : (
+                    <ul className="divide-y divide-amber-100">
+                      {unmatchedPayments.map(({ transaction, allocation }) => {
+                        const candidates = paymentInvoiceCandidates[transaction.id] || [];
+                        return (
+                          <li key={transaction.id} className="px-4 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                                  <span className="truncate">{transaction.counterpartyName || 'Unknown'}</span>
+                                  {allocation.allocatedCents > 0 && (
+                                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                                      Partially matched
+                                    </span>
+                                  )}
+                                  {transaction.dashboardLink && (
+                                    <a
+                                      href={transaction.dashboardLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex text-gray-400 hover:text-gray-700"
+                                      title="Open transaction in Mercury"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  )}
+                                </div>
+                                <div className="mt-0.5 text-xs text-gray-500">
+                                  {formatTxnFullDate(transaction.postedAt || transaction.createdAt)}
+                                  {' · '}
+                                  {formatCurrency(transaction.amount)} received
+                                </div>
+                              </div>
+                              <div className="flex-shrink-0 text-right">
+                                <div className="text-sm font-semibold text-amber-700">
+                                  {formatCurrency(centsToAmount(allocation.remainingCents))}
+                                </div>
+                                <div className="text-[10px] uppercase tracking-wide text-gray-400">available</div>
+                              </div>
+                            </div>
+
+                            {candidates.length === 0 ? (
+                              <p className="mt-2 text-xs text-gray-400">No matching outstanding invoices found.</p>
+                            ) : (
+                              <ul className="mt-2 space-y-1">
+                                {candidates.map((c) => (
+                                  <li
+                                    key={`${c.invoice.client}-${c.invoice.sheetRowNumber}`}
+                                    className="flex items-center justify-between gap-3 rounded-md bg-gray-50 px-3 py-2"
+                                  >
+                                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                                      <span className="font-medium text-gray-900">{c.invoice.client}</span>
+                                      <span className="text-gray-600">{formatCurrency(c.invoice.amount)}</span>
+                                      <span className="text-xs text-gray-400">
+                                        sent {formatDateDisplay(c.invoice.dateSent, c.invoice.year)}
+                                      </span>
+                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                        c.priority === 0
+                                          ? 'bg-green-50 text-green-700'
+                                          : c.priority === 1
+                                            ? 'bg-blue-50 text-blue-700'
+                                            : 'bg-gray-200 text-gray-600'
+                                      }`}>
+                                        {c.matchType === 'exact-name'
+                                          ? 'Name match'
+                                          : c.matchType === 'paid-as'
+                                            ? 'Paid-as match'
+                                            : 'Amount match'}
+                                        {c.exactAmount ? ' · exact' : ''}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleConfirmMatch(c.invoice, transaction.id)}
+                                      disabled={savingAlias === c.invoice.sheetRowNumber}
+                                      className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                                      title={`Match this payment to ${c.invoice.client}'s ${formatCurrency(c.invoice.amount)} invoice`}
+                                    >
+                                      {savingAlias === c.invoice.sheetRowNumber ? (
+                                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                      ) : (
+                                        <Check className="h-3.5 w-3.5" />
+                                      )}
+                                      Match
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {invoicesView === 'invoices' && (
+              <>
 
             {/* Filters Row */}
             <div className="flex items-center gap-4 mb-4 flex-wrap">
@@ -1231,10 +1641,17 @@ const AdminInvoices = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                           {inv.status === 'Paid' ? (
                             <span className="text-gray-400 text-xs">—</span>
-                          ) : draftSuccess[inv.sheetRowNumber] ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-green-50 text-green-700">
-                              <CheckCircle className="w-3.5 h-3.5" />
-                              Draft Created
+                          ) : inv.pendingReminder || draftSuccess[inv.sheetRowNumber] ? (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-50 text-amber-700"
+                              title={
+                                inv.pendingReminder?.createdAt
+                                  ? `${REMINDER_ORDINALS[Math.min(inv.pendingReminder.stage || 0, 2)]} reminder draft created ${inv.pendingReminder.createdAt.slice(0, 10)} — count advances once the send is confirmed`
+                                  : 'Draft created — count advances once the send is confirmed'
+                              }
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              Awaiting send
                             </span>
                           ) : (
                             <button
@@ -1260,14 +1677,27 @@ const AdminInvoices = () => {
                               ) : (
                                 <>
                                   <Send className="w-3.5 h-3.5" />
-                                  Remind
+                                  {REMINDER_ORDINALS[Math.min(inv.remindersSent || 0, 2)]} Reminder
                                 </>
                               )}
                             </button>
                           )}
+                          {(inv.remindersSent || 0) > 0 && (
+                            <div className="mt-1 text-[10px] text-gray-400">
+                              {inv.remindersSent} sent{inv.lastReminderSentAt ? ` · ${String(inv.lastReminderSentAt).slice(0, 10)}` : ''}
+                            </div>
+                          )}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 max-w-[200px] truncate">
-                          {inv.notes || '—'}
+                        <td className="px-6 py-4 text-sm text-gray-500 max-w-[220px]">
+                          <div className="truncate">{inv.notes || '—'}</div>
+                          {inv.matchedTransactionId && paymentAllocations[inv.matchedTransactionId]?.invoiceCount > 1 && (
+                            <div
+                              className="mt-1 text-[10px] font-medium text-blue-700"
+                              title="This note is derived from payment matches and does not replace invoice notes"
+                            >
+                              Paid with {paymentAllocations[inv.matchedTransactionId].invoiceCount} invoices by the same payment
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1282,6 +1712,8 @@ const AdminInvoices = () => {
                 </table>
               </div>
             </div>
+              </>
+            )}
           </>
         )}
       </div>

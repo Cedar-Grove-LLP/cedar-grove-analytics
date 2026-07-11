@@ -318,15 +318,21 @@ export const CALC_DEFINITIONS = Object.freeze({
     notes: ['Practice areas are derived from billingCategory — see the Practice Area column tooltip for the exact grouping rule.'],
   },
   projectedEarnings: {
-    label: 'Projected Earnings (take-home)',
-    formula: 'YTD actual earnings + Σ over remaining months: (target hours − actual this month) × projected take-home rate',
-    inputs: ['YTD actual earnings', 'monthly targets (admin-entered)', 'rate card ladder (Q2/Q4 rank bumps, capped at rank 19)', 'YTD actuals'],
+    label: 'Projected Client Earnings (take-home)',
+    formula: 'Σ over remaining months: (target hours − actual this month) × projected take-home rate',
+    inputs: ['monthly targets (admin-entered)', 'rate card ladder (Q2/Q4 rank bumps, capped at rank 19)', 'current-month actuals'],
     source: SOURCE.COMPUTED,
     notes: [
       'Rank is matched on the client rate; the payout uses the attorney (take-home) column — Colin rate for Colin.',
       'If the current client rate has no exact rate-card match, take-home is unknown and the projection is $0.',
       'Part-time (PTE) attorneys skip the rate card entirely: their stored rate is paid flat for the whole year, with no Q2/Q4 rank bumps.',
     ],
+  },
+  projectedEarningsTotal: {
+    label: 'Projected Total',
+    formula: 'YTD actual earnings + projected client earnings + projected profit share',
+    inputs: ['YTD actual earnings', 'projected client earnings', 'projected partner profit share'],
+    source: SOURCE.COMPUTED,
   },
   projectedHours: {
     label: 'Projected Hours',
@@ -341,7 +347,7 @@ export const CALC_DEFINITIONS = Object.freeze({
     source: SOURCE.COMPUTED,
     notes: [
       'Predicted annual firm profit = average of the current year\'s completed-month profit, projected across all 12 months.',
-      'Only the two partners receive a share; it is added on top of their labor projection in the Proj. Earnings total.',
+      'Only the two partners receive a share; it is added on top of their labor projection in the Proj. Total.',
       'Shows $0 until firmProfit is synced from the invoices sheet (B16).',
     ],
   },

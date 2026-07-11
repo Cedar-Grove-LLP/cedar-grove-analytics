@@ -7,8 +7,12 @@ import { getCalcTooltipLines } from '../../utils/calcDefinitions.mjs';
 // Full static class strings only — Tailwind's JIT cannot see interpolated
 // class names (same convention as ClientStatCard's ACCENT map).
 const POS = {
-  top: 'bottom-full mb-2',
-  bottom: 'top-full mt-2',
+  // Padding belongs to the positioned hover surface, so there is no dead
+  // zone between the trigger and the visible panel. A margin here causes the
+  // tooltip to disappear while the pointer crosses the gap, which presents as
+  // rapid flashing when someone tries to move from the icon into the panel.
+  top: 'bottom-full pb-2',
+  bottom: 'top-full pt-2',
 };
 const ALIGN = {
   left: 'left-0',
@@ -68,16 +72,18 @@ const CalcTooltip = ({
       <span
         role="tooltip"
         id={id}
-        className={`absolute ${POS[position] || POS.top} ${ALIGN[align] || ALIGN.left} hidden group-hover:block group-focus-within:block z-50 w-max max-w-xs p-2 bg-gray-900 text-white text-xs font-normal normal-case tracking-normal text-left rounded shadow-lg whitespace-normal`}
+        className={`absolute ${POS[position] || POS.top} ${ALIGN[align] || ALIGN.left} hidden group-hover:block group-focus-within:block z-50 w-max max-w-xs text-white text-xs font-normal normal-case tracking-normal text-left whitespace-normal`}
       >
-        {body.map((line, i) => (
-          <span
-            key={i}
-            className={`block ${i === 0 ? 'font-semibold mb-0.5' : ''}${i > 0 && i === body.length - 1 ? ' text-gray-300 mt-0.5' : ''}`}
-          >
-            {line}
-          </span>
-        ))}
+        <span className="block p-2 bg-gray-900 rounded shadow-lg">
+          {body.map((line, i) => (
+            <span
+              key={i}
+              className={`block ${i === 0 ? 'font-semibold mb-0.5' : ''}${i > 0 && i === body.length - 1 ? ' text-gray-300 mt-0.5' : ''}`}
+            >
+              {line}
+            </span>
+          ))}
+        </span>
       </span>
     </span>
   );

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, LogOut, DollarSign, ArrowDownCircle, ArrowUpCircle, ExternalLink, RefreshCw, Search, Download } from 'lucide-react';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
@@ -15,14 +15,12 @@ const FILTER_OPTIONS = [
   { key: 'all', label: 'All Transactions' },
   { key: 'expenses', label: 'Expenses' },
   { key: 'payments', label: 'Payments' },
-  { key: 'unmatched', label: 'Unmatched Payments' },
 ];
 
 const AdminTransactions = () => {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const [transactions, setTransactions] = useState([]);
-  const [matchedTxnIds, setMatchedTxnIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
@@ -34,22 +32,9 @@ const AdminTransactions = () => {
 
   const fetchTransactions = useCallback(async () => {
     try {
-      // Load transactions plus the invoices doc so we can flag which payments
-      // are already matched to an invoice (drives the "Unmatched Payments"
-      // filter). matchedTransactionId is set by the invoices dashboard.
-      const [snapshot, invoicesSnap] = await Promise.all([
-        getDocs(collection(db, 'transactions')),
-        getDoc(doc(db, 'invoices', 'all')),
-      ]);
+      const snapshot = await getDocs(collection(db, 'transactions'));
       const docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
       setTransactions(docs);
-
-      const entries = invoicesSnap.exists() ? (invoicesSnap.data().entries || []) : [];
-      const matched = new Set();
-      for (const inv of entries) {
-        if (inv.matchedTransactionId) matched.add(inv.matchedTransactionId);
-      }
-      setMatchedTxnIds(matched);
     } catch (err) {
       console.error('Error fetching transactions:', err);
     } finally {
@@ -126,9 +111,6 @@ const AdminTransactions = () => {
       items = items.filter((t) => t.amount < 0);
     } else if (filter === 'payments') {
       items = items.filter((t) => t.amount > 0);
-    } else if (filter === 'unmatched') {
-      // Incoming payments not yet matched to any invoice.
-      items = items.filter((t) => t.amount > 0 && !matchedTxnIds.has(t.id));
     }
 
     // Counterparty name search (case-insensitive substring)
@@ -176,7 +158,7 @@ const AdminTransactions = () => {
     });
 
     return items;
-  }, [transactions, matchedTxnIds, filter, nameFilter, startDate, endDate, sortConfig]);
+  }, [transactions, filter, nameFilter, startDate, endDate, sortConfig]);
 
   const summaryStats = useMemo(() => {
     const expenses = transactions.filter((t) => t.amount < 0);
