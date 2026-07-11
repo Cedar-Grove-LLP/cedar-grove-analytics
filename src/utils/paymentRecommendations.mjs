@@ -1,4 +1,4 @@
-import { toCents } from './paymentAllocations.mjs';
+import { MIN_REMAINING_CENTS, toCents } from './paymentAllocations.mjs';
 
 /**
  * Canonicalize identity without making it fuzzy. Punctuation, casing, and
@@ -61,7 +61,7 @@ export function recommendPaymentForInvoice({
   const strong = [];
   for (const transaction of transactions) {
     const allocation = allocations[transaction.id];
-    if (!allocation || allocation.isOverAllocated || allocation.remainingCents !== invoiceCents) continue;
+    if (!allocation || allocation.remainingCents !== invoiceCents) continue;
 
     const counterparty = normalizePaymentIdentity(transaction?.counterpartyName);
     if (!counterparty) continue;
@@ -84,4 +84,49 @@ export function recommendPaymentForInvoice({
   const best = strong.filter((candidate) => candidate.priority === bestPriority);
   if (best.length > 1) return { status: 'ambiguous', candidates: best };
   return { status: 'recommended', candidate: best[0], candidates: best };
+}
+
+/**
+ * The inverse view: for one incoming payment, list the outstanding invoices it
+ * could settle. A candidate needs SOME signal — a trusted identity tie
+ * (exact/paid-as name) or an exact amount fit — and must fit within the
+ * payment's remaining balance. Ranked: identity + exact amount, then identity,
+ * then exact amount alone; ties break toward the larger invoice.
+ */
+export function recommendInvoicesForPayment({
+  payment,
+  invoices = [],
+  allocation,
+  aliases = {},
+  historicalPaidAs = {},
+} = {}) {
+  const remainingCents = allocation?.remainingCents ?? 0;
+  if (remainingCents < MIN_REMAINING_CENTS) return [];
+
+  const counterparty = normalizePaymentIdentity(payment?.counterpartyName);
+  const candidates = [];
+
+  for (const invoice of invoices) {
+    if (invoice?.status === 'Paid' || invoice?.matchedTransactionId) continue;
+    const invoiceCents = toCents(invoice?.amount);
+    if (invoiceCents <= 0 || invoiceCents > remainingCents) continue;
+
+    const client = normalizePaymentIdentity(invoice?.client);
+    if (!client) continue;
+
+    const paidAs = !!counterparty
+      && (aliasMatchesClient(aliases, client, counterparty)
+        || !!historicalPaidAs[client]?.has(counterparty));
+    const exactName = !!counterparty && counterparty === client;
+    const hasIdentity = paidAs || exactName;
+    const exactAmount = invoiceCents === remainingCents;
+    if (!hasIdentity && !exactAmount) continue;
+
+    const matchType = exactName ? 'exact-name' : paidAs ? 'paid-as' : 'amount';
+    const priority = hasIdentity && exactAmount ? 0 : hasIdentity ? 1 : 2;
+    candidates.push({ invoice, invoiceCents, exactAmount, matchType, priority });
+  }
+
+  candidates.sort((a, b) => a.priority - b.priority || b.invoiceCents - a.invoiceCents);
+  return candidates;
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw, Search, Download, AlertTriangle, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, LogOut, Receipt, DollarSign, CheckCircle, Clock, Check, X, Send, Mail, RefreshCw, Search, Download, AlertTriangle, ExternalLink } from 'lucide-react';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { db, auth } from '@/firebase/config';
@@ -17,11 +17,13 @@ import {
   canFullyAllocateInvoice,
   centsToAmount,
   invoiceAllocationCents,
+  MIN_REMAINING_CENTS,
   toCents,
 } from '@/utils/paymentAllocations.mjs';
 import {
   buildHistoricalPaidAs,
   normalizePaymentIdentity,
+  recommendInvoicesForPayment,
   recommendPaymentForInvoice,
 } from '@/utils/paymentRecommendations.mjs';
 
@@ -170,7 +172,7 @@ const AdminInvoices = () => {
   const [matchSelections, setMatchSelections] = useState({});
   const manuallySelectedRowsRef = useRef(new Set());
   const autoSelectedRowsRef = useRef(new Map());
-  const [showUnmatchedPayments, setShowUnmatchedPayments] = useState(true);
+  const [invoicesView, setInvoicesView] = useState('invoices');
   const [savingAlias, setSavingAlias] = useState(null);
   const [confirmedMatches, setConfirmedMatches] = useState({});
   const [markingPaid, setMarkingPaid] = useState(null);
@@ -773,15 +775,27 @@ const AdminInvoices = () => {
 
   const unmatchedPayments = useMemo(() => transactions
     .map((transaction) => ({ transaction, allocation: paymentAllocations[transaction.id] }))
-    .filter(({ allocation }) => allocation && allocation.remainingCents > 0 && !allocation.isOverAllocated)
+    .filter(({ allocation }) => allocation && allocation.remainingCents >= MIN_REMAINING_CENTS)
     .sort((a, b) => new Date(b.transaction.postedAt || b.transaction.createdAt || 0)
       - new Date(a.transaction.postedAt || a.transaction.createdAt || 0)),
   [transactions, paymentAllocations]);
 
-  const overAllocatedPayments = useMemo(() => transactions
-    .map((transaction) => ({ transaction, allocation: paymentAllocations[transaction.id] }))
-    .filter(({ allocation }) => allocation?.isOverAllocated),
-  [transactions, paymentAllocations]);
+  // For each unmatched payment, the outstanding invoices it could settle.
+  // Computed over the full invoice book (not the filtered table) so candidates
+  // aren't hidden by the active status/name filters.
+  const paymentInvoiceCandidates = useMemo(() => {
+    const result = {};
+    for (const { transaction, allocation } of unmatchedPayments) {
+      result[transaction.id] = recommendInvoicesForPayment({
+        payment: transaction,
+        invoices,
+        allocation,
+        aliases,
+        historicalPaidAs,
+      });
+    }
+    return result;
+  }, [unmatchedPayments, invoices, aliases, historicalPaidAs]);
 
   // -------------------------------------------------------
   // Matching logic: for each invoice, find candidate
@@ -1036,13 +1050,9 @@ const AdminInvoices = () => {
             <div className="text-xs text-green-700 truncate max-w-[220px]">
               {txn.counterpartyName} — {formatCurrency(invoiceAllocation)} of {formatCurrency(txn.amount)} — {formatTxnDate(txn.postedAt || txn.createdAt)}
             </div>
-            {allocation?.isOverAllocated ? (
-              <div className="text-[10px] font-medium text-red-600">
-                Over-allocated by {formatCurrency(centsToAmount(allocation.overAllocatedCents))}
-              </div>
-            ) : allocation?.remainingCents > 0 ? (
-              <div className="text-[10px] text-amber-600">
-                {formatCurrency(centsToAmount(allocation.remainingCents))} payment remaining
+            {allocation && allocation.remainingCents >= MIN_REMAINING_CENTS ? (
+              <div className="text-[10px] font-medium text-amber-600">
+                Overpaid {formatCurrency(centsToAmount(allocation.remainingCents))}
               </div>
             ) : (
               <div className="text-[10px] text-gray-500">Payment fully matched</div>
@@ -1276,115 +1286,144 @@ const AdminInvoices = () => {
               </div>
             </div>
 
-            {/* Unmatched and partially matched incoming payments live beside invoices. */}
-            <div className="mb-6 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm">
+            {/* View toggle: the invoices table, or the unmatched-payment matcher. */}
+            <div className="mb-4 flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setShowUnmatchedPayments((visible) => !visible)}
-                className="flex w-full items-center justify-between bg-amber-50 px-4 py-3 text-left"
-                aria-expanded={showUnmatchedPayments}
+                onClick={() => setInvoicesView('invoices')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  invoicesView === 'invoices'
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}
               >
-                <div className="flex items-center gap-2">
-                  {showUnmatchedPayments
-                    ? <ChevronDown className="h-4 w-4 text-amber-700" />
-                    : <ChevronRight className="h-4 w-4 text-amber-700" />}
-                  <div>
-                    <div className="text-sm font-semibold text-amber-900">
-                      Unmatched payments ({unmatchedPayments.length})
-                    </div>
-                    <div className="text-xs font-normal text-amber-700">
-                      Incoming payments with money still available to match to invoices
-                    </div>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-amber-900">
+                Invoices
+              </button>
+              <button
+                type="button"
+                onClick={() => setInvoicesView('unmatched')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  invoicesView === 'unmatched'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                Unmatched payments ({unmatchedPayments.length})
+              </button>
+              {invoicesView === 'unmatched' && unmatchedPayments.length > 0 && (
+                <span className="ml-auto text-sm font-semibold text-amber-700">
                   {formatCurrency(centsToAmount(unmatchedPayments.reduce(
                     (sum, item) => sum + item.allocation.remainingCents, 0
-                  )))} remaining
+                  )))} available to match
                 </span>
-              </button>
-
-              {overAllocatedPayments.length > 0 && (
-                <div className="border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                  <div className="flex items-start gap-2 font-medium">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                    <div>
-                      {overAllocatedPayments.length} payment{overAllocatedPayments.length === 1 ? ' is' : 's are'} over-allocated and require review:
-                      {' '}
-                      {overAllocatedPayments.map(({ transaction, allocation }) => (
-                        <span key={transaction.id} className="mr-2 inline-block">
-                          {transaction.counterpartyName || 'Unknown'} by {formatCurrency(centsToAmount(allocation.overAllocatedCents))}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
               )}
+            </div>
 
-              {showUnmatchedPayments && (
-                <div className="overflow-x-auto border-t border-amber-100">
+            {invoicesView === 'unmatched' && (
+              <div className="mb-6 overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm">
+                <div>
                   {unmatchedPayments.length === 0 ? (
                     <p className="px-4 py-6 text-center text-sm text-gray-500">All incoming payments are fully matched.</p>
                   ) : (
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          {['Date', 'Counterparty', 'Original amount', 'Allocated', 'Remaining', 'Link'].map((label) => (
-                            <th
-                              key={label}
-                              className={`px-4 py-2 text-xs font-medium uppercase tracking-wider text-gray-500 ${
-                                ['Original amount', 'Allocated', 'Remaining'].includes(label) ? 'text-right' : label === 'Link' ? 'text-center' : 'text-left'
-                              }`}
-                            >
-                              {label}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100 bg-white">
-                        {unmatchedPayments.map(({ transaction, allocation }) => (
-                          <tr key={transaction.id} className="hover:bg-amber-50/40">
-                            <td className="whitespace-nowrap px-4 py-2 text-sm text-gray-600">
-                              {formatTxnFullDate(transaction.postedAt || transaction.createdAt)}
-                            </td>
-                            <td className="px-4 py-2 text-sm font-medium text-gray-900">
-                              {transaction.counterpartyName || 'Unknown'}
-                              {allocation.allocatedCents > 0 && (
-                                <span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
-                                  Partially matched
-                                </span>
-                              )}
-                            </td>
-                            <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-gray-700">
-                              {formatCurrency(transaction.amount)}
-                            </td>
-                            <td className="whitespace-nowrap px-4 py-2 text-right text-sm text-gray-600">
-                              {formatCurrency(centsToAmount(allocation.allocatedCents))}
-                            </td>
-                            <td className="whitespace-nowrap px-4 py-2 text-right text-sm font-semibold text-amber-700">
-                              {formatCurrency(centsToAmount(allocation.remainingCents))}
-                            </td>
-                            <td className="px-4 py-2 text-center">
-                              {transaction.dashboardLink ? (
-                                <a
-                                  href={transaction.dashboardLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex text-gray-400 hover:text-gray-700"
-                                  title="Open transaction in Mercury"
-                                >
-                                  <ExternalLink className="h-4 w-4" />
-                                </a>
-                              ) : <span className="text-gray-300">—</span>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <ul className="divide-y divide-amber-100">
+                      {unmatchedPayments.map(({ transaction, allocation }) => {
+                        const candidates = paymentInvoiceCandidates[transaction.id] || [];
+                        return (
+                          <li key={transaction.id} className="px-4 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
+                                  <span className="truncate">{transaction.counterpartyName || 'Unknown'}</span>
+                                  {allocation.allocatedCents > 0 && (
+                                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                                      Partially matched
+                                    </span>
+                                  )}
+                                  {transaction.dashboardLink && (
+                                    <a
+                                      href={transaction.dashboardLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex text-gray-400 hover:text-gray-700"
+                                      title="Open transaction in Mercury"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  )}
+                                </div>
+                                <div className="mt-0.5 text-xs text-gray-500">
+                                  {formatTxnFullDate(transaction.postedAt || transaction.createdAt)}
+                                  {' · '}
+                                  {formatCurrency(transaction.amount)} received
+                                </div>
+                              </div>
+                              <div className="flex-shrink-0 text-right">
+                                <div className="text-sm font-semibold text-amber-700">
+                                  {formatCurrency(centsToAmount(allocation.remainingCents))}
+                                </div>
+                                <div className="text-[10px] uppercase tracking-wide text-gray-400">available</div>
+                              </div>
+                            </div>
+
+                            {candidates.length === 0 ? (
+                              <p className="mt-2 text-xs text-gray-400">No matching outstanding invoices found.</p>
+                            ) : (
+                              <ul className="mt-2 space-y-1">
+                                {candidates.map((c) => (
+                                  <li
+                                    key={`${c.invoice.client}-${c.invoice.sheetRowNumber}`}
+                                    className="flex items-center justify-between gap-3 rounded-md bg-gray-50 px-3 py-2"
+                                  >
+                                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                                      <span className="font-medium text-gray-900">{c.invoice.client}</span>
+                                      <span className="text-gray-600">{formatCurrency(c.invoice.amount)}</span>
+                                      <span className="text-xs text-gray-400">
+                                        sent {formatDateDisplay(c.invoice.dateSent, c.invoice.year)}
+                                      </span>
+                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                        c.priority === 0
+                                          ? 'bg-green-50 text-green-700'
+                                          : c.priority === 1
+                                            ? 'bg-blue-50 text-blue-700'
+                                            : 'bg-gray-200 text-gray-600'
+                                      }`}>
+                                        {c.matchType === 'exact-name'
+                                          ? 'Name match'
+                                          : c.matchType === 'paid-as'
+                                            ? 'Paid-as match'
+                                            : 'Amount match'}
+                                        {c.exactAmount ? ' · exact' : ''}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleConfirmMatch(c.invoice, transaction.id)}
+                                      disabled={savingAlias === c.invoice.sheetRowNumber}
+                                      className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                                      title={`Match this payment to ${c.invoice.client}'s ${formatCurrency(c.invoice.amount)} invoice`}
+                                    >
+                                      {savingAlias === c.invoice.sheetRowNumber ? (
+                                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                      ) : (
+                                        <Check className="h-3.5 w-3.5" />
+                                      )}
+                                      Match
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {invoicesView === 'invoices' && (
+              <>
 
             {/* Filters Row */}
             <div className="flex items-center gap-4 mb-4 flex-wrap">
@@ -1673,6 +1712,8 @@ const AdminInvoices = () => {
                 </table>
               </div>
             </div>
+              </>
+            )}
           </>
         )}
       </div>

@@ -33,17 +33,32 @@ test('legacy matches allocate the invoice amount', () => {
   assert.equal(allocation.isFullyAllocated, true);
 });
 
-test('explicit allocations are cents-safe and over-allocation blocks matches', () => {
+test('a payment consumed beyond its balance clamps remaining to zero and blocks more matches', () => {
   const allocation = buildPaymentAllocations(
-    [{ id: 'p1', amount: 0.3 }],
+    [{ id: 'p1', amount: 10 }],
     [
-      { matchedTransactionId: 'p1', amount: 0.1, matchedPaymentAmount: 0.1 },
-      { matchedTransactionId: 'p1', amount: 0.22, matchedPaymentAmount: 0.22 },
+      { matchedTransactionId: 'p1', amount: 6, matchedPaymentAmount: 6 },
+      { matchedTransactionId: 'p1', amount: 6, matchedPaymentAmount: 6 },
     ],
   ).p1;
 
-  assert.equal(allocation.isOverAllocated, true);
-  assert.equal(allocation.overAllocatedCents, 2);
   assert.equal(allocation.remainingCents, 0);
+  assert.equal(allocation.isFullyAllocated, true);
   assert.equal(canFullyAllocateInvoice(allocation, 0.01), false);
+});
+
+test('a single invoice matched to a smaller deposit is an accepted under-payment', () => {
+  // The Mason case: a $7177 invoice matched to a $6459.30 Mercury deposit
+  // (legacy match, no matchedPaymentAmount → allocation falls back to $7177).
+  // The deposit came in short of what was billed; that under-payment is assumed
+  // correct — nothing remains to apply and nothing is flagged.
+  const allocation = buildPaymentAllocations(
+    [{ id: 'mason', amount: 6459.3 }],
+    [{ matchedTransactionId: 'mason', amount: 7176.999999999997 }],
+  ).mason;
+
+  assert.equal(allocation.invoiceCount, 1);
+  assert.equal(allocation.remainingCents, 0);
+  assert.equal(allocation.isFullyAllocated, true);
+  assert.equal('isOverAllocated' in allocation, false);
 });

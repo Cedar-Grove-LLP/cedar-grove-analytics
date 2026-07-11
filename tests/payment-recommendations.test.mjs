@@ -4,6 +4,7 @@ import { buildPaymentAllocations } from '../src/utils/paymentAllocations.mjs';
 import {
   buildHistoricalPaidAs,
   normalizePaymentIdentity,
+  recommendInvoicesForPayment,
   recommendPaymentForInvoice,
 } from '../src/utils/paymentRecommendations.mjs';
 
@@ -77,4 +78,40 @@ test('rejects insufficient and overallocated payments', () => {
     matchedInvoices: [invoice({ amount: 100, status: 'Paid', matchedTransactionId: 'over' })],
   });
   assert.equal(result.status, 'none');
+});
+
+test('recommendInvoicesForPayment ranks identity+exact over identity over amount-only', () => {
+  const pay = payment('p1', 'Acme, Inc.', 100);
+  const allocations = buildPaymentAllocations([pay], []);
+  const invoices = [
+    invoice({ client: 'Acme, Inc.', amount: 100 }),          // identity + exact
+    invoice({ client: 'Acme, Inc.', amount: 40 }),           // identity, fits
+    invoice({ client: 'Other Co', amount: 100 }),            // amount-only
+    invoice({ client: 'Other Co', amount: 33 }),             // no signal → excluded
+    invoice({ client: 'Acme, Inc.', amount: 100, status: 'Paid' }), // paid → excluded
+  ];
+
+  const out = recommendInvoicesForPayment({ payment: pay, invoices, allocation: allocations.p1 });
+  assert.deepEqual(
+    out.map((c) => [c.invoice.client, c.invoice.amount, c.matchType, c.priority]),
+    [
+      ['Acme, Inc.', 100, 'exact-name', 0],
+      ['Acme, Inc.', 40, 'exact-name', 1],
+      ['Other Co', 100, 'amount', 2],
+    ],
+  );
+});
+
+test('recommendInvoicesForPayment ignores payments with no remaining balance', () => {
+  const pay = payment('p1', 'Acme, Inc.', 100);
+  const allocations = buildPaymentAllocations(
+    [pay],
+    [{ matchedTransactionId: 'p1', amount: 100, matchedPaymentAmount: 100 }],
+  );
+  const out = recommendInvoicesForPayment({
+    payment: pay,
+    invoices: [invoice({ client: 'Acme, Inc.', amount: 100 })],
+    allocation: allocations.p1,
+  });
+  assert.equal(out.length, 0);
 });

@@ -1,3 +1,8 @@
+// A leftover balance below this is rounding noise, not a real overpayment or an
+// amount worth matching elsewhere. Payments whose remaining is under $1 are
+// treated as fully matched — never surfaced as "Overpaid" or as unmatched.
+export const MIN_REMAINING_CENTS = 100;
+
 /** Convert a currency value to integer cents. Invalid values become zero. */
 export function toCents(value) {
   const amount = Number(value);
@@ -25,8 +30,6 @@ export function buildPaymentAllocations(transactions = [], invoices = []) {
       allocatedCents: 0,
       remainingCents: paymentCents,
       invoiceCount: 0,
-      overAllocatedCents: 0,
-      isOverAllocated: false,
       isFullyAllocated: paymentCents === 0,
     };
   }
@@ -40,17 +43,18 @@ export function buildPaymentAllocations(transactions = [], invoices = []) {
 
   for (const allocation of Object.values(result)) {
     const rawRemaining = allocation.paymentCents - allocation.allocatedCents;
+    // Clamp remaining at zero. A payment matched below the invoice total (a
+    // deposit that came in short of what was billed) simply has nothing left to
+    // apply — that under-payment is assumed correct and is never flagged.
     allocation.remainingCents = Math.max(rawRemaining, 0);
-    allocation.overAllocatedCents = Math.max(-rawRemaining, 0);
-    allocation.isOverAllocated = rawRemaining < 0;
-    allocation.isFullyAllocated = rawRemaining === 0;
+    allocation.isFullyAllocated = rawRemaining <= 0;
   }
 
   return result;
 }
 
 export function canFullyAllocateInvoice(allocation, invoiceAmount) {
-  if (!allocation || allocation.isOverAllocated) return false;
+  if (!allocation) return false;
   const neededCents = Math.max(toCents(invoiceAmount), 0);
   return neededCents > 0 && allocation.remainingCents >= neededCents;
 }
