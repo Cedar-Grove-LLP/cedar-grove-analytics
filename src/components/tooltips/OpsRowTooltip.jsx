@@ -1,13 +1,17 @@
 import { formatHours, formatDate } from '../../utils/formatters';
 
-const OpsRowTooltip = ({ ops, position }) => {
+const OpsRowTooltip = ({ ops, position, id, onMouseEnter, onMouseLeave }) => {
   if (!ops) return null;
 
   const attorneyBreakdown = Object.entries(ops.byAttorney || {})
     .sort((a, b) => b[1].hours - a[1].hours);
 
   return (
-    <div 
+    <div
+      role="tooltip"
+      id={id}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl p-5"
       style={{ 
         left: Math.min(position.x + 15, window.innerWidth - 650),

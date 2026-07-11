@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { formatCurrency, formatHours } from '../../utils/formatters';
-import { TransactionRowTooltip } from '../tooltips';
+import { TransactionRowTooltip, useRowTooltip } from '../tooltips';
 import { CalcTooltip } from '../shared';
 import { PRACTICE_AREA_COLORS, GRAY } from '../../utils/colors';
 import SortableTh from './SortableTh';
@@ -14,8 +13,9 @@ const PracticeCategoryTable = ({
   onSort,
   totalHours,
 }) => {
-  const [hoveredCategory, setHoveredCategory] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  // Row-detail tooltip: hover + keyboard focus, Escape-dismissable (WCAG
+  // 1.4.13/2.1.1) — shared wiring in tooltips/useRowTooltip.
+  const rowTooltip = useRowTooltip();
 
   return (
     <div className="bg-white rounded-lg shadow overflow-x-auto">
@@ -82,14 +82,7 @@ const PracticeCategoryTable = ({
               <tr
                 key={idx}
                 className="hover:bg-blue-50 cursor-pointer transition-colors"
-                onMouseEnter={(e) => {
-                  setHoveredCategory(cat);
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }}
-                onMouseMove={(e) => {
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }}
-                onMouseLeave={() => setHoveredCategory(null)}
+                {...rowTooltip.rowProps(cat)}
               >
                 <th scope="row" className="px-6 py-4 whitespace-nowrap text-sm font-medium text-left">
                   <Link
@@ -111,7 +104,7 @@ const PracticeCategoryTable = ({
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {formatHours(cat.totalHours)}h
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-medium">
                   {formatCurrency(cat.totalEarnings)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -123,10 +116,11 @@ const PracticeCategoryTable = ({
         </tbody>
       </table>
 
-      {hoveredCategory && (
+      {rowTooltip.active && (
         <TransactionRowTooltip
-          transaction={hoveredCategory}
-          position={tooltipPosition}
+          transaction={rowTooltip.active}
+          position={rowTooltip.position}
+          {...rowTooltip.tooltipProps}
         />
       )}
     </div>

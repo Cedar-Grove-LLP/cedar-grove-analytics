@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { formatCurrency, formatHours } from '../../utils/formatters';
-import { TransactionRowTooltip } from '../tooltips';
+import { TransactionRowTooltip, useRowTooltip } from '../tooltips';
 import { CalcTooltip } from '../shared';
 import SortableTh from './SortableTh';
 
@@ -13,8 +12,9 @@ const TransactionsTable = ({
   onSort,
   totalHours
 }) => {
-  const [hoveredTransaction, setHoveredTransaction] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  // Row-detail tooltip: hover + keyboard focus, Escape-dismissable (WCAG
+  // 1.4.13/2.1.1) — shared wiring in tooltips/useRowTooltip.
+  const rowTooltip = useRowTooltip();
 
   return (
     <div className="bg-white rounded-lg shadow overflow-x-auto">
@@ -80,14 +80,7 @@ const TransactionsTable = ({
               <tr
                 key={idx}
                 className="hover:bg-blue-50 cursor-pointer transition-colors"
-                onMouseEnter={(e) => {
-                  setHoveredTransaction(txn);
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }}
-                onMouseMove={(e) => {
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }}
-                onMouseLeave={() => setHoveredTransaction(null)}
+                {...rowTooltip.rowProps(txn)}
               >
                 <th scope="row" className="px-6 py-4 whitespace-nowrap text-sm font-medium text-left">
                   <Link
@@ -106,7 +99,7 @@ const TransactionsTable = ({
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {formatHours(txn.totalHours)}h
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-medium">
                   {formatCurrency(txn.totalEarnings)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -118,10 +111,11 @@ const TransactionsTable = ({
         </tbody>
       </table>
 
-      {hoveredTransaction && (
+      {rowTooltip.active && (
         <TransactionRowTooltip
-          transaction={hoveredTransaction}
-          position={tooltipPosition}
+          transaction={rowTooltip.active}
+          position={rowTooltip.position}
+          {...rowTooltip.tooltipProps}
         />
       )}
     </div>

@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Ban } from 'lucide-react';
 import { formatCurrency, formatHours } from '../../utils/formatters';
 import { getStatusBadge } from '@/utils/statusStyles';
 import { getPaymentStatusBadge, PAYMENT_STATUS_LABEL, HOLD_FLAG_MESSAGE } from '@/utils/paymentStatus.mjs';
-import { ClientRowTooltip } from '../tooltips';
+import { ClientRowTooltip, useRowTooltip } from '../tooltips';
 import { CalcTooltip } from '../shared';
 import SortableTh from './SortableTh';
 
@@ -17,8 +16,9 @@ const ClientsTable = ({
   onSort,
 }) => {
   const router = useRouter();
-  const [hoveredClient, setHoveredClient] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  // Row-detail tooltip: hover + keyboard focus, Escape-dismissable (WCAG
+  // 1.4.13/2.1.1) — shared wiring in tooltips/useRowTooltip.
+  const rowTooltip = useRowTooltip();
 
   const handleClientClick = (clientName) => {
     router.push(`/clients/${encodeURIComponent(clientName)}`);
@@ -111,18 +111,7 @@ const ClientsTable = ({
               key={idx} 
               className="hover:bg-purple-50 cursor-pointer transition-colors"
               onClick={() => handleClientClick(client.name)}
-              onMouseEnter={(e) => {
-                if (client.entryCount > 0) {
-                  setHoveredClient(client);
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }
-              }}
-              onMouseMove={(e) => {
-                if (client.entryCount > 0) {
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }
-              }}
-              onMouseLeave={() => setHoveredClient(null)}
+              {...(client.entryCount > 0 ? rowTooltip.rowProps(client) : {})}
             >
               <th scope="row" className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800 text-left">
                 <Link
@@ -166,7 +155,7 @@ const ClientsTable = ({
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {formatHours(client.billableHours || client.totalHours || 0)}h
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-medium">
                 {formatCurrency(client.grossBillables || 0)}
               </td>
               <td
@@ -185,10 +174,11 @@ const ClientsTable = ({
         </tbody>
       </table>
       
-      {hoveredClient && (
-        <ClientRowTooltip 
-          client={hoveredClient} 
-          position={tooltipPosition}
+      {rowTooltip.active && (
+        <ClientRowTooltip
+          client={rowTooltip.active}
+          position={rowTooltip.position}
+          {...rowTooltip.tooltipProps}
         />
       )}
     </div>

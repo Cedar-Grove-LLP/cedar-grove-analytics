@@ -1,6 +1,6 @@
 import { formatCurrency, formatHours, formatDate } from '../../utils/formatters';
 
-const MatterRowTooltip = ({ matter, position }) => {
+const MatterRowTooltip = ({ matter, position, id, onMouseEnter, onMouseLeave }) => {
   if (!matter) return null;
 
   const attorneyBreakdown = Object.entries(matter.byAttorney || {})
@@ -8,6 +8,10 @@ const MatterRowTooltip = ({ matter, position }) => {
 
   return (
     <div
+      role="tooltip"
+      id={id}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl p-5"
       style={{
         left: Math.min(position.x + 15, window.innerWidth - 750),

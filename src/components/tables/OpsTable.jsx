@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from 'react';
-import { OpsRowTooltip } from '../tooltips';
+import { OpsRowTooltip, useRowTooltip } from '../tooltips';
 import { CalcTooltip } from '../shared';
 import SortableTh from './SortableTh';
 
@@ -10,8 +9,9 @@ const OpsTable = ({
   sortConfig, 
   onSort 
 }) => {
-  const [hoveredOps, setHoveredOps] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  // Row-detail tooltip: hover + keyboard focus, Escape-dismissable (WCAG
+  // 1.4.13/2.1.1) — shared wiring in tooltips/useRowTooltip.
+  const rowTooltip = useRowTooltip();
 
   return (
     <div className="bg-white rounded-lg shadow overflow-x-auto">
@@ -50,14 +50,7 @@ const OpsTable = ({
             <tr 
               key={idx} 
               className="hover:bg-green-50 cursor-pointer transition-colors"
-              onMouseEnter={(e) => {
-                setHoveredOps(ops);
-                setTooltipPosition({ x: e.clientX, y: e.clientY });
-              }}
-              onMouseMove={(e) => {
-                setTooltipPosition({ x: e.clientX, y: e.clientY });
-              }}
-              onMouseLeave={() => setHoveredOps(null)}
+              {...rowTooltip.rowProps(ops)}
             >
               <th scope="row" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 text-left">
                 {ops.category}
@@ -73,10 +66,11 @@ const OpsTable = ({
         </tbody>
       </table>
       
-      {hoveredOps && (
-        <OpsRowTooltip 
-          ops={hoveredOps} 
-          position={tooltipPosition}
+      {rowTooltip.active && (
+        <OpsRowTooltip
+          ops={rowTooltip.active}
+          position={rowTooltip.position}
+          {...rowTooltip.tooltipProps}
         />
       )}
     </div>

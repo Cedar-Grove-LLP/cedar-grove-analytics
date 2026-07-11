@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from 'react';
 import { formatCurrency, formatHours } from '../../utils/formatters';
-import { MatterRowTooltip } from '../tooltips';
+import { MatterRowTooltip, useRowTooltip } from '../tooltips';
 import SortableTh from './SortableTh';
 
 const MattersTable = ({
@@ -11,8 +10,9 @@ const MattersTable = ({
   onSort,
   totalHours
 }) => {
-  const [hoveredMatter, setHoveredMatter] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  // Row-detail tooltip: hover + keyboard focus, Escape-dismissable (WCAG
+  // 1.4.13/2.1.1) — shared wiring in tooltips/useRowTooltip.
+  const rowTooltip = useRowTooltip();
 
   return (
     <div className="bg-white rounded-lg shadow overflow-x-auto">
@@ -77,14 +77,7 @@ const MattersTable = ({
               <tr
                 key={idx}
                 className="hover:bg-blue-50 cursor-pointer transition-colors"
-                onMouseEnter={(e) => {
-                  setHoveredMatter(m);
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }}
-                onMouseMove={(e) => {
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }}
-                onMouseLeave={() => setHoveredMatter(null)}
+                {...rowTooltip.rowProps(m)}
               >
                 <th scope="row" className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 text-left">
                   {m.matter}
@@ -101,7 +94,7 @@ const MattersTable = ({
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {formatHours(m.totalHours)}h
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-medium">
                   {formatCurrency(m.totalEarnings)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -113,10 +106,11 @@ const MattersTable = ({
         </tbody>
       </table>
 
-      {hoveredMatter && (
+      {rowTooltip.active && (
         <MatterRowTooltip
-          matter={hoveredMatter}
-          position={tooltipPosition}
+          matter={rowTooltip.active}
+          position={rowTooltip.position}
+          {...rowTooltip.tooltipProps}
         />
       )}
     </div>

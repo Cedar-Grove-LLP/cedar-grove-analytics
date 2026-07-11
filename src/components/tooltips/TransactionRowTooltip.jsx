@@ -1,6 +1,6 @@
 import { formatCurrency, formatHours } from '../../utils/formatters';
 
-const TransactionRowTooltip = ({ transaction, position }) => {
+const TransactionRowTooltip = ({ transaction, position, id, onMouseEnter, onMouseLeave }) => {
   if (!transaction) return null;
 
   const matterList = Object.values(transaction.matters || {})
@@ -8,6 +8,10 @@ const TransactionRowTooltip = ({ transaction, position }) => {
 
   return (
     <div
+      role="tooltip"
+      id={id}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl p-5"
       style={{
         left: Math.min(position.x + 15, window.innerWidth - 650),

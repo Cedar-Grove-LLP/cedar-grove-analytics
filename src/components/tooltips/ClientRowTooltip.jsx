@@ -2,7 +2,7 @@
 
 import { formatCurrency, formatHours, formatDate } from '../../utils/formatters';
 
-const ClientRowTooltip = ({ client, position }) => {
+const ClientRowTooltip = ({ client, position, id, onMouseEnter, onMouseLeave }) => {
   if (!client || client.entryCount === 0) return null;
 
   const attorneyBreakdown = Object.entries(client.byAttorney || {})
@@ -12,7 +12,11 @@ const ClientRowTooltip = ({ client, position }) => {
     .sort((a, b) => b[1].hours - a[1].hours);
 
   return (
-    <div 
+    <div
+      role="tooltip"
+      id={id}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl p-5"
       style={{ 
         left: Math.min(position.x + 15, window.innerWidth - 750),
