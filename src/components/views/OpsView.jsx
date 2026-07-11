@@ -57,6 +57,7 @@ const OpsView = ({
   if (opsData.length === 0) {
     return (
       <div className="space-y-6">
+        <h2 className="sr-only">Ops</h2>
         <DateRangeIndicator
           dateRangeLabel={dateRangeLabel}
           entryCount={opsData?.length || 0}
@@ -72,6 +73,7 @@ const OpsView = ({
 
   return (
     <div className="space-y-6">
+      <h2 className="sr-only">Ops</h2>
       <DateRangeIndicator
         dateRangeLabel={dateRangeLabel}
         entryCount={opsData?.length || 0}

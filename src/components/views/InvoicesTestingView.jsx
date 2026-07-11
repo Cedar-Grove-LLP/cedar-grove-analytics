@@ -97,11 +97,11 @@ const StatCard = ({ label, value, tone }) => (
     'rounded-xl border px-3.5 py-2.5 min-w-[130px] shadow-sm',
     tone === 'red' ? 'border-red-100 bg-red-50/70' : 'border-gray-200 bg-white',
   )}>
-    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</div>
+    <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-600">{label}</div>
     <div className={cx('mt-0.5 text-[15px] font-bold tabular-nums', tone === 'red' ? 'text-red-700' : 'text-cg-black')}>{value}</div>
   </div>
 );
-const SourceNote = ({ children }) => <p className="text-[12px] leading-relaxed text-gray-400 mb-2">{children}</p>;
+const SourceNote = ({ children }) => <p className="text-[12px] leading-relaxed text-gray-600 mb-2">{children}</p>;
 
 // Parse a user-typed number: strips $ , whitespace; (123) → -123. Returns null
 // on empty/invalid so a bad entry is ignored rather than committed.
@@ -142,6 +142,7 @@ const EditableNum = ({ cellKey, value, edit, fmtFn = fmt, pinnable = false }) =>
     return (
       <input
         autoFocus
+        aria-label="Edit value"
         defaultValue={String(value)}
         onChange={(e) => setDraft(e.target.value)}
         onFocus={() => setDraft(String(value))}
@@ -159,7 +160,7 @@ const EditableNum = ({ cellKey, value, edit, fmtFn = fmt, pinnable = false }) =>
       : state === 'derived-changed' ? 'bg-[#fbf4de]' : '';
   return (
     <span className="inline-flex items-center justify-end gap-1">
-      {changed && <span className="text-[10px] text-gray-400 line-through">{fmtFn(base)}</span>}
+      {changed && <span className="text-[10px] text-gray-600 line-through">{fmtFn(base)}</span>}
       <button
         type="button"
         onClick={() => { setDraft(String(value)); setEditing(true); }}
@@ -171,7 +172,7 @@ const EditableNum = ({ cellKey, value, edit, fmtFn = fmt, pinnable = false }) =>
       {changed && <span className={cx('text-[10px] font-semibold', delta < 0 ? 'text-[#c0392b]' : 'text-cg-green')}>{delta > 0 ? '+' : ''}{fmtFn(delta)}</span>}
       {state === 'pinned' && <span title="Pinned — overrides the formula; upstream edits no longer change it" className="text-[10px]">📌</span>}
       {(state === 'edited' || state === 'pinned') && (
-        <button type="button" onClick={() => edit.onEdit(cellKey, undefined)} title="Clear this override" className="text-[10px] text-gray-400 transition-colors hover:text-red-600">✕</button>
+        <button type="button" onClick={() => edit.onEdit(cellKey, undefined)} title="Clear this override" aria-label="Clear override" className="text-[10px] text-gray-400 transition-colors hover:text-red-600">✕</button>
       )}
     </span>
   );
@@ -186,7 +187,7 @@ const DeltaVal = ({ value, base, fmtFn = fmt }) => {
   const d = value - base;
   return (
     <span className="inline-flex items-center justify-end gap-1">
-      <span className="text-[10px] text-gray-400 line-through">{fmtFn(base)}</span>
+      <span className="text-[10px] text-gray-600 line-through">{fmtFn(base)}</span>
       <span className="rounded-md bg-[#fbf4de] px-1">{fmtFn(value)}</span>
       <span className={cx('text-[10px] font-semibold', d < 0 ? 'text-[#c0392b]' : 'text-cg-green')}>{d > 0 ? '+' : ''}{fmtFn(d)}</span>
     </span>
@@ -280,8 +281,8 @@ const MonthTab = ({ data, monthKey, edit }) => {
                 {data.rateHeaders ? (
                   <>
                     <tr>
-                      <td className={cx(cell, C.greenHead)}>Attorney</td>
-                      {data.rateHeaders.map((h, i) => <td key={i} className={cx(cell, C.greenHead, 'text-right')}>{h}</td>)}
+                      <th scope="col" className={cx(cell, C.greenHead, 'text-left')}>Attorney</th>
+                      {data.rateHeaders.map((h, i) => <th scope="col" key={i} className={cx(cell, C.greenHead, 'text-right')}>{h}</th>)}
                     </tr>
                     {data.rateRows.map((r, i) => (
                       <tr key={i} className="transition-colors hover:bg-[#f8faf5]">
@@ -300,7 +301,7 @@ const MonthTab = ({ data, monthKey, edit }) => {
                   </>
                 ) : (
                   <>
-                    <tr>{RATE_TABLE_COLS.map((c, i) => <td key={c} className={cx(cell, C.greenHead, i === 0 ? 'text-left' : 'text-right')}>{c}</td>)}</tr>
+                    <tr>{RATE_TABLE_COLS.map((c, i) => <th scope="col" key={c} className={cx(cell, C.greenHead, i === 0 ? 'text-left' : 'text-right')}>{c}</th>)}</tr>
                     {data.rateTable.map((r, i) => (
                       <tr key={i} className="transition-colors hover:bg-[#f8faf5]">
                         <td className={cx(cell, 'font-semibold')}>{r.name}</td>
@@ -329,9 +330,9 @@ const MonthTab = ({ data, monthKey, edit }) => {
           <table className="border-collapse">
             <tbody>
               <tr>
-                <td className={cx(cell, 'sticky left-0 top-0 z-30 bg-[#e6ecdb] text-[11px] font-semibold uppercase tracking-wider text-cg-dark')} style={{ minWidth: 190 }}>Client</td>
-                {attorneys.map((a) => <td key={a} className={cx(cell, C.grayHead, 'text-center')} style={{ minWidth: 70 }}>{a}</td>)}
-                {MATRIX_TAIL.map((h) => <td key={h} className={cx(cell, h === 'Sum Billables' ? C.medGreenHead : C.grayHead, 'text-center')} style={{ minWidth: 90 }}>{h}</td>)}
+                <th scope="col" className={cx(cell, 'sticky left-0 top-0 z-30 bg-[#e6ecdb] text-left text-[11px] font-semibold uppercase tracking-wider text-cg-dark')} style={{ minWidth: 190 }}>Client</th>
+                {attorneys.map((a) => <th scope="col" key={a} className={cx(cell, C.grayHead, 'text-center')} style={{ minWidth: 70 }}>{a}</th>)}
+                {MATRIX_TAIL.map((h) => <th scope="col" key={h} className={cx(cell, h === 'Sum Billables' ? C.medGreenHead : C.grayHead, 'text-center')} style={{ minWidth: 90 }}>{h}</th>)}
               </tr>
               {matrix.map((r, ri) => {
                 const bk = (j) => (edit && monthKey ? mxBillKey(monthKey, ri, j) : null);
@@ -402,8 +403,8 @@ const RateSheetScaffold = ({ rows }) => (
     <table className="border-collapse">
       <tbody>
         <tr>
-          {RATE_COLS.map((h, i) => <td key={i} className={cx(cell, C.greenHead, i >= 2 ? 'text-right' : 'text-center')} style={{ minWidth: i === 5 ? 210 : 80 }}>{h}</td>)}
-          <td className={cx(cell, C.greenHead)} style={{ minWidth: 340 }} />
+          {RATE_COLS.map((h, i) => <th scope="col" key={i} className={cx(cell, C.greenHead, i >= 2 ? 'text-right' : 'text-center')} style={{ minWidth: i === 5 ? 210 : 80 }}>{h}</th>)}
+          <th scope="col" className={cx(cell, C.greenHead)} style={{ minWidth: 340 }} />
         </tr>
         {rows.map((r, i) => {
           const band = rateBand(r.level);
@@ -446,7 +447,7 @@ const CashAccountingScaffold = ({ rows, baseRows, edit }) => {
       <SheetWrap>
         <table className="border-collapse">
           <tbody>
-            <tr>{CASH_COLS.map((h) => <td key={h} className={cx(cell, C.greenHead, 'whitespace-normal')} style={{ minWidth: 100 }}>{h}</td>)}</tr>
+            <tr>{CASH_COLS.map((h) => <th scope="col" key={h} className={cx(cell, C.greenHead, 'text-left whitespace-normal')} style={{ minWidth: 100 }}>{h}</th>)}</tr>
             {withDerived.map((r, i) => (
               <tr key={i} className={cx('transition-colors hover:bg-[#f8faf5]', !r.filled && 'opacity-50')}>
                 <td className={cx(cell, 'font-medium text-cg-black')}>{r.month}</td>
@@ -482,7 +483,7 @@ const ProfitsPaidScaffold = ({ rows }) => (
   <SheetWrap>
     <table className="border-collapse">
       <tbody>
-        <tr>{['Date (UTC)', 'Description', 'Amount', 'Note'].map((h, i) => <td key={h} className={cx(cell, C.greenHead, i === 2 ? 'text-right' : '')} style={{ minWidth: i === 3 ? 320 : 120 }}>{h}</td>)}</tr>
+        <tr>{['Date (UTC)', 'Description', 'Amount', 'Note'].map((h, i) => <th scope="col" key={h} className={cx(cell, C.greenHead, i === 2 ? 'text-right' : 'text-left')} style={{ minWidth: i === 3 ? 320 : 120 }}>{h}</th>)}</tr>
         {rows.map((r, i) => {
           const bg = r.highlight === 'green' ? C.lightGreen : r.highlight === 'tan' ? C.tan : '';
           return (
@@ -509,10 +510,10 @@ const ExpensesScaffold = ({ rows, edit }) => (
       <table className="border-collapse">
         <tbody>
           <tr>
-            <td className={cx(cell, 'sticky left-0 top-0 z-30 bg-[#f3f5ee] text-[11px] font-semibold uppercase tracking-wider text-cg-dark')} style={{ minWidth: 170 }}>Expense Category</td>
-            <td className={cx(cell, C.greenHead)} style={{ minWidth: 200 }}>Label</td>
-            {MONTHS12.map((m) => <td key={m} className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 84 }}>{m}</td>)}
-            <td className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 140 }}>P&amp;L Category</td>
+            <th scope="col" className={cx(cell, 'sticky left-0 top-0 z-30 bg-[#f3f5ee] text-left text-[11px] font-semibold uppercase tracking-wider text-cg-dark')} style={{ minWidth: 170 }}>Expense Category</th>
+            <th scope="col" className={cx(cell, C.greenHead, 'text-left')} style={{ minWidth: 200 }}>Label</th>
+            {MONTHS12.map((m) => <th scope="col" key={m} className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 84 }}>{m}</th>)}
+            <th scope="col" className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 140 }}>P&amp;L Category</th>
           </tr>
           {rows.map((r, i) => (
             <tr key={i} className={cx('group transition-colors hover:bg-[#f8faf5]', r.highlight && C.yellow)}>
@@ -538,9 +539,9 @@ const PnlScaffold = ({ months, rows, baseRows }) => (
       <table className="border-collapse">
         <tbody>
           <tr>
-            <td className={cx(cell, C.greenHead)} style={{ minWidth: 220 }}>Category</td>
-            {months.map((m) => <td key={m} className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 85 }}>{m}</td>)}
-            <td className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 100 }}>2025 Total</td>
+            <th scope="col" className={cx(cell, C.greenHead, 'text-left')} style={{ minWidth: 220 }}>Category</th>
+            {months.map((m) => <th scope="col" key={m} className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 85 }}>{m}</th>)}
+            <th scope="col" className={cx(cell, C.greenHead, 'text-center')} style={{ minWidth: 100 }}>2025 Total</th>
           </tr>
           {rows.map((r, i) => {
             if (r.t === 'band' || r.t === 'sub') {
@@ -625,7 +626,7 @@ const BalanceSheetScaffold = ({ rows }) => (
         {rows.map((r, i) => {
           if (r.t === 'title') return <tr key={i}><td className={cx(cell, 'font-bold text-[15px]')} colSpan={3} style={{ minWidth: 360 }}>{r.label}</td></tr>;
           if (r.t === 'asof') return <tr key={i}><td className={cx(cell, C.yellow, 'italic')} colSpan={3}>{r.label}</td></tr>;
-          if (r.t === 'head') return <tr key={i}><td className={cx(cell, C.greenHead)}>Account</td><td className={cx(cell, C.greenHead, 'text-right')} style={{ minWidth: 130 }}>Current Period</td><td className={cx(cell, C.greenHead)} style={{ minWidth: 300 }}>Notes</td></tr>;
+          if (r.t === 'head') return <tr key={i}><th scope="col" className={cx(cell, C.greenHead, 'text-left')}>Account</th><th scope="col" className={cx(cell, C.greenHead, 'text-right')} style={{ minWidth: 130 }}>Current Period</th><th scope="col" className={cx(cell, C.greenHead, 'text-left')} style={{ minWidth: 300 }}>Notes</th></tr>;
           if (r.t === 'spacer') return <tr key={i}><td className={cell} /><td className={cell} /><td className={cell} /></tr>;
           if (r.t === 'band') return <tr key={i}><td className={cx(cell, C.blueBand)}>{r.label}</td><td className={cx(cell, C.blueBand)} /><td className={cx(cell, C.blueBand)} /></tr>;
           if (r.t === 'group') return <tr key={i}><td className={cx(cell, 'font-bold')}>{r.label}</td><td className={cell} /><td className={cell} /></tr>;
@@ -677,10 +678,10 @@ const PaymentStatusScaffold = ({ register, total, realTerms, edit }) => {
         <table className="border-collapse">
           <tbody>
             <tr>
-              <td className={cx(cell, C.greenHead)} style={{ minWidth: 220 }}>All 2026 Billing</td>
-              <td className={cx(cell, C.greenHead, 'text-right')} style={{ minWidth: 110 }}>{fmt(total)}</td>
-              {PAYMENT_HEADERS.map((h) => <td key={h} className={cx(cell, C.greenHead)}>{h}</td>)}
-              {REMINDER_HEADERS.map((h) => <td key={h} className={cx(cell, C.medGreenHead, 'text-center')}>{h}</td>)}
+              <th scope="col" className={cx(cell, C.greenHead, 'text-left')} style={{ minWidth: 220 }}>All 2026 Billing</th>
+              <th scope="col" className={cx(cell, C.greenHead, 'text-right')} style={{ minWidth: 110 }}>{fmt(total)}</th>
+              {PAYMENT_HEADERS.map((h) => <th scope="col" key={h} className={cx(cell, C.greenHead, 'text-left')}>{h}</th>)}
+              {REMINDER_HEADERS.map((h) => <th scope="col" key={h} className={cx(cell, C.medGreenHead, 'text-center')}>{h}</th>)}
             </tr>
             {rows.map((r, i) => (
               <tr key={i} className="transition-colors hover:bg-[#f8faf5]">
@@ -699,7 +700,7 @@ const PaymentStatusScaffold = ({ register, total, realTerms, edit }) => {
                   {r.next
                     ? (r.due
                         ? <span className="rounded-full bg-[#e3f3e7] px-2 py-[1px] text-[11px] font-semibold text-cg-green">Due</span>
-                        : <span className="text-[12px] text-gray-400">Upcoming</span>)
+                        : <span className="text-[12px] text-gray-600">Upcoming</span>)
                     : <span className="text-gray-300">–</span>}
                 </td>
               </tr>
@@ -969,20 +970,20 @@ const InvoicesTestingView = () => {
             className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-[12px] font-medium text-cg-dark shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-40"
             title="Re-read the Google Sheet (bypasses the 5-minute server cache)"
           >
-            <span className={cx(liveStatus === 'loading' && 'inline-block animate-spin')}>↻</span>
+            <span aria-hidden="true" className={cx(liveStatus === 'loading' && 'inline-block animate-spin motion-reduce:animate-none')}>↻</span>
             {liveStatus === 'loading' ? 'Refreshing…' : 'Refresh from sheet'}
           </button>
         </div>
       </div>
 
       {usingFallback && (
-        <div className="rounded-xl border border-[#ecd9a4] bg-[#fbf4de] px-3.5 py-2.5 text-[13px] text-[#7f6000]">
+        <div role="alert" className="rounded-xl border border-[#ecd9a4] bg-[#fbf4de] px-3.5 py-2.5 text-[13px] text-[#7f6000]">
           <span className="font-semibold">Live fetch failed — showing the frozen snapshot.</span> {liveError}
           {' '}<button onClick={() => fetchLive(true)} className="font-semibold underline underline-offset-2">Retry</button>
         </div>
       )}
       {editCount > 0 && (
-        <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e6c980] bg-[#fbf4de]/95 px-3.5 py-2.5 text-[13px] text-[#7f6000] shadow-sm backdrop-blur">
+        <div role="status" className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e6c980] bg-[#fbf4de]/95 px-3.5 py-2.5 text-[13px] text-[#7f6000] shadow-sm backdrop-blur">
           <span className="flex items-center gap-2">
             <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#d9a514] px-1.5 text-[11px] font-bold text-white">{editCount}</span>
             <span><span className="font-semibold">Sandbox — local edit{editCount > 1 ? 's' : ''} only.</span> Nothing is written to the Google Sheet; refresh to discard.</span>
@@ -1011,19 +1012,19 @@ const InvoicesTestingView = () => {
         <div className="flex flex-wrap items-center justify-between gap-2">
           {activeDrift ? (
             <div className="flex items-center gap-2">
-              <span className="text-[12px] text-gray-400">vs Google Sheet:</span>
+              <span className="text-[12px] text-gray-600">vs Google Sheet:</span>
               <DriftChip drift={activeDrift} />
             </div>
           ) : <span />}
           {editCount === 0 && liveStatus === 'ready' && (
-            <p className="text-[12px] text-gray-400">Click any number on the month, Cash, Expenses, or Payment Status tabs to model a what-if — deltas ripple through to the P&amp;L, and the sheet is never touched.</p>
+            <p className="text-[12px] text-gray-600">Click any number on the month, Cash, Expenses, or Payment Status tabs to model a what-if — deltas ripple through to the P&amp;L, and the sheet is never touched.</p>
           )}
         </div>
       )}
 
       {loadingLive ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-gray-200 bg-white py-16 shadow-sm">
-          <span className="h-6 w-6 animate-spin rounded-full border-2 border-gray-200 border-t-cg-green" />
+        <div role="status" className="flex flex-col items-center gap-3 rounded-xl border border-gray-200 bg-white py-16 shadow-sm">
+          <span aria-hidden="true" className="h-6 w-6 animate-spin motion-reduce:animate-none rounded-full border-2 border-gray-200 border-t-cg-green" />
           <span className="text-sm text-gray-500">Reading the Google Sheet…</span>
         </div>
       ) : (

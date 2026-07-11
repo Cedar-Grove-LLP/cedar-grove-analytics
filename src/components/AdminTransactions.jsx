@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge } from '@/utils/statusStyles';
 import { downloadCSV } from '@/utils/csv';
+import { SortableTh } from '@/components/tables';
 
 const FILTER_OPTIONS = [
   { key: 'all', label: 'All Transactions' },
@@ -82,11 +83,6 @@ const AdminTransactions = () => {
       key,
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
     }));
-  };
-
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
   // Export the currently filtered/sorted transactions to CSV. Amount is a raw
@@ -211,7 +207,7 @@ const AdminTransactions = () => {
                 <span>{syncing ? 'Syncing...' : 'Sync from Mercury'}</span>
               </button>
               {syncStatus && (
-                <span className={`text-sm ${syncStatus.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                <span role={syncStatus.type === 'success' ? 'status' : 'alert'} className={`text-sm ${syncStatus.type === 'success' ? 'text-green-700' : 'text-red-600'}`}>
                   {syncStatus.message}
                 </span>
               )}
@@ -310,6 +306,7 @@ const AdminTransactions = () => {
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
+              aria-label="Search transactions"
               value={nameFilter}
               onChange={(e) => setNameFilter(e.target.value)}
               placeholder="Search counterparty..."
@@ -368,37 +365,41 @@ const AdminTransactions = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th
-                    onClick={() => handleSort('postedAt')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
-                  >
-                    Date{getSortIndicator('postedAt')}
-                  </th>
-                  <th
-                    onClick={() => handleSort('status')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
-                  >
-                    Status{getSortIndicator('status')}
-                  </th>
-                  <th
-                    onClick={() => handleSort('amount')}
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
-                  >
-                    Amount{getSortIndicator('amount')}
-                  </th>
-                  <th
-                    onClick={() => handleSort('counterpartyName')}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
-                  >
-                    Counterparty{getSortIndicator('counterpartyName')}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <SortableTh
+                    label="Date"
+                    sortKey="postedAt"
+                    sortConfig={sortConfig}
+                    onSort={handleSort}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-100 whitespace-nowrap"
+                  />
+                  <SortableTh
+                    label="Status"
+                    sortKey="status"
+                    sortConfig={sortConfig}
+                    onSort={handleSort}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-100 whitespace-nowrap"
+                  />
+                  <SortableTh
+                    label="Amount"
+                    sortKey="amount"
+                    sortConfig={sortConfig}
+                    onSort={handleSort}
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-100 whitespace-nowrap"
+                  />
+                  <SortableTh
+                    label="Counterparty"
+                    sortKey="counterpartyName"
+                    sortConfig={sortConfig}
+                    onSort={handleSort}
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-100 whitespace-nowrap"
+                  />
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Description
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Note
                   </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Link
                   </th>
                 </tr>
@@ -420,7 +421,7 @@ const AdminTransactions = () => {
                     </td>
                     <td
                       className={`px-6 py-4 whitespace-nowrap text-sm font-medium text-right ${
-                        txn.amount < 0 ? 'text-red-600' : 'text-green-600'
+                        txn.amount < 0 ? 'text-red-600' : 'text-green-700'
                       }`}
                     >
                       {formatCurrency(txn.amount)}
@@ -440,9 +441,10 @@ const AdminTransactions = () => {
                           href={txn.dashboardLink}
                           target="_blank"
                           rel="noopener noreferrer"
+                          aria-label="Open transaction in Mercury"
                           className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors"
                         >
-                          <ExternalLink className="w-4 h-4" />
+                          <ExternalLink className="w-4 h-4" aria-hidden="true" />
                         </a>
                       ) : (
                         '—'

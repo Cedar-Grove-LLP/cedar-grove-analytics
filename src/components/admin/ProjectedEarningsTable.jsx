@@ -88,7 +88,7 @@ const EarningsCard = ({ title, rows, togglePromote }) => {
   return (
     <div className="bg-white rounded-lg shadow overflow-x-auto">
       <div className="bg-cg-green text-white px-4 py-3 font-semibold">{title}</div>
-      <table className="w-full min-w-[1380px] table-fixed text-xs border-collapse [&_th]:!px-2 [&_td]:!px-2">
+      <table aria-label={`${title} projected earnings`} className="w-full min-w-[1380px] table-fixed text-xs border-collapse [&_th]:!px-2 [&_td]:!px-2">
         {/* Both employment groups use the same column grid. Without explicit
             widths, each table sizes itself from its own currency values, so
             the Full-time headers wrap while the shorter Part-time values do
@@ -107,46 +107,46 @@ const EarningsCard = ({ title, rows, togglePromote }) => {
         </colgroup>
         <thead className="bg-gray-100 text-gray-700">
           <tr>
-            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Attorney</th>
-            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+            <th scope="col" className="px-3 py-2 text-left font-semibold whitespace-nowrap">Attorney</th>
+            <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 Current Rate
                 <CalcTooltip calcKey="billingRate" position="bottom" />
               </span>
             </th>
-            <th className="px-3 py-2 text-center font-semibold whitespace-nowrap">Level (Now → EOY)</th>
-            <th className="px-3 py-2 text-center font-semibold whitespace-nowrap">Promote</th>
-            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+            <th scope="col" className="px-3 py-2 text-center font-semibold whitespace-nowrap">Level (Now → EOY)</th>
+            <th scope="col" className="px-3 py-2 text-center font-semibold whitespace-nowrap">Promote</th>
+            <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 YTD Client Hours
                 <CalcTooltip calcKey="billableHours" position="bottom" />
               </span>
             </th>
-            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+            <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 YTD Earnings
                 <CalcTooltip calcKey="earnings" position="bottom" />
               </span>
             </th>
-            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+            <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 Proj. Client Hours
                 <CalcTooltip calcKey="projectedHours" position="bottom" />
               </span>
             </th>
-            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+            <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 Proj. Client Earnings
                 <CalcTooltip calcKey="projectedEarnings" position="bottom" />
               </span>
             </th>
-            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+            <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 Proj. Profit Share
                 <CalcTooltip calcKey="partnerProfitShare" position="bottom" align="right" />
               </span>
             </th>
-            <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+            <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 Proj. Total
                 <CalcTooltip calcKey="projectedEarningsTotal" position="bottom" align="right" />
@@ -184,6 +184,7 @@ const EarningsCard = ({ title, rows, togglePromote }) => {
                 {r.canPromote ? (
                   <input
                     type="checkbox"
+                    aria-label={`Promote ${r.name}`}
                     className="h-4 w-4 accent-cg-green cursor-pointer"
                     checked={r.promoted}
                     onChange={() => togglePromote(r.userId)}

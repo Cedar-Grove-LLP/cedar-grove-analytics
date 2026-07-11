@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { useAuth } from '@/context/AuthContext';
+import { SortableTh } from '@/components/tables';
 
 const AdminMatterManagement = () => {
   const { user, signOut } = useAuth();
@@ -66,11 +67,6 @@ const AdminMatterManagement = () => {
       key,
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc',
     }));
-  };
-
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
   };
 
   // Parse dates from Firestore Timestamps or strings.
@@ -320,13 +316,13 @@ const AdminMatterManagement = () => {
         {(errorMessage || successMessage) && (
           <div className="mb-4">
             {errorMessage && (
-              <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700">
+              <div role="alert" className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700">
                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
                 <span>{errorMessage}</span>
               </div>
             )}
             {successMessage && (
-              <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-700">
+              <div role="status" className="flex items-center gap-2 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-700">
                 <CheckCircle className="w-5 h-5 flex-shrink-0" />
                 <span>{successMessage}</span>
               </div>
@@ -342,6 +338,7 @@ const AdminMatterManagement = () => {
             </div>
             <input
               type="text"
+              aria-label="Search matters"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -363,9 +360,10 @@ const AdminMatterManagement = () => {
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Add New Matter</h3>
             <form onSubmit={handleAddMatter} className="flex items-end gap-4">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Matter Name *</label>
+                <label htmlFor="new-matter-name" className="block text-sm font-medium text-gray-700 mb-1">Matter Name *</label>
                 <input
                   type="text"
+                  id="new-matter-name"
                   value={newMatter.name}
                   onChange={(e) => setNewMatter((prev) => ({ ...prev, name: e.target.value }))}
                   className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -373,9 +371,10 @@ const AdminMatterManagement = () => {
                 />
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
+                <label htmlFor="new-matter-client" className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
                 <input
                   type="text"
+                  id="new-matter-client"
                   value={newMatter.clientName}
                   onChange={(e) => setNewMatter((prev) => ({ ...prev, clientName: e.target.value }))}
                   list="client-names-add"
@@ -411,7 +410,7 @@ const AdminMatterManagement = () => {
               </button>
             </form>
             {addError && (
-              <div className="flex items-center gap-2 mt-3 text-sm text-red-600">
+              <div role="alert" className="flex items-center gap-2 mt-3 text-sm text-red-600">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{addError}</span>
               </div>
@@ -448,15 +447,16 @@ const AdminMatterManagement = () => {
                     { key: 'createdAt', label: 'Created', width: 'w-[12%]' },
                     { key: 'lastUsedAt', label: 'Last Used', width: 'w-[12%]' },
                   ].map((col) => (
-                    <th
+                    <SortableTh
                       key={col.key}
-                      onClick={() => handleSort(col.key)}
-                      className={`${col.width} px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none`}
-                    >
-                      {col.label}{getSortIndicator(col.key)}
-                    </th>
+                      label={col.label}
+                      sortKey={col.key}
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className={`${col.width} px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider select-none`}
+                    />
                   ))}
-                  <th className="w-[16%] px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className="w-[16%] px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -474,6 +474,7 @@ const AdminMatterManagement = () => {
                         {isEditing ? (
                           <input
                             type="text"
+                            aria-label="Edit matter name"
                             value={editingMatter.name}
                             onChange={(e) => setEditingMatter((prev) => ({ ...prev, name: e.target.value }))}
                             className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -489,6 +490,7 @@ const AdminMatterManagement = () => {
                           <>
                             <input
                               type="text"
+                              aria-label="Edit client name"
                               value={editingMatter.clientName}
                               onChange={(e) => setEditingMatter((prev) => ({ ...prev, clientName: e.target.value }))}
                               list={`client-names-${matter.id}`}
@@ -524,7 +526,7 @@ const AdminMatterManagement = () => {
                               <button
                                 onClick={handleSaveEdit}
                                 disabled={isSaving}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
                               >
                                 {isSaving ? (
                                   <div className="w-3 h-3 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>

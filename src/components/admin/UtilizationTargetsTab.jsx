@@ -70,7 +70,7 @@ const deltaCellValue = (n) => {
   const s = formatHours(n);            // "0", "-2", "1.5", …
   if (s === '0') return { text: '0', className: 'text-gray-400' };
   if (s[0] === '-') return { text: s, className: 'text-red-600' };
-  return { text: `+${s}`, className: 'text-green-600' };
+  return { text: `+${s}`, className: 'text-green-700' };
 };
 
 const EMPTY_CELL = { text: '', className: '' };
@@ -223,32 +223,32 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
       )}
       <thead className="bg-cg-green text-white">
         <tr>
-          <th rowSpan={2} className="px-2 py-1 text-left align-middle whitespace-nowrap border-r-2 border-cg-dark text-sm">
+          <th rowSpan={2} scope="col" className="px-2 py-1 text-left align-middle whitespace-nowrap border-r-2 border-cg-dark text-sm">
             {title}
           </th>
-          <th rowSpan={2} className="px-1 py-1"></th>
+          <th rowSpan={2} scope="col" className="px-1 py-1"></th>
           {visibleMonths.map(m => (
-            <th key={m.idx} colSpan={showMonthTotals ? 3 : 2} className="px-1 py-1 text-center border-l-2 border-cg-dark font-semibold">
+            <th key={m.idx} colSpan={showMonthTotals ? 3 : 2} scope="colgroup" className="px-1 py-1 text-center border-l-2 border-cg-dark font-semibold">
               {m.short}
             </th>
           ))}
-          <th colSpan={3} className="px-1 py-1 text-center border-l-2 border-cg-dark font-semibold text-sm">
+          <th colSpan={3} scope="colgroup" className="px-1 py-1 text-center border-l-2 border-cg-dark font-semibold text-sm">
             {summaryLabel}
           </th>
         </tr>
         <tr>
           {visibleMonths.map(m => (
             <Fragment key={m.idx}>
-              <th className="px-0.5 py-0.5 text-[10px] font-normal border-l-2 border-cg-dark">Client</th>
-              <th className="px-0.5 py-0.5 text-[10px] font-normal">Ops</th>
+              <th scope="col" className="px-0.5 py-0.5 text-[10px] font-normal border-l-2 border-cg-dark">Client</th>
+              <th scope="col" className="px-0.5 py-0.5 text-[10px] font-normal">Ops</th>
               {showMonthTotals && (
-                <th className="px-0.5 py-0.5 text-[10px] font-normal">Total</th>
+                <th scope="col" className="px-0.5 py-0.5 text-[10px] font-normal">Total</th>
               )}
             </Fragment>
           ))}
-          <th className="px-0.5 py-0.5 text-[10px] font-normal border-l-2 border-cg-dark">Client</th>
-          <th className="px-0.5 py-0.5 text-[10px] font-normal">Ops</th>
-          <th className="px-0.5 py-0.5 text-[10px] font-normal">Total</th>
+          <th scope="col" className="px-0.5 py-0.5 text-[10px] font-normal border-l-2 border-cg-dark">Client</th>
+          <th scope="col" className="px-0.5 py-0.5 text-[10px] font-normal">Ops</th>
+          <th scope="col" className="px-0.5 py-0.5 text-[10px] font-normal">Total</th>
         </tr>
       </thead>
       <tbody>
@@ -336,9 +336,9 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
             <Fragment key={u.id}>
               {/* Target — editable */}
               <tr className="bg-white border-t-2 border-gray-300">
-                <td rowSpan={3} className="px-2 py-0.5 font-medium text-gray-900 whitespace-nowrap border-r-2 border-cg-dark text-sm align-middle">
+                <th rowSpan={3} scope="rowgroup" className="px-2 py-0.5 font-medium text-gray-900 whitespace-nowrap border-r-2 border-cg-dark text-sm align-middle text-left">
                   {u.name || u.id}
-                </td>
+                </th>
                 <td className="px-1 py-0.5 text-[10px] text-gray-500 text-right whitespace-nowrap">
                   <span className="inline-flex items-center gap-1">
                     Target
@@ -354,6 +354,7 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
                       <td className="px-0.5 py-0.5 border-l-2 border-cg-dark">
                         <input
                           type="number"
+                          aria-label={`${u.name || u.id} ${m.long} client hours target`}
                           value={cell.client ?? ''}
                           onChange={(e) => onChange(u.id, m.idx, 'client', e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, rowIdx, clientCol)}
@@ -368,6 +369,7 @@ const TargetTable = ({ title, users, matrix, actuals, capacity, onChange, visibl
                       <td className="px-0.5 py-0.5">
                         <input
                           type="number"
+                          aria-label={`${u.name || u.id} ${m.long} ops hours target`}
                           value={cell.ops ?? ''}
                           onChange={(e) => onChange(u.id, m.idx, 'ops', e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, rowIdx, opsCol)}
@@ -609,6 +611,7 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
     <div className="space-y-6">
       {saveStatus && (
         <div
+          role={saveStatus === 'success' ? 'status' : 'alert'}
           className={`flex items-center gap-2 px-4 py-3 rounded-lg ${
             saveStatus === 'success'
               ? 'bg-green-50 border border-green-200 text-green-700'
@@ -635,6 +638,7 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
             <Calendar className="w-5 h-5 text-gray-600" />
             <span className="font-medium text-gray-700">Year:</span>
             <select
+              aria-label="Select year"
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cg-green focus:border-transparent bg-white"

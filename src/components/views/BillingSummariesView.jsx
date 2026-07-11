@@ -205,8 +205,8 @@ const BillingSummariesView = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-cg-green"></div>
+        <div className="text-center" role="status">
+          <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-cg-green" aria-hidden="true"></div>
           <div className="mt-4 text-xl text-cg-dark">Loading billing data...</div>
         </div>
       </div>
@@ -215,9 +215,9 @@ const BillingSummariesView = () => {
 
   if (entriesError) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center" role="alert">
         <div className="text-red-600 text-xl mb-2">Error loading data</div>
-        <div className="text-red-500">{entriesError}</div>
+        <div className="text-red-600">{entriesError}</div>
       </div>
     );
   }
@@ -242,11 +242,12 @@ const BillingSummariesView = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Month Selector */}
           <div>
-            <label className="block text-sm font-medium text-cg-dark mb-2">
+            <label htmlFor="bs-month-select" className="block text-sm font-medium text-cg-dark mb-2">
               <Calendar className="w-4 h-4 inline mr-2" />
               Select Month
             </label>
             <select
+              id="bs-month-select"
               value={selectedMonth}
               onChange={(e) => {
                 setSelectedMonth(e.target.value);
@@ -265,11 +266,12 @@ const BillingSummariesView = () => {
 
           {/* Client Selector */}
           <div>
-            <label className="block text-sm font-medium text-cg-dark mb-2">
+            <label htmlFor="bs-client-select" className="block text-sm font-medium text-cg-dark mb-2">
               <Building2 className="w-4 h-4 inline mr-2" />
               Select Client
             </label>
             <select
+              id="bs-client-select"
               value={selectedClient}
               onChange={(e) => setSelectedClient(e.target.value)}
               disabled={!selectedMonth}
@@ -298,7 +300,7 @@ const BillingSummariesView = () => {
               flag it where invoices are prepared (same styling as the
               Overview banner). */}
           {missingRateAttorneys.length > 0 && (
-            <div className="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+            <div className="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800" role="status">
               <div className="flex items-center gap-2 font-medium">
                 <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600" />
                 <span>
@@ -339,7 +341,7 @@ const BillingSummariesView = () => {
                 </span>
                 <DollarSign className="w-5 h-5 text-green-500" />
               </div>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(totals.amount)}</div>
+              <div className="text-2xl font-bold text-green-700">{formatCurrency(totals.amount)}</div>
               {hasAdjustments && (
                 <div className="text-xs text-gray-500 mt-1">
                   includes {formatCurrency(totals.adjustment)} in adjustments
@@ -375,45 +377,45 @@ const BillingSummariesView = () => {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="min-w-full divide-y divide-gray-200" aria-label={`Billing details for ${selectedClient}, ${formatMonthDisplay(selectedMonth)}`}>
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Date
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Attorney
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <span className="inline-flex items-center gap-1">
                           Rate
                           <CalcTooltip calcKey="billingRate" position="bottom" />
                         </span>
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <span className="inline-flex items-center gap-1">
                           Hours
                           <CalcTooltip calcKey="billableHours" position="bottom" align="right" />
                         </span>
                       </th>
                       {hasAdjustments && (
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                           <span className="inline-flex items-center gap-1">
                             Adjustment
                             <CalcTooltip calcKey="entryAdjustment" position="bottom" align="right" />
                           </span>
                         </th>
                       )}
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <span className="inline-flex items-center gap-1">
                           Amount
                           <CalcTooltip calcKey="billingSummaryAmount" position="bottom" align="right" />
                         </span>
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Category
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Notes
                       </th>
                     </tr>
@@ -432,7 +434,7 @@ const BillingSummariesView = () => {
                           {entry.attorneyName}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
-                          {entry.rate > 0 ? `${formatCurrency(entry.rate)}/hr` : <span className="text-red-500">No rate set</span>}
+                          {entry.rate > 0 ? `${formatCurrency(entry.rate)}/hr` : <span className="text-red-600">No rate set</span>}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
                           {formatHours(entry.billableHours)}h
@@ -442,7 +444,7 @@ const BillingSummariesView = () => {
                             {entry.adjustment !== 0 ? formatCurrency(entry.adjustment) : '—'}
                           </td>
                         )}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 text-right font-medium">
                           {formatCurrency(entry.amount)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -471,7 +473,7 @@ const BillingSummariesView = () => {
                           {formatCurrency(totals.adjustment)}
                         </td>
                       )}
-                      <td className="px-6 py-4 text-sm font-bold text-green-600 text-right">
+                      <td className="px-6 py-4 text-sm font-bold text-green-700 text-right">
                         {formatCurrency(totals.amount)}
                       </td>
                       <td colSpan={2}></td>

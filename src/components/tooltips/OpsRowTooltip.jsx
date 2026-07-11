@@ -31,7 +31,7 @@ const OpsRowTooltip = ({ ops, position }) => {
             <div key={attorney} className="inline-flex items-center bg-green-50 px-3 py-1.5 rounded-full text-sm">
               <span className="font-medium text-gray-800">{attorney}</span>
               <span className="text-gray-500 ml-2">({stats.count})</span>
-              <span className="text-green-600 font-semibold ml-2">{formatHours(stats.hours)}h</span>
+              <span className="text-green-700 font-semibold ml-2">{formatHours(stats.hours)}h</span>
             </div>
           ))}
         </div>
@@ -63,7 +63,7 @@ const OpsRowTooltip = ({ ops, position }) => {
           </tbody>
         </table>
         {ops.count > 10 && (
-          <div className="text-xs text-gray-400 mt-2 text-center">
+          <div className="text-xs text-gray-500 mt-2 text-center">
             Showing 10 of {ops.count} entries
           </div>
         )}

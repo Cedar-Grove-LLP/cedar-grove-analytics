@@ -9,6 +9,13 @@ function LoginContent() {
   const { user, isAdmin, isAuthorized, loading, signInWithGoogle, signOut } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Client components can't export static metadata — set the distinct page
+  // title (WCAG 2.4.2) imperatively.
+  useEffect(() => {
+    document.title = 'Sign in — Cedar Grove Analytics';
+  }, []);
+
   const rawReturnUrl = searchParams.get('returnUrl') || '/';
   // SEC-009: validate returnUrl as same-origin before passing to router.push.
   // Cross-origin, protocol-relative (//evil), backslash-trick (/\evil), and
@@ -94,8 +101,8 @@ function LoginContent() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center" role="status">
+          <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-blue-600" aria-hidden="true"></div>
           <div className="mt-4 text-xl text-gray-700">Loading...</div>
         </div>
       </div>
@@ -108,7 +115,7 @@ function LoginContent() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
@@ -140,7 +147,7 @@ function LoginContent() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+          <div role="alert" className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
             {error}
           </div>
         )}
@@ -156,12 +163,12 @@ function LoginContent() {
         >
           {signingIn ? (
             <>
-              <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-              <span className="text-gray-600">Signing in...</span>
+              <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin motion-reduce:animate-none" aria-hidden="true"></div>
+              <span className="text-gray-600" role="status">Signing in...</span>
             </>
           ) : (
             <>
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   fill="#4285F4"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -193,8 +200,8 @@ function LoginContent() {
 function LoginLoading() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="text-center" role="status">
+        <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-blue-600" aria-hidden="true"></div>
         <div className="mt-4 text-xl text-gray-700">Loading...</div>
       </div>
     </div>

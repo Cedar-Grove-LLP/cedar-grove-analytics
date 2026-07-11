@@ -135,7 +135,7 @@ const AnnualProgressCompact = ({ year, group, result }) => {
         paceDeltaHours={result.paceDeltaHours}
         barClassName="h-3"
       />
-      <p className="text-xs text-gray-400 mt-3 flex items-center gap-x-3 gap-y-1 flex-wrap">
+      <p className="text-xs text-gray-600 mt-3 flex items-center gap-x-3 gap-y-1 flex-wrap">
         <span className="inline-flex items-center gap-1">
           Pace marker shows where you should be by today
           <CalcTooltip calcKey="annualPaceMarker" position="bottom" />
@@ -610,8 +610,8 @@ const AttorneyDetailView = ({ attorneyName }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center" role="status">
+          <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-blue-600" aria-hidden="true"></div>
           <div className="mt-4 text-xl text-gray-700">Loading data...</div>
         </div>
       </div>
@@ -621,7 +621,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center max-w-md">
+        <div className="text-center max-w-md" role="alert">
           <div className="text-red-600 text-xl mb-4">Error loading data</div>
           <div className="text-gray-600 mb-4">{error}</div>
           <Link href="/" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
@@ -653,7 +653,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">{attorneyName}</h1>
-                  <p className="text-sm text-gray-500">{personRole} Performance Analytics{activationDateLabel && <span className="ml-2 text-gray-400">&middot; Active since {activationDateLabel}</span>}</p>
+                  <p className="text-sm text-gray-500">{personRole} Performance Analytics{activationDateLabel && <span className="ml-2 text-gray-600">&middot; Active since {activationDateLabel}</span>}</p>
                 </div>
               </div>
             </div>
@@ -697,13 +697,13 @@ const AttorneyDetailView = ({ attorneyName }) => {
                     {w.message}
                     {w.type === 'date-mismatch' && w.mismatchedRows && w.mismatchedRows.length > 0 && (
                       <div className="mt-1 ml-2">
-                        <table className="text-xs border-collapse">
+                        <table className="text-xs border-collapse" aria-label="Rows with mismatched dates">
                           <thead>
                             <tr className="text-amber-700">
-                              <th className="pr-3 py-0.5 text-left font-medium">Row</th>
-                              <th className="pr-3 py-0.5 text-left font-medium">Date</th>
-                              <th className="pr-3 py-0.5 text-left font-medium">{w.collection === 'billables' ? 'Client' : 'Description'}</th>
-                              <th className="pr-3 py-0.5 text-right font-medium">Hours</th>
+                              <th scope="col" className="pr-3 py-0.5 text-left font-medium">Row</th>
+                              <th scope="col" className="pr-3 py-0.5 text-left font-medium">Date</th>
+                              <th scope="col" className="pr-3 py-0.5 text-left font-medium">{w.collection === 'billables' ? 'Client' : 'Description'}</th>
+                              <th scope="col" className="pr-3 py-0.5 text-right font-medium">Hours</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -747,7 +747,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                 Overall Utilization
                 <CalcTooltip calcKey="utilizationPct" position="bottom" />
               </div>
-              <div className="text-xs text-gray-400 mt-1">
+              <div className="text-xs text-gray-600 mt-1">
                 <CalcTooltip calcKey="proRatedTarget" dynamic={{ context: targetAdjustmentContext }} variant="underline">
                   {formatHours(attorneyStats.totalHours)}h / {formatHours(calculatedTargets.totalTarget)}h target
                 </CalcTooltip>
@@ -769,7 +769,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                 Billable Utilization
                 <CalcTooltip calcKey="utilizationPct" position="bottom" />
               </div>
-              <div className="text-xs text-gray-400 mt-1">
+              <div className="text-xs text-gray-600 mt-1">
                 <CalcTooltip calcKey="proRatedTarget" dynamic={{ context: targetAdjustmentContext }} variant="underline">
                   {formatHours(attorneyStats.billableHours)}h / {formatHours(calculatedTargets.billableTarget)}h target
                 </CalcTooltip>
@@ -791,7 +791,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                 Ops Utilization
                 <CalcTooltip calcKey="utilizationPct" position="bottom" />
               </div>
-              <div className="text-xs text-gray-400 mt-1">
+              <div className="text-xs text-gray-600 mt-1">
                 <CalcTooltip calcKey="proRatedTarget" dynamic={{ context: targetAdjustmentContext }} variant="underline">
                   {formatHours(attorneyStats.opsHours)}h / {formatHours(calculatedTargets.opsTarget)}h target
                 </CalcTooltip>
@@ -835,7 +835,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
               </span>
               <DollarSign className="w-5 h-5 text-green-500" />
             </div>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(attorneyStats.totalEarnings)}</div>
+            <div className="text-2xl font-bold text-green-700">{formatCurrency(attorneyStats.totalEarnings)}</div>
             <div className="text-xs text-gray-500 mt-1">From billable work</div>
           </div>
 
@@ -904,7 +904,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Monthly Trend */}
             {monthlyTrend.length > 1 && (
-              <div className="bg-white p-6 rounded-lg shadow">
+              <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label="Hours Trend Over Time chart">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Hours Trend Over Time</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={monthlyTrend}>
@@ -936,7 +936,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
 
             {/* Top Clients */}
             {clientBreakdown.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow">
+              <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label="Top Clients by Hours chart">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Clients by Hours</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={clientBreakdown.slice(0, 8)} layout="vertical">
@@ -952,7 +952,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
 
             {/* Top Matters */}
             {matterBreakdown.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow">
+              <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label="Top Matters by Hours chart">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Matters by Hours</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={matterBreakdown.slice(0, 8)} layout="vertical">
@@ -973,7 +973,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Transaction Type Pie Chart */}
             {transactionBreakdown.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow">
+              <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label="Billable Time by Transaction Type chart">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Billable Time by Transaction Type</h3>
                 <ResponsiveContainer width="100%" height={350}>
                   <PieChart>
@@ -1000,7 +1000,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
 
             {/* Ops Category Pie Chart */}
             {opsBreakdown.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow">
+              <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label="Ops Time by Category chart">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Ops Time by Category</h3>
                 <ResponsiveContainer width="100%" height={350}>
                   <PieChart>
@@ -1034,24 +1034,24 @@ const AttorneyDetailView = ({ attorneyName }) => {
               <h3 className="text-lg font-semibold text-gray-900">Client Breakdown</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200" aria-label="Client breakdown">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Hours
                         <CalcTooltip calcKey="billableHours" position="bottom" />
                       </span>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Earnings
                         <CalcTooltip calcKey="earnings" position="bottom" align="right" />
                       </span>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         % of Total
                         <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
@@ -1067,7 +1067,13 @@ const AttorneyDetailView = ({ attorneyName }) => {
                       onClick={() => router.push(`/clients/${encodeURIComponent(client.name)}`)}
                     >
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800">
-                        {client.name}
+                        <Link
+                          href={`/clients/${encodeURIComponent(client.name)}`}
+                          className="hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {client.name}
+                        </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
                         {client.count}
@@ -1075,7 +1081,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
                         {formatHours(client.billableHours)}h
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 text-right font-medium">
                         {formatCurrency(client.earnings)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
@@ -1098,24 +1104,24 @@ const AttorneyDetailView = ({ attorneyName }) => {
               <h3 className="text-lg font-semibold text-gray-900">Transaction Type Breakdown</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200" aria-label="Transaction type breakdown">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Count</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Count</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Hours
                         <CalcTooltip calcKey="billableHours" position="bottom" />
                       </span>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Earnings
                         <CalcTooltip calcKey="earnings" position="bottom" align="right" />
                       </span>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         % of Billable
                         <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
@@ -1137,7 +1143,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
                         {formatHours(txn.hours)}h
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 text-right font-medium">
                         {formatCurrency(txn.earnings)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
@@ -1161,39 +1167,39 @@ const AttorneyDetailView = ({ attorneyName }) => {
               </p>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200" aria-label="Recent time entries">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Billable
                         <CalcTooltip calcKey="billableHours" position="bottom" />
                       </span>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Ops
                         <CalcTooltip calcKey="opsHours" position="bottom" align="right" />
                       </span>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Earnings
                         <CalcTooltip calcKey="entryEarnings" position="bottom" align="right" />
                       </span>
                     </th>
                     {hasAdjustments && (
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         <span className="inline-flex items-center gap-1">
                           Adjustment
                           <CalcTooltip calcKey="entryAdjustment" position="bottom" align="right" />
                         </span>
                       </th>
                     )}
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -1204,9 +1210,14 @@ const AttorneyDetailView = ({ attorneyName }) => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {entryDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer"
-                            onClick={() => router.push(`/clients/${encodeURIComponent(entry.client || 'Unknown')}`)}>
-                          {entry.client || 'Unknown'}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800">
+                          <Link
+                            href={`/clients/${encodeURIComponent(entry.client || 'Unknown')}`}
+                            className="hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {entry.client || 'Unknown'}
+                          </Link>
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900">
                           <span className="inline-flex px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
@@ -1216,10 +1227,10 @@ const AttorneyDetailView = ({ attorneyName }) => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 text-right font-medium">
                           {entry.billableHours > 0 ? `${formatHours(entry.billableHours)}h` : '-'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 text-right font-medium">
                           {entry.opsHours > 0 ? `${formatHours(entry.opsHours)}h` : '-'}
                         </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${entry.earnings < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${entry.earnings < 0 ? 'text-red-600' : 'text-green-700'}`}>
                           {entry.earnings ? formatCurrency(entry.earnings) : '-'}
                         </td>
                         {hasAdjustments && (

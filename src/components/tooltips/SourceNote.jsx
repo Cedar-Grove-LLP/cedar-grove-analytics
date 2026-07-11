@@ -3,7 +3,7 @@
 // stays consistent across every chart tooltip.
 const SourceNote = ({ sourceNote }) =>
   sourceNote ? (
-    <p className="mt-1.5 pt-1.5 border-t border-gray-100 text-[11px] text-gray-400 max-w-[280px]">
+    <p className="mt-1.5 pt-1.5 border-t border-gray-100 text-[11px] text-gray-500 max-w-[280px]">
       {sourceNote}
     </p>
   ) : null;

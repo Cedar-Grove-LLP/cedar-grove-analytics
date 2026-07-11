@@ -42,7 +42,9 @@ export const GRAY = {
 };
 
 // Tooltip/label styling constants used by Recharts/D3
-export const LABEL_LINE_COLOR = GRAY[400];
+// Pie-label leader lines use GRAY[500] to meet WCAG 1.4.11 non-text contrast
+// (>= 3:1 against the white card background).
+export const LABEL_LINE_COLOR = GRAY[500];
 export const TOOLTIP_BORDER = GRAY[200];
 
 // Practice-area accent colors for the admin Practice Composition tab, matched

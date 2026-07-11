@@ -78,6 +78,7 @@ const AttorneysView = ({
 
   return (
     <div className="space-y-6">
+      <h2 className="sr-only">Team Members</h2>
       <DateRangeIndicator
         dateRangeLabel={dateRangeLabel}
         entryCount={attorneyData?.length || 0}

@@ -15,7 +15,12 @@ const PracticeAreaTrendTooltip = ({ active, payload, label }) => {
     <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
       <p className="font-medium text-gray-900 mb-1">{label}</p>
       {sorted.map((entry, idx) => (
-        <p key={idx} style={{ color: entry.color }} className="text-sm">
+        <p key={idx} className="text-sm text-gray-900">
+          <span
+            aria-hidden="true"
+            style={{ backgroundColor: entry.color }}
+            className="inline-block w-2 h-2 rounded-full mr-1"
+          />
           {entry.name}: {entry.value.toFixed(1)}%
         </p>
       ))}
@@ -37,7 +42,7 @@ const PracticeAreaTrendChart = ({ data, title = "Practice Area Composition Over 
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label={title}>
       <h3 className="text-lg font-semibold text-gray-900 mb-1">{title}</h3>
       <p className="text-sm text-gray-500 mb-4">
         Share of billable hours by practice area, month over month — a growing slice signals where to hire next.

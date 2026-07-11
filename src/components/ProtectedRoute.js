@@ -62,8 +62,8 @@ export default function ProtectedRoute({
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center" role="status">
+          <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-blue-600" aria-hidden="true"></div>
           <div className="mt-4 text-xl text-gray-700">Checking authentication...</div>
         </div>
       </div>

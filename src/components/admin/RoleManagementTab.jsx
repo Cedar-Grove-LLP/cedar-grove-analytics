@@ -149,7 +149,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
   return (
     <div>
       {saveStatus && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg mb-6 ${saveStatus === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+        <div role={saveStatus === 'success' ? 'status' : 'alert'} className={`flex items-center gap-2 px-4 py-3 rounded-lg mb-6 ${saveStatus === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
           {saveStatus === 'success' ? (<><CheckCircle className="w-5 h-5" /><span>Roles and employment types saved successfully!</span></>) : (<><AlertCircle className="w-5 h-5" /><span>Error saving changes. Please try again.</span></>)}
         </div>
       )}
@@ -209,6 +209,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <input
                       type="email"
+                      aria-label={`Email for ${user.name || user.id}`}
                       value={edits.email}
                       onChange={(e) => handleChange(user.id, 'email', e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -218,6 +219,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <input
                       type="text"
+                      aria-label={`Role for ${user.name || user.id}`}
                       value={edits.role}
                       onChange={(e) => handleChange(user.id, 'role', e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -226,6 +228,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <select
+                      aria-label={`Employment type for ${user.name || user.id}`}
                       value={edits.employmentType}
                       onChange={(e) => handleChange(user.id, 'employmentType', e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm"
@@ -240,6 +243,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
                       type="button"
                       role="switch"
                       aria-checked={edits.active}
+                      aria-label={`Active status for ${user.name || user.id}`}
                       onClick={() => handleChange(user.id, 'active', !edits.active)}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${edits.active ? 'bg-green-500' : 'bg-gray-300'}`}
                     >
@@ -250,6 +254,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <input
                       type="month"
+                      aria-label={`Activation month for ${user.name || user.id}`}
                       value={edits.activationDate}
                       onChange={(e) => handleChange(user.id, 'activationDate', e.target.value)}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"

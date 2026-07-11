@@ -476,8 +476,8 @@ const ClientDetailView = ({ clientName }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center" role="status">
+          <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-blue-600" aria-hidden="true"></div>
           <div className="mt-4 text-xl text-gray-700">Loading client data...</div>
         </div>
       </div>
@@ -487,7 +487,7 @@ const ClientDetailView = ({ clientName }) => {
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center max-w-md">
+        <div className="text-center max-w-md" role="alert">
           <div className="text-red-600 text-xl mb-4">Error loading data</div>
           <div className="text-gray-600 mb-4">{error}</div>
           <Link href="/" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
@@ -641,7 +641,7 @@ const ClientDetailView = ({ clientName }) => {
               </span>
               <DollarSign className="w-5 h-5 text-green-500" />
             </div>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(clientStats.grossBillables)}</div>
+            <div className="text-2xl font-bold text-green-700">{formatCurrency(clientStats.grossBillables)}</div>
             <div className="text-xs text-gray-500 mt-1">Rate × Hours</div>
           </div>
 
@@ -654,7 +654,7 @@ const ClientDetailView = ({ clientName }) => {
                 </span>
                 <DollarSign className="w-5 h-5 text-green-500" />
               </div>
-              <div className="text-2xl font-bold text-green-600">{formatCurrency(clientStats.takeHomeEarnings)}</div>
+              <div className="text-2xl font-bold text-green-700">{formatCurrency(clientStats.takeHomeEarnings)}</div>
               <div className="text-xs text-gray-500 mt-1">Take-home (incl. adjustment)</div>
             </div>
           )}
@@ -724,7 +724,7 @@ const ClientDetailView = ({ clientName }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Monthly Trend */}
             {trendData.length > 1 && (
-              <div className="bg-white p-6 rounded-lg shadow">
+              <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label="Hours Trend Over Time chart">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Hours Trend Over Time</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={trendData}>
@@ -758,7 +758,7 @@ const ClientDetailView = ({ clientName }) => {
 
             {/* Attorney Breakdown */}
             {attorneyBreakdown.length > 0 && (
-              <div className="bg-white p-6 rounded-lg shadow">
+              <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label="Hours by Attorney chart">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Hours by Attorney</h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={attorneyBreakdown.slice(0, 8)}>
@@ -779,7 +779,7 @@ const ClientDetailView = ({ clientName }) => {
         {transactionBreakdown.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Pie Chart */}
-            <div className="bg-white p-6 rounded-lg shadow">
+            <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label="Time by Transaction Type chart">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Time by Transaction Type</h3>
               <ResponsiveContainer width="100%" height={350}>
                 <PieChart>
@@ -812,24 +812,24 @@ const ClientDetailView = ({ clientName }) => {
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Transaction Type Details</h3>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="min-w-full divide-y divide-gray-200" aria-label="Transaction type details">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Count</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Count</th>
+                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         <span className="inline-flex items-center gap-1">
                           Hours
                           <CalcTooltip calcKey="billableHours" position="bottom" />
                         </span>
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         <span className="inline-flex items-center gap-1">
                           Gross Billables
                           <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
                         </span>
                       </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         <span className="inline-flex items-center gap-1">
                           %
                           <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
@@ -843,7 +843,7 @@ const ClientDetailView = ({ clientName }) => {
                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{txn.type}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 text-right">{txn.count}</td>
                         <td className="px-4 py-3 text-sm text-gray-900 text-right font-medium">{formatHours(txn.hours)}h</td>
-                        <td className="px-4 py-3 text-sm text-green-600 text-right font-medium">{formatCurrency(txn.grossBillables)}</td>
+                        <td className="px-4 py-3 text-sm text-green-700 text-right font-medium">{formatCurrency(txn.grossBillables)}</td>
                         <td className="px-4 py-3 text-sm text-gray-600 text-right">{txn.percentage}%</td>
                       </tr>
                     ))}
@@ -861,24 +861,24 @@ const ClientDetailView = ({ clientName }) => {
               <h3 className="text-lg font-semibold text-gray-900">Attorney Breakdown</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200" aria-label="Attorney breakdown">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attorney</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attorney</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entries</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Billable Hours
                         <CalcTooltip calcKey="billableHours" position="bottom" />
                       </span>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Gross Billables
                         <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
                       </span>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         % of Total
                         <CalcTooltip calcKey="shareOfTotalHours" position="bottom" align="right" />
@@ -898,7 +898,7 @@ const ClientDetailView = ({ clientName }) => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 text-right font-medium">
                         {formatHours(attorney.billableHours)}h
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 text-right font-medium">
                         {formatCurrency(attorney.grossBillables)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 text-right">
@@ -924,33 +924,33 @@ const ClientDetailView = ({ clientName }) => {
               </p>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200" aria-label="Recent time entries">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attorney</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Attorney</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Hours
                         <CalcTooltip calcKey="billableHours" position="bottom" align="right" />
                       </span>
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       <span className="inline-flex items-center gap-1">
                         Gross Billables
                         <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
                       </span>
                     </th>
                     {hasAdjustments && (
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         <span className="inline-flex items-center gap-1">
                           Adjustment
                           <CalcTooltip calcKey="entryAdjustment" position="bottom" align="right" />
                         </span>
                       </th>
                     )}
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -976,7 +976,7 @@ const ClientDetailView = ({ clientName }) => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-blue-600 text-right font-medium">
                           {billableHours > 0 ? `${formatHours(billableHours)}h` : '-'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 text-right font-medium">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 text-right font-medium">
                           {grossBillables > 0 ? formatCurrency(grossBillables) : '-'}
                         </td>
                         {hasAdjustments && (

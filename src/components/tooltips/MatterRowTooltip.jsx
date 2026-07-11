@@ -63,14 +63,14 @@ const MatterRowTooltip = ({ matter, position }) => {
                 <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{formatDate(entry.date)}</td>
                 <td className="px-3 py-2 font-medium text-gray-800">{entry.attorney}</td>
                 <td className="px-3 py-2 text-right text-gray-900 font-medium">{formatHours(entry.hours)}h</td>
-                <td className="px-3 py-2 text-right text-green-600 font-medium">{formatCurrency(entry.earnings)}</td>
+                <td className="px-3 py-2 text-right text-green-700 font-medium">{formatCurrency(entry.earnings)}</td>
                 <td className="px-3 py-2 text-gray-600 truncate max-w-[200px]" title={entry.notes}>{entry.notes || '-'}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {matter.count > 10 && (
-          <div className="text-xs text-gray-400 mt-2 text-center">
+          <div className="text-xs text-gray-500 mt-2 text-center">
             Showing 10 of {matter.count} entries
           </div>
         )}

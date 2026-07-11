@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Ban } from 'lucide-react';
 import { formatCurrency, formatHours } from '../../utils/formatters';
@@ -8,6 +9,7 @@ import { getStatusBadge } from '@/utils/statusStyles';
 import { getPaymentStatusBadge, PAYMENT_STATUS_LABEL, HOLD_FLAG_MESSAGE } from '@/utils/paymentStatus.mjs';
 import { ClientRowTooltip } from '../tooltips';
 import { CalcTooltip } from '../shared';
+import SortableTh from './SortableTh';
 
 const ClientsTable = ({
   clients,
@@ -18,92 +20,89 @@ const ClientsTable = ({
   const [hoveredClient, setHoveredClient] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? '↑' : '↓';
-  };
-
   const handleClientClick = (clientName) => {
     router.push(`/clients/${encodeURIComponent(clientName)}`);
   };
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      <table className="min-w-full divide-y divide-gray-200 table-fixed">
+    <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <table aria-label="Clients" className="min-w-full divide-y divide-gray-200 table-fixed">
         <thead className="bg-gray-50">
           <tr>
-            <th
-              onClick={() => onSort('name')}
-              className="w-[16%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+            <SortableTh
+              label="Client Name"
+              sortKey="name"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[16%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            />
+            <SortableTh
+              label="Status"
+              sortKey="status"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[9%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              Client Name {getSortIndicator('name')}
-            </th>
-            <th
-              onClick={() => onSort('status')}
-              className="w-[9%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              <CalcTooltip calcKey="activeClients" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Payment"
+              sortKey="paymentStatus"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[11%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              <span className="inline-flex items-center gap-1">
-                Status {getSortIndicator('status')}
-                <CalcTooltip calcKey="activeClients" position="bottom" />
-              </span>
-            </th>
-            <th
-              onClick={() => onSort('paymentStatus')}
-              className="w-[11%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              <CalcTooltip calcKey="paymentStatusTag" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Avg Days"
+              sortKey="avgPaymentDays"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[9%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              <span className="inline-flex items-center gap-1">
-                Payment {getSortIndicator('paymentStatus')}
-                <CalcTooltip calcKey="paymentStatusTag" position="bottom" />
-              </span>
-            </th>
-            <th
-              onClick={() => onSort('avgPaymentDays')}
-              className="w-[9%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              <CalcTooltip calcKey="avgPaymentDays" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Outstanding"
+              sortKey="outstandingInvoices"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[9%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              <span className="inline-flex items-center gap-1">
-                Avg Days {getSortIndicator('avgPaymentDays')}
-                <CalcTooltip calcKey="avgPaymentDays" position="bottom" />
-              </span>
-            </th>
-            <th
-              onClick={() => onSort('outstandingInvoices')}
-              className="w-[9%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              <CalcTooltip calcKey="outstandingInvoices" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Billable Hours"
+              sortKey="billableHours"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[11%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              <span className="inline-flex items-center gap-1">
-                Outstanding {getSortIndicator('outstandingInvoices')}
-                <CalcTooltip calcKey="outstandingInvoices" position="bottom" />
-              </span>
-            </th>
-            <th
-              onClick={() => onSort('billableHours')}
-              className="w-[11%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              <CalcTooltip calcKey="billableHours" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Billables"
+              sortKey="grossBillables"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[11%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              <span className="inline-flex items-center gap-1">
-                Billable Hours {getSortIndicator('billableHours')}
-                <CalcTooltip calcKey="billableHours" position="bottom" />
-              </span>
-            </th>
-            <th
-              onClick={() => onSort('grossBillables')}
-              className="w-[11%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              <span className="inline-flex items-center gap-1">
-                Billables {getSortIndicator('grossBillables')}
-                <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
-              </span>
-            </th>
+              <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+            </SortableTh>
             {/* Per-client "General Notes" — paired to each client by name, so it
                 rides along with its row through any sort (not sortable itself,
                 free text). */}
-            <th className="w-[14%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th scope="col" className="w-[14%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Notes
             </th>
-            <th
-              onClick={() => onSort('lastActivity')}
-              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              Last Activity {getSortIndicator('lastActivity')}
-            </th>
+            <SortableTh
+              label="Last Activity"
+              sortKey="lastActivity"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            />
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -125,9 +124,15 @@ const ClientsTable = ({
               }}
               onMouseLeave={() => setHoveredClient(null)}
             >
-              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800">
-                <span className="hover:underline">{client.name}</span>
-              </td>
+              <th scope="row" className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 hover:text-blue-800 text-left">
+                <Link
+                  href={`/clients/${encodeURIComponent(client.name)}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="hover:underline"
+                >
+                  {client.name}
+                </Link>
+              </th>
               <td className="px-6 py-4 whitespace-nowrap text-sm">
                 <span
                   className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

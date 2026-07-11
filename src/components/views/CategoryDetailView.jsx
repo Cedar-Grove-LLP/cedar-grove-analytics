@@ -222,8 +222,8 @@ const CategoryDetailView = ({ categoryName }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center" role="status">
+          <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-blue-600" aria-hidden="true"></div>
           <div className="mt-4 text-xl text-gray-700">Loading category data...</div>
         </div>
       </div>
@@ -233,7 +233,7 @@ const CategoryDetailView = ({ categoryName }) => {
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center max-w-md">
+        <div className="text-center max-w-md" role="alert">
           <div className="text-red-600 text-xl mb-4">Error loading data</div>
           <div className="text-gray-600 mb-4">{error}</div>
           <Link href="/" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
@@ -294,22 +294,25 @@ const CategoryDetailView = ({ categoryName }) => {
         {sortedMatters.length > 0 ? (
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200" aria-label={`Matters in ${categoryName}`}>
                 <thead className="bg-gray-50">
                   <tr>
                     <th
+                      scope="col"
                       onClick={() => handleSort('matter')}
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
                       Matter{getSortIndicator('matter')}
                     </th>
                     <th
+                      scope="col"
                       onClick={() => handleSort('clientName')}
                       className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
                       Client{getSortIndicator('clientName')}
                     </th>
                     <th
+                      scope="col"
                       onClick={() => handleSort('avgHours')}
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
@@ -319,12 +322,14 @@ const CategoryDetailView = ({ categoryName }) => {
                       </span>
                     </th>
                     <th
+                      scope="col"
                       onClick={() => handleSort('count')}
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
                       Count{getSortIndicator('count')}
                     </th>
                     <th
+                      scope="col"
                       onClick={() => handleSort('totalHours')}
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
@@ -334,6 +339,7 @@ const CategoryDetailView = ({ categoryName }) => {
                       </span>
                     </th>
                     <th
+                      scope="col"
                       onClick={() => handleSort('grossBillables')}
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
@@ -343,6 +349,7 @@ const CategoryDetailView = ({ categoryName }) => {
                       </span>
                     </th>
                     <th
+                      scope="col"
                       onClick={() => handleSort('percentage')}
                       className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                     >
@@ -387,7 +394,7 @@ const CategoryDetailView = ({ categoryName }) => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
                         {formatHours(matter.totalHours)}h
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium text-right">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-medium text-right">
                         {formatCurrency(matter.grossBillables)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">

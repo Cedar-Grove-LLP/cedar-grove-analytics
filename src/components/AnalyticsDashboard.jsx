@@ -230,8 +230,8 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   if (loading && !dataIndependentView) {
     return (
       <div className="flex items-center justify-center h-screen bg-cg-background">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-cg-green"></div>
+        <div className="text-center" role="status">
+          <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-cg-green" aria-hidden="true"></div>
           <div className="mt-4 text-xl text-cg-dark">Loading analytics data...</div>
         </div>
       </div>
@@ -242,7 +242,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   if (error && !dataIndependentView) {
     return (
       <div className="flex items-center justify-center h-screen bg-cg-background">
-        <div className="text-center max-w-md">
+        <div className="text-center max-w-md" role="alert">
           <div className="text-red-600 text-xl mb-4">Error loading data</div>
           <div className="text-cg-dark mb-4">{error}</div>
           <button
@@ -281,7 +281,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
           />
 
           <div className="flex items-center justify-center py-20">
-            <div className="text-center max-w-md">
+            <div className="text-center max-w-md" role="status">
               <div className="text-cg-dark text-xl mb-4">No data available</div>
               <div className="text-gray-500">
                 No time entries found for the selected date range. Try selecting a different time period above.
@@ -318,8 +318,9 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
           matchedUserName={matchedUserName}
         />
 
-        {/* Navigation Tabs */}
-        <div className="mb-6 flex gap-2 border-b border-gray-300">
+        {/* Navigation Tabs — flex-wrap keeps all ten tabs visible at 1024px
+            and 200% zoom instead of overflowing the shell. */}
+        <nav aria-label="Dashboard sections" className="mb-6 flex flex-wrap gap-2 border-b border-gray-300">
           {[
             { key: 'overview', label: 'Overview' },
             { key: 'attorneys', label: 'Team Members' },
@@ -341,18 +342,20 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             <button
               key={tab.key}
               onClick={() => switchTab(tab.key)}
+              aria-current={selectedView === tab.key ? 'page' : undefined}
               className={`px-4 py-2 font-medium transition-colors ${
                 selectedView === tab.key
-                  ? 'text-cg-green border-b-2 border-cg-green'
+                  ? 'text-cg-green-text border-b-2 border-cg-green'
                   : 'text-cg-dark hover:text-cg-black'
               }`}
             >
               {tab.label}
             </button>
           ))}
-        </div>
+        </nav>
 
         {/* Views */}
+        <main id="main-content">
         {selectedView === 'overview' && (
           <OverviewView
             dateRange={dateRange}
@@ -435,6 +438,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
         {selectedView === 'tech-team' && !restrictedMode && <TechTeamView />}
 
         {selectedView === 'invoices-testing' && isAdmin && !restrictedMode && <InvoicesTestingView />}
+        </main>
       </div>
     </div>
   );
@@ -465,12 +469,12 @@ const Header = ({
   const restrictedMode = downloadsOnly || transactionsOpsOnly;
 
   return (
-    <div className="mb-8 flex justify-between items-start">
+    <header className="mb-8 flex flex-wrap justify-between items-start gap-4">
       <div>
         <h1 className="text-3xl font-bold text-cg-black">Cedar Grove Analytics</h1>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         {!downloadsOnly && (
           <AttorneyFilterDropdown
             allAttorneyNames={allAttorneyNames}
@@ -526,13 +530,14 @@ const Header = ({
               onClick={onLogout}
               className="flex items-center gap-2 px-3 py-2 text-cg-dark hover:text-cg-black hover:bg-gray-200 rounded-lg transition-colors"
               title={`Logged in as ${user.email}`}
+              aria-label={`Log out (signed in as ${user.email})`}
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         )}
       </div>
-    </div>
+    </header>
   );
 };
 

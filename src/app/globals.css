@@ -7,6 +7,10 @@
   --color-cg-background: #ECEDE5;
   --color-cg-dark: #5A5A48;
   --color-cg-green: #1CA33B;
+  /* Darkened brand green for TEXT and links on light backgrounds: cg-green is
+     3.31:1 on white (fails WCAG 1.4.3's 4.5:1 for normal text); this shade is
+     5.5:1. Keep cg-green for fills/icons/borders (3:1 non-text passes). */
+  --color-cg-green-text: #15792C;
 
   /* Semantic: Status */
   --color-status-success: #16a34a;
@@ -40,13 +44,17 @@
   --color-secondary-light: #ffedd5;
   --color-secondary-text: #c2410c;
 
-  /* Override gray scale to match the warm background tone */
+  /* Override gray scale to match the warm background tone.
+     gray-500 is deliberately darker than the visual ramp suggests: it is used
+     as small secondary TEXT in ~330 places, and the old #7A7B6E was 4.30:1 on
+     white — just under WCAG 1.4.3's 4.5:1. #6E6F62 is 5.1:1. (Charts keep
+     their own #7A7B6E in utils/colors.js GRAY[500] — non-text needs only 3:1.) */
   --color-gray-50: #F7F7F4;
   --color-gray-100: #ECEDE5;
   --color-gray-200: #E0E1D9;
   --color-gray-300: #C9CAC0;
   --color-gray-400: #A5A699;
-  --color-gray-500: #7A7B6E;
+  --color-gray-500: #6E6F62;
   --color-gray-600: #5A5A48;
   --color-gray-700: #484839;
   --color-gray-800: #36362B;
@@ -60,13 +68,34 @@
     color: var(--color-cg-dark);
   }
 
-  /* Override default link colors to use Cedar Grove green */
+  /* Override default link colors to use Cedar Grove green (text-safe shade —
+     the raw brand green fails 4.5:1 contrast for text, see token comment) */
   a {
-    color: var(--color-cg-green);
+    color: var(--color-cg-green-text);
   }
-  
+
   a:hover {
     text-decoration: underline;
+  }
+
+  /* Visible keyboard focus everywhere (WCAG 2.4.7/2.4.13). Utilities that set
+     their own focus ring still apply; this is the fallback so no control can
+     lose its indicator via outline-none alone. */
+  :focus-visible {
+    outline: 2px solid var(--color-cg-green-text);
+    outline-offset: 2px;
+  }
+
+  /* Respect reduced-motion preferences: stop infinite spinners and long
+     transitions (WCAG 2.3.3 optimization). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
@@ -92,9 +121,10 @@
     background-color: var(--color-gray-700);
   }
 
-  /* Secondary/accent button */
+  /* Secondary/accent button (text-safe green: white on raw cg-green is
+     3.31:1, below the 4.5:1 required for the button label) */
   .cg-button-accent {
-    background-color: var(--color-cg-green);
+    background-color: var(--color-cg-green-text);
     color: var(--color-cg-white);
     padding: 0.5rem 1rem;
     border-radius: 0.5rem;

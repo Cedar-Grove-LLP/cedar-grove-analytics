@@ -19,7 +19,7 @@ const BillableVsOpsChart = ({ data, title = "Billable vs Ops Time by Attorney" }
   const sortedData = sortBySeniority(data, (d) => d.name);
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label={title}>
       <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={350}>
         <BarChart data={sortedData} barGap={0} barCategoryGap="20%">

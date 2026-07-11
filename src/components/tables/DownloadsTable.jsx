@@ -2,6 +2,7 @@
 
 import { FolderOpen } from 'lucide-react';
 import { CalcTooltip } from '../shared';
+import SortableTh from './SortableTh';
 
 const DownloadsTable = ({
   mode,
@@ -10,11 +11,6 @@ const DownloadsTable = ({
   onSort,
   onFolderClick,
 }) => {
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? '↑' : '↓';
-  };
-
   const formatDate = (isoString) => {
     if (!isoString) return '—';
     const date = new Date(isoString);
@@ -28,46 +24,48 @@ const DownloadsTable = ({
 
   if (mode === 'folders') {
     return (
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200 table-fixed">
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <table aria-label="Download folders" className="min-w-full divide-y divide-gray-200 table-fixed">
           <thead className="bg-gray-50">
             <tr>
-              <th
-                onClick={() => onSort('name')}
-                className="w-[40%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              <SortableTh
+                label="Folder"
+                sortKey="name"
+                sortConfig={sortConfig}
+                onSort={onSort}
+                className="w-[40%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              />
+              <SortableTh
+                label="Downloads"
+                sortKey="downloads"
+                sortConfig={sortConfig}
+                onSort={onSort}
+                className="w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
-                Folder {getSortIndicator('name')}
-              </th>
-              <th
-                onClick={() => onSort('downloads')}
-                className="w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                <CalcTooltip calcKey="downloads" position="bottom" />
+              </SortableTh>
+              <SortableTh
+                label="Files"
+                sortKey="uniqueFiles"
+                sortConfig={sortConfig}
+                onSort={onSort}
+                className="w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
-                <span className="inline-flex items-center gap-1">
-                  Downloads {getSortIndicator('downloads')}
-                  <CalcTooltip calcKey="downloads" position="bottom" />
-                </span>
-              </th>
-              <th
-                onClick={() => onSort('uniqueFiles')}
-                className="w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              >
-                <span className="inline-flex items-center gap-1">
-                  Files {getSortIndicator('uniqueFiles')}
-                  <CalcTooltip calcKey="uniqueFiles" position="bottom" />
-                </span>
-              </th>
-              <th className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <CalcTooltip calcKey="uniqueFiles" position="bottom" />
+              </SortableTh>
+              <th scope="col" className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <span className="inline-flex items-center gap-1">
                   Users
                   <CalcTooltip calcKey="uniqueUsers" position="bottom" />
                 </span>
               </th>
-              <th
-                onClick={() => onSort('lastDownload')}
-                className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-              >
-                Last Download {getSortIndicator('lastDownload')}
-              </th>
+              <SortableTh
+                label="Last Download"
+                sortKey="lastDownload"
+                sortConfig={sortConfig}
+                onSort={onSort}
+                className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              />
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -78,14 +76,22 @@ const DownloadsTable = ({
                 className="hover:bg-blue-50 transition-colors cursor-pointer group"
                 title={`${folder.files.map(f => f.file).join('\n')}`}
               >
-                <td className="px-6 py-3 text-sm text-gray-900 truncate">
+                <th scope="row" className="px-6 py-3 text-sm font-normal text-left text-gray-900 truncate">
                   <div className="flex items-center gap-2">
                     <FolderOpen className="w-4 h-4 text-amber-500 shrink-0" />
-                    <span className="truncate group-hover:text-blue-600" title={folder.folderName}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onFolderClick(folder.folderName);
+                      }}
+                      className="truncate group-hover:text-blue-600 hover:underline text-left"
+                      title={folder.folderName}
+                    >
                       {folder.folderName}
-                    </span>
+                    </button>
                   </div>
-                </td>
+                </th>
                 <td className="px-6 py-3 text-sm text-gray-900 font-medium">
                   {folder.downloads}
                 </td>
@@ -115,31 +121,33 @@ const DownloadsTable = ({
 
   // File mode
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      <table className="min-w-full divide-y divide-gray-200 table-fixed">
+    <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <table aria-label="Files in folder" className="min-w-full divide-y divide-gray-200 table-fixed">
         <thead className="bg-gray-50">
           <tr>
-            <th
-              onClick={() => onSort('file')}
-              className="w-[60%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+            <SortableTh
+              label="Document"
+              sortKey="file"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[60%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            />
+            <SortableTh
+              label="Downloads"
+              sortKey="downloads"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              Document {getSortIndicator('file')}
-            </th>
-            <th
-              onClick={() => onSort('downloads')}
-              className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              <span className="inline-flex items-center gap-1">
-                Downloads {getSortIndicator('downloads')}
-                <CalcTooltip calcKey="downloads" position="bottom" />
-              </span>
-            </th>
-            <th
-              onClick={() => onSort('lastDownload')}
-              className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              Last Download {getSortIndicator('lastDownload')}
-            </th>
+              <CalcTooltip calcKey="downloads" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Last Download"
+              sortKey="lastDownload"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            />
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -148,9 +156,9 @@ const DownloadsTable = ({
               key={idx}
               className="hover:bg-blue-50 transition-colors"
             >
-              <td className="px-6 py-3 text-sm text-gray-900 truncate" title={d.file}>
+              <th scope="row" className="px-6 py-3 text-sm font-normal text-left text-gray-900 truncate" title={d.file}>
                 {d.file}
-              </td>
+              </th>
               <td className="px-6 py-3 text-sm text-gray-900">
                 {d.downloads}
               </td>
