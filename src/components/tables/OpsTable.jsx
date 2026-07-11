@@ -49,7 +49,7 @@ const OpsTable = ({
           {opsData.map((ops, idx) => (
             <tr 
               key={idx} 
-              className="hover:bg-green-50 cursor-pointer transition-colors"
+              className="hover:bg-green-50 transition-colors"
               {...rowTooltip.rowProps(ops)}
             >
               <th scope="row" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 text-left">

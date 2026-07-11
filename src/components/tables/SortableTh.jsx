@@ -37,15 +37,21 @@ const SortableTh = ({
       aria-sort={active ? DIRECTION_TO_ARIA[sortConfig.direction] : undefined}
       className={className}
     >
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className={`inline-flex items-center gap-1 hover:text-gray-700 ${buttonClassName}`}
-      >
-        {label}
+      <span className="inline-flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onSort(sortKey)}
+          className={`inline-flex items-center gap-1 hover:text-gray-700 ${buttonClassName}`}
+        >
+          {label}
+          {active && <span aria-hidden="true">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>}
+        </button>
+        {/* Extras (e.g. a focusable CalcTooltip) render as SIBLINGS of the
+            button, not inside it — a button must not contain focusable
+            descendants, and tooltip text must not pollute its accessible
+            name. */}
         {children}
-        {active && <span aria-hidden="true">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>}
-      </button>
+      </span>
     </th>
   );
 };

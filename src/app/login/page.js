@@ -14,6 +14,8 @@ function LoginContent() {
   // title (WCAG 2.4.2) imperatively.
   useEffect(() => {
     document.title = 'Sign in — Cedar Grove Analytics';
+    // Restore the default on unmount (see detail pages for rationale).
+    return () => { document.title = 'Cedar Grove Analytics'; };
   }, []);
 
   const rawReturnUrl = searchParams.get('returnUrl') || '/';
@@ -140,7 +142,7 @@ function LoginContent() {
   // Not logged in (or anonymous) - show sign in form
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
+      <main id="main-content" className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900">Cedar Grove Analytics</h1>
           <p className="text-gray-600 mt-2">Sign in to continue</p>
@@ -191,7 +193,7 @@ function LoginContent() {
           )}
         </button>
 
-      </div>
+      </main>
     </div>
   );
 }

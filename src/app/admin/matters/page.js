@@ -7,7 +7,10 @@ export const metadata = { title: 'Matters' };
 export default function AdminMattersPage() {
   return (
     <ProtectedRoute requireAdmin={true}>
-      <AdminMatterManagement />
+      {/* Skip-link target (WCAG 2.4.1) + main landmark for this route. */}
+      <main id="main-content">
+        <AdminMatterManagement />
+      </main>
     </ProtectedRoute>
   );
 }

@@ -14,7 +14,7 @@ const TransactionRowTooltip = ({ transaction, position, id, onMouseEnter, onMous
       onMouseLeave={onMouseLeave}
       className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl p-5"
       style={{
-        left: Math.min(position.x + 15, window.innerWidth - 650),
+        left: Math.max(10, Math.min(position.x + 15, window.innerWidth - 650)),
         top: Math.max(10, Math.min(position.y - 200, window.innerHeight - 450)),
         width: '620px',
       }}

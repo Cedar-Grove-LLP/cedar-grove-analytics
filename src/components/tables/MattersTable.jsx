@@ -76,7 +76,7 @@ const MattersTable = ({
             return (
               <tr
                 key={idx}
-                className="hover:bg-blue-50 cursor-pointer transition-colors"
+                className="hover:bg-blue-50 transition-colors"
                 {...rowTooltip.rowProps(m)}
               >
                 <th scope="row" className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 text-left">

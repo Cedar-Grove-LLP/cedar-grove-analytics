@@ -9,7 +9,8 @@ import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { getEntryDate, getPSTDate, getDateRangeLabel } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours } from '@/utils/formatters';
 import { DateRangeDropdown, CalcTooltip } from '@/components/shared';
-import { MatterRowTooltip } from '@/components/tooltips';
+import { MatterRowTooltip, useRowTooltip } from '@/components/tooltips';
+import { SortableTh } from '@/components/tables';
 
 const CategoryDetailView = ({ categoryName }) => {
   const router = useRouter();
@@ -22,8 +23,9 @@ const CategoryDetailView = ({ categoryName }) => {
   const [customDateEnd, setCustomDateEnd] = useState('');
   const [showDateDropdown, setShowDateDropdown] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'totalHours', direction: 'desc' });
-  const [hoveredMatter, setHoveredMatter] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  // Row-detail tooltip: hover + keyboard focus, Escape-dismissable (WCAG
+  // 1.4.13/2.1.1) — shared wiring in tooltips/useRowTooltip.
+  const rowTooltip = useRowTooltip();
 
   const loading = billableLoading || ratesLoading;
   const error = billableError || ratesError;
@@ -212,11 +214,6 @@ const CategoryDetailView = ({ categoryName }) => {
     return items;
   }, [matterBreakdown, sortConfig]);
 
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
-  };
-
   const totalHours = matterBreakdown.reduce((sum, m) => sum + m.totalHours, 0);
 
   if (loading) {
@@ -297,67 +294,63 @@ const CategoryDetailView = ({ categoryName }) => {
               <table className="min-w-full divide-y divide-gray-200" aria-label={`Matters in ${categoryName}`}>
                 <thead className="bg-gray-50">
                   <tr>
-                    <th
-                      scope="col"
-                      onClick={() => handleSort('matter')}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    <SortableTh
+                      label="Matter"
+                      sortKey="matter"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    />
+                    <SortableTh
+                      label="Client"
+                      sortKey="clientName"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    />
+                    <SortableTh
+                      label="Avg Hours"
+                      sortKey="avgHours"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      Matter{getSortIndicator('matter')}
-                    </th>
-                    <th
-                      scope="col"
-                      onClick={() => handleSort('clientName')}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
+                    </SortableTh>
+                    <SortableTh
+                      label="Count"
+                      sortKey="count"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    />
+                    <SortableTh
+                      label="Total Hours"
+                      sortKey="totalHours"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      Client{getSortIndicator('clientName')}
-                    </th>
-                    <th
-                      scope="col"
-                      onClick={() => handleSort('avgHours')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      <CalcTooltip calcKey="billableHours" position="bottom" />
+                    </SortableTh>
+                    <SortableTh
+                      label="Total Earnings"
+                      sortKey="grossBillables"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      <span className="inline-flex items-center gap-1">
-                        Avg Hours{getSortIndicator('avgHours')}
-                        <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
-                      </span>
-                    </th>
-                    <th
-                      scope="col"
-                      onClick={() => handleSort('count')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+                    </SortableTh>
+                    <SortableTh
+                      label="% of Total"
+                      sortKey="percentage"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      Count{getSortIndicator('count')}
-                    </th>
-                    <th
-                      scope="col"
-                      onClick={() => handleSort('totalHours')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        Total Hours{getSortIndicator('totalHours')}
-                        <CalcTooltip calcKey="billableHours" position="bottom" />
-                      </span>
-                    </th>
-                    <th
-                      scope="col"
-                      onClick={() => handleSort('grossBillables')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        Total Earnings{getSortIndicator('grossBillables')}
-                        <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
-                      </span>
-                    </th>
-                    <th
-                      scope="col"
-                      onClick={() => handleSort('percentage')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        % of Total{getSortIndicator('percentage')}
-                        <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
-                      </span>
-                    </th>
+                      <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
+                    </SortableTh>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -365,18 +358,11 @@ const CategoryDetailView = ({ categoryName }) => {
                     <tr
                       key={idx}
                       className="hover:bg-blue-50 transition-colors"
-                      onMouseEnter={(e) => {
-                        setHoveredMatter(matter);
-                        setTooltipPosition({ x: e.clientX, y: e.clientY });
-                      }}
-                      onMouseMove={(e) => {
-                        setTooltipPosition({ x: e.clientX, y: e.clientY });
-                      }}
-                      onMouseLeave={() => setHoveredMatter(null)}
+                      {...rowTooltip.rowProps(matter)}
                     >
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900 max-w-[300px] truncate" title={matter.matter}>
+                      <th scope="row" className="px-6 py-4 text-sm font-medium text-gray-900 max-w-[300px] truncate text-left" title={matter.matter}>
                         {matter.matter}
-                      </td>
+                      </th>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <Link
                           href={`/clients/${encodeURIComponent(matter.clientName)}`}
@@ -406,10 +392,11 @@ const CategoryDetailView = ({ categoryName }) => {
               </table>
             </div>
 
-            {hoveredMatter && (
+            {rowTooltip.active && (
               <MatterRowTooltip
-                matter={hoveredMatter}
-                position={tooltipPosition}
+                matter={rowTooltip.active}
+                position={rowTooltip.position}
+                {...rowTooltip.tooltipProps}
               />
             )}
           </div>

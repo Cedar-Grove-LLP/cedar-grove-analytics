@@ -13,11 +13,18 @@ export default function UserDetailPage() {
   // title (WCAG 2.4.2) imperatively.
   useEffect(() => {
     document.title = `${userName} — Cedar Grove Analytics`;
+    // Restore the default on unmount: the imperative write bypasses React's
+    // virtual DOM, so a soft navigation to a route whose metadata title is
+    // unchanged would otherwise keep this page's title.
+    return () => { document.title = 'Cedar Grove Analytics'; };
   }, [userName]);
 
   return (
     <ProtectedRoute allowedAttorneyName={userName}>
-      <AttorneyDetailView attorneyName={userName} />
+      {/* Skip-link target (WCAG 2.4.1) + main landmark for this route. */}
+      <main id="main-content">
+        <AttorneyDetailView attorneyName={userName} />
+      </main>
     </ProtectedRoute>
   );
 }

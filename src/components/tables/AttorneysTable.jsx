@@ -130,7 +130,7 @@ const AttorneysTable = ({
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {formatHours(total)}h
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-medium">
                   {formatCurrency(attorney.earnings)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">

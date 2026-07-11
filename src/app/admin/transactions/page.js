@@ -7,7 +7,10 @@ export const metadata = { title: 'Transactions' };
 export default function AdminTransactionsPage() {
   return (
     <ProtectedRoute requireAdmin={true}>
-      <AdminTransactions />
+      {/* Skip-link target (WCAG 2.4.1) + main landmark for this route. */}
+      <main id="main-content">
+        <AdminTransactions />
+      </main>
     </ProtectedRoute>
   );
 }

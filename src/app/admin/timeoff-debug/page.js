@@ -7,7 +7,10 @@ export const metadata = { title: 'Time-Off Debug' };
 export default function AdminTimeOffDebugPage() {
   return (
     <ProtectedRoute requireAdmin={true}>
-      <AdminTimeOffDebug />
+      {/* Skip-link target (WCAG 2.4.1) + main landmark for this route. */}
+      <main id="main-content">
+        <AdminTimeOffDebug />
+      </main>
     </ProtectedRoute>
   );
 }

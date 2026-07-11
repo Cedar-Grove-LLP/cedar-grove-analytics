@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Info } from 'lucide-react';
 import { getCalcTooltipLines } from '../../utils/calcDefinitions.mjs';
 
@@ -59,6 +59,21 @@ const CalcTooltip = ({
   // hidden even though hover/focus-within would normally reveal it. Cleared
   // on mouseleave/blur so the tooltip works again on the next visit.
   const [dismissed, setDismissed] = useState(false);
+  // Hover-open tooltips must be Escape-dismissable even when DOM focus is
+  // elsewhere (a pure mouse user never focuses the trigger, so the wrapper's
+  // own onKeyDown would never fire). Track hover and listen document-wide
+  // only while hovered.
+  const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    if (!hovered) return undefined;
+    const onDocKeyDown = (e) => {
+      if (e.key === 'Escape') setDismissed(true);
+    };
+    document.addEventListener('keydown', onDocKeyDown);
+    return () => document.removeEventListener('keydown', onDocKeyDown);
+  }, [hovered]);
+
   const body = lines ?? getCalcTooltipLines(calcKey, dynamic);
   if (!body || body.length === 0) return children || null;
 
@@ -73,7 +88,11 @@ const CalcTooltip = ({
       onKeyDown={(e) => {
         if (e.key === 'Escape') setDismissed(true);
       }}
-      onMouseLeave={() => setDismissed(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setDismissed(false);
+      }}
       onBlur={() => setDismissed(false)}
     >
       {variant === 'underline' ? (

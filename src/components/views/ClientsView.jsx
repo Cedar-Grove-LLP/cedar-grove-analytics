@@ -285,6 +285,7 @@ const ClientsView = ({
 
   return (
     <div className="space-y-6">
+      <h2 className="sr-only">Clients</h2>
       {/* Reporting header */}
       <div>
         <p className="text-base text-cg-dark">

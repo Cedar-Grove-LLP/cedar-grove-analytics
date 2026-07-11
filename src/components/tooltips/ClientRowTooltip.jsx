@@ -19,7 +19,7 @@ const ClientRowTooltip = ({ client, position, id, onMouseEnter, onMouseLeave }) 
       onMouseLeave={onMouseLeave}
       className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl p-5"
       style={{ 
-        left: Math.min(position.x + 15, window.innerWidth - 750),
+        left: Math.max(10, Math.min(position.x + 15, window.innerWidth - 750)),
         top: Math.max(10, Math.min(position.y - 200, window.innerHeight - 550)),
         width: '700px',
       }}

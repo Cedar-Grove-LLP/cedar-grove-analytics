@@ -224,7 +224,7 @@ const MatterCategorySunburst = ({ data, title = "Time by Billing Category", minM
       .text(d => !d.children ? `${formatHours(d.value)}h` : "")
       .style("font-size", "8px")
       .style("font-weight", "500")
-      .style("fill", GRAY[500])
+      .style("fill", GRAY[600])
       .style("opacity", 0);
 
     // Center circle for clicking back (keyboard-operable too, so zooming
@@ -258,7 +258,7 @@ const MatterCategorySunburst = ({ data, title = "Time by Billing Category", minM
       .attr("text-anchor", "middle")
       .attr("dy", "1em")
       .style("font-size", "12px")
-      .style("fill", GRAY[500])
+      .style("fill", GRAY[600])
       .text(`${formatHours(root.value)}h total`);
 
     const centerHint = svg.append("text")

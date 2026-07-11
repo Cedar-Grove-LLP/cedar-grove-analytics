@@ -56,9 +56,13 @@ export function useRowTooltip() {
     }, HIDE_DELAY_MS);
   }, [cancelHide]);
 
-  useEffect(() => cancelHide, [cancelHide]);
+  // Clear any pending hide timer on unmount.
+  useEffect(() => () => clearTimeout(hideTimerRef.current), []);
 
-  const rowProps = useCallback((datum) => ({
+  // Not memoized on purpose: the props object is rebuilt per row per render
+  // either way, and depending on `active` would churn the identity anyway —
+  // a useCallback here would only imply a stability it can't deliver.
+  const rowProps = (datum) => ({
     tabIndex: 0,
     'aria-describedby': active === datum ? id : undefined,
     onMouseEnter: (e) => {
@@ -75,20 +79,37 @@ export function useRowTooltip() {
     onMouseLeave: scheduleHide,
     onFocus: (e) => {
       // Keyboard path: anchor to the row itself, not a pointer position.
-      dismissedRef.current = false;
+      // Focus events bubble from the row's inner links/buttons — do NOT
+      // clear the Escape latch here, or tabbing to a child of a dismissed
+      // row would instantly re-open the tooltip (1.4.13 regression). The
+      // latch is cleared on mouseenter, on leaving the row, and on hide.
+      if (dismissedRef.current) return;
       cancelHide();
       const rect = e.currentTarget.getBoundingClientRect();
       setActive(datum);
       setPosition({ x: rect.left + 60, y: rect.top + rect.height / 2 });
     },
-    onBlur: scheduleHide,
+    onBlur: (e) => {
+      // Blur also bubbles on focus moves BETWEEN the row and its children —
+      // only treat it as leaving when focus lands outside the row.
+      if (e.currentTarget.contains(e.relatedTarget)) return;
+      dismissedRef.current = false;
+      scheduleHide();
+    },
     onKeyDown: (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && active !== null) {
         dismissedRef.current = true;
+        // The panel unmounts without firing its own mouseleave, so the
+        // over-tooltip flag must be reset here or every later scheduleHide
+        // would no-op and tooltips would never close again.
+        overTooltipRef.current = false;
         setActive(null);
+        // The Escape consumed a dismissal — don't also close an enclosing
+        // Escape-dismissable container in the same keypress.
+        e.stopPropagation();
       }
     },
-  }), [active, id, cancelHide, scheduleHide]);
+  });
 
   const tooltipProps = {
     id,

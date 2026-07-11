@@ -7,7 +7,10 @@ export const metadata = { title: 'Users' };
 export default function AdminUsersPage() {
   return (
     <ProtectedRoute requireAdmin={true}>
-      <AdminUsers />
+      {/* Skip-link target (WCAG 2.4.1) + main landmark for this route. */}
+      <main id="main-content">
+        <AdminUsers />
+      </main>
     </ProtectedRoute>
   );
 }

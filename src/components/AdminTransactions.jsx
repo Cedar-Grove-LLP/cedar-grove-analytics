@@ -279,7 +279,7 @@ const AdminTransactions = () => {
               </div>
               <div>
                 <div className="text-sm text-gray-600">Payments ({summaryStats.paymentCount})</div>
-                <div className="text-xl font-semibold text-green-600">{formatCurrency(summaryStats.paymentTotal)}</div>
+                <div className="text-xl font-semibold text-green-700">{formatCurrency(summaryStats.paymentTotal)}</div>
               </div>
             </div>
           </div>
@@ -370,28 +370,28 @@ const AdminTransactions = () => {
                     sortKey="postedAt"
                     sortConfig={sortConfig}
                     onSort={handleSort}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-100 whitespace-nowrap"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                   />
                   <SortableTh
                     label="Status"
                     sortKey="status"
                     sortConfig={sortConfig}
                     onSort={handleSort}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-100 whitespace-nowrap"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                   />
                   <SortableTh
                     label="Amount"
                     sortKey="amount"
                     sortConfig={sortConfig}
                     onSort={handleSort}
-                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-100 whitespace-nowrap"
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                   />
                   <SortableTh
                     label="Counterparty"
                     sortKey="counterpartyName"
                     sortConfig={sortConfig}
                     onSort={handleSort}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-100 whitespace-nowrap"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
                   />
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Description
