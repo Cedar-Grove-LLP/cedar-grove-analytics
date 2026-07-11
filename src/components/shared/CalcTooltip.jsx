@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Info } from 'lucide-react';
 import { getCalcTooltipLines } from '../../utils/calcDefinitions.mjs';
 
@@ -26,6 +26,11 @@ const ALIGN = {
  * and Google Sheets provenance — so the same metric reads identically
  * everywhere it appears.
  *
+ * Accessibility: opens on hover AND keyboard focus, is hoverable (no gap
+ * between trigger and panel), and is dismissable with Escape without moving
+ * focus (WCAG 1.4.13); the dismissal resets when the pointer leaves / focus
+ * blurs so the next visit shows it again.
+ *
  * @param {string}   calcKey   key in CALC_DEFINITIONS (required unless `lines` given)
  * @param {object}   [dynamic] { context?: string } appended as the last line,
  *                             e.g. the OOO pace-adjustment sentence
@@ -50,6 +55,25 @@ const CalcTooltip = ({
   children,
 }) => {
   const id = useId();
+  // Escape-dismissal override (WCAG 1.4.13): while true, the panel stays
+  // hidden even though hover/focus-within would normally reveal it. Cleared
+  // on mouseleave/blur so the tooltip works again on the next visit.
+  const [dismissed, setDismissed] = useState(false);
+  // Hover-open tooltips must be Escape-dismissable even when DOM focus is
+  // elsewhere (a pure mouse user never focuses the trigger, so the wrapper's
+  // own onKeyDown would never fire). Track hover and listen document-wide
+  // only while hovered.
+  const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    if (!hovered) return undefined;
+    const onDocKeyDown = (e) => {
+      if (e.key === 'Escape') setDismissed(true);
+    };
+    document.addEventListener('keydown', onDocKeyDown);
+    return () => document.removeEventListener('keydown', onDocKeyDown);
+  }, [hovered]);
+
   const body = lines ?? getCalcTooltipLines(calcKey, dynamic);
   if (!body || body.length === 0) return children || null;
 
@@ -61,18 +85,31 @@ const CalcTooltip = ({
       // Triggers often sit inside sortable <th onClick> headers — inspecting
       // a tooltip must not bubble into a sort toggle.
       onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') setDismissed(true);
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setDismissed(false);
+      }}
+      onBlur={() => setDismissed(false)}
     >
       {variant === 'underline' ? (
         <span className="underline decoration-dotted decoration-gray-300 cursor-help">
           {children}
         </span>
       ) : (
-        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" aria-label={`About ${body[0]}`} />
+        // p-1 widens the hit target of the 14px glyph toward the 24px WCAG
+        // 2.5.8 minimum; the negative margin keeps the visual footprint.
+        <span className="p-1 -m-0.5 inline-flex">
+          <Info className="w-3.5 h-3.5 text-gray-500 cursor-help" aria-label={`About ${body[0]}`} />
+        </span>
       )}
       <span
         role="tooltip"
         id={id}
-        className={`absolute ${POS[position] || POS.top} ${ALIGN[align] || ALIGN.left} hidden group-hover:block group-focus-within:block z-50 w-max max-w-xs text-white text-xs font-normal normal-case tracking-normal text-left whitespace-normal`}
+        className={`absolute ${POS[position] || POS.top} ${ALIGN[align] || ALIGN.left} ${dismissed ? 'hidden' : 'hidden group-hover:block group-focus-within:block'} z-50 w-max max-w-xs text-white text-xs font-normal normal-case tracking-normal text-left whitespace-normal`}
       >
         <span className="block p-2 bg-gray-900 rounded shadow-lg">
           {body.map((line, i) => (

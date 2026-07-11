@@ -1,6 +1,6 @@
 import { formatCurrency, formatHours, formatDate } from '../../utils/formatters';
 
-const MatterRowTooltip = ({ matter, position }) => {
+const MatterRowTooltip = ({ matter, position, id, onMouseEnter, onMouseLeave }) => {
   if (!matter) return null;
 
   const attorneyBreakdown = Object.entries(matter.byAttorney || {})
@@ -8,9 +8,13 @@ const MatterRowTooltip = ({ matter, position }) => {
 
   return (
     <div
+      role="tooltip"
+      id={id}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl p-5"
       style={{
-        left: Math.min(position.x + 15, window.innerWidth - 750),
+        left: Math.max(10, Math.min(position.x + 15, window.innerWidth - 750)),
         top: Math.max(10, Math.min(position.y - 200, window.innerHeight - 550)),
         width: '700px',
       }}
@@ -63,14 +67,14 @@ const MatterRowTooltip = ({ matter, position }) => {
                 <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{formatDate(entry.date)}</td>
                 <td className="px-3 py-2 font-medium text-gray-800">{entry.attorney}</td>
                 <td className="px-3 py-2 text-right text-gray-900 font-medium">{formatHours(entry.hours)}h</td>
-                <td className="px-3 py-2 text-right text-green-600 font-medium">{formatCurrency(entry.earnings)}</td>
+                <td className="px-3 py-2 text-right text-green-700 font-medium">{formatCurrency(entry.earnings)}</td>
                 <td className="px-3 py-2 text-gray-600 truncate max-w-[200px]" title={entry.notes}>{entry.notes || '-'}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {matter.count > 10 && (
-          <div className="text-xs text-gray-400 mt-2 text-center">
+          <div className="text-xs text-gray-500 mt-2 text-center">
             Showing 10 of {matter.count} entries
           </div>
         )}

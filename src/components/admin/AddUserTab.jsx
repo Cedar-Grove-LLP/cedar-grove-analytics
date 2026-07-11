@@ -94,14 +94,14 @@ const AddUserTab = ({ users, allUsers, refetch }) => {
 
           <form onSubmit={handleAddUser} className="space-y-4">
             {formError && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              <div role="alert" className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{formError}</span>
               </div>
             )}
 
             {successMessage && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
+              <div role="status" className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
                 <CheckCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{successMessage}</span>
               </div>

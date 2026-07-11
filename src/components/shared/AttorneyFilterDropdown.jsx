@@ -9,6 +9,7 @@ const AttorneyFilterDropdown = ({
   setShowDropdown,
 }) => {
   const dropdownRef = useRef(null);
+  const triggerRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -20,6 +21,14 @@ const AttorneyFilterDropdown = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [setShowDropdown]);
 
+  // Escape closes the panel and returns focus to the trigger (WCAG 2.1.1).
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      setShowDropdown(false);
+      triggerRef.current?.focus();
+    }
+  };
+
   const getButtonLabel = () => {
     if (!globalAttorneyFilter || globalAttorneyFilter.length === 0) return 'No Team Members';
     if (globalAttorneyFilter.length === allAttorneyNames.length) return 'All Team Members';
@@ -30,20 +39,23 @@ const AttorneyFilterDropdown = ({
   const isFiltered = globalAttorneyFilter?.length > 0 && globalAttorneyFilter?.length < allAttorneyNames?.length;
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef} onKeyDown={handleKeyDown}>
       <button
+        ref={triggerRef}
         onClick={() => setShowDropdown(!showDropdown)}
+        aria-expanded={showDropdown}
+        aria-haspopup="true"
         className={`flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50 transition-colors shadow-sm ${
           isFiltered
-            ? 'bg-cg-green/10 border-cg-green' 
+            ? 'bg-cg-green/10 border-cg-green'
             : 'bg-cg-white border-gray-300'
         }`}
       >
-        <Users className="w-4 h-4 text-cg-dark" />
+        <Users className="w-4 h-4 text-cg-dark" aria-hidden="true" />
         <span className="text-sm font-medium text-cg-dark">
           {getButtonLabel()}
         </span>
-        <ChevronDown className={`w-4 h-4 text-cg-dark transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 text-cg-dark transition-transform ${showDropdown ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
 
       {showDropdown && (
@@ -52,8 +64,8 @@ const AttorneyFilterDropdown = ({
             <button
               onClick={() => setGlobalAttorneyFilter([...allAttorneyNames])}
               className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
-                globalAttorneyFilter.length === allAttorneyNames.length 
-                  ? 'bg-cg-green/10 text-cg-green font-medium' 
+                globalAttorneyFilter.length === allAttorneyNames.length
+                  ? 'bg-cg-green/10 text-cg-green-text font-medium'
                   : 'text-cg-dark hover:bg-gray-100'
               }`}
             >

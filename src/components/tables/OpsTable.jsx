@@ -1,70 +1,60 @@
 "use client";
 
-import { useState } from 'react';
-import { OpsRowTooltip } from '../tooltips';
+import { OpsRowTooltip, useRowTooltip } from '../tooltips';
 import { CalcTooltip } from '../shared';
+import SortableTh from './SortableTh';
 
 const OpsTable = ({ 
   opsData, 
   sortConfig, 
   onSort 
 }) => {
-  const [hoveredOps, setHoveredOps] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
-
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? '↑' : '↓';
-  };
+  // Row-detail tooltip: hover + keyboard focus, Escape-dismissable (WCAG
+  // 1.4.13/2.1.1) — shared wiring in tooltips/useRowTooltip.
+  const rowTooltip = useRowTooltip();
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      <table className="w-full divide-y divide-gray-200">
+    <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <table aria-label="Ops entries" className="w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            <th 
-              onClick={() => onSort('category')}
-              className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+            <SortableTh
+              label="Ops Category"
+              sortKey="category"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            />
+            <SortableTh
+              label="Hours"
+              sortKey="hours"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-24"
             >
-              Ops Category {getSortIndicator('category')}
-            </th>
-            <th 
-              onClick={() => onSort('hours')}
-              className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-24"
+              <CalcTooltip calcKey="opsHours" position="bottom" align="right" />
+            </SortableTh>
+            <SortableTh
+              label="%"
+              sortKey="percentage"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-20"
             >
-              <span className="inline-flex items-center gap-1">
-                Hours {getSortIndicator('hours')}
-                <CalcTooltip calcKey="opsHours" position="bottom" align="right" />
-              </span>
-            </th>
-            <th 
-              onClick={() => onSort('percentage')}
-              className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 w-20"
-            >
-              <span className="inline-flex items-center gap-1">
-                % {getSortIndicator('percentage')}
-                <CalcTooltip calcKey="pctOfTotalOps" position="bottom" align="right" />
-              </span>
-            </th>
+              <CalcTooltip calcKey="pctOfTotalOps" position="bottom" align="right" />
+            </SortableTh>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {opsData.map((ops, idx) => (
             <tr 
               key={idx} 
-              className="hover:bg-green-50 cursor-pointer transition-colors"
-              onMouseEnter={(e) => {
-                setHoveredOps(ops);
-                setTooltipPosition({ x: e.clientX, y: e.clientY });
-              }}
-              onMouseMove={(e) => {
-                setTooltipPosition({ x: e.clientX, y: e.clientY });
-              }}
-              onMouseLeave={() => setHoveredOps(null)}
+              className="hover:bg-green-50 transition-colors"
+              {...rowTooltip.rowProps(ops)}
             >
-              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+              <th scope="row" className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 text-left">
                 {ops.category}
-              </td>
+              </th>
               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-right">
                 {ops.hours}h
               </td>
@@ -76,10 +66,11 @@ const OpsTable = ({
         </tbody>
       </table>
       
-      {hoveredOps && (
-        <OpsRowTooltip 
-          ops={hoveredOps} 
-          position={tooltipPosition}
+      {rowTooltip.active && (
+        <OpsRowTooltip
+          ops={rowTooltip.active}
+          position={rowTooltip.position}
+          {...rowTooltip.tooltipProps}
         />
       )}
     </div>

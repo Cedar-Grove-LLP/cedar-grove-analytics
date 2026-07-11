@@ -21,10 +21,10 @@ function DeltaBadge({ value }) {
   const down = value < 0;
   const Arrow = up ? ArrowUp : down ? ArrowDown : null;
   const color = up
-    ? 'text-status-success'
+    ? 'text-status-success-text'
     : down
     ? 'text-status-danger'
-    : 'text-gray-400';
+    : 'text-gray-600';
   return (
     <span className={`flex items-center gap-0.5 text-sm font-semibold ${color}`}>
       {Arrow && <Arrow className="w-4 h-4" />}

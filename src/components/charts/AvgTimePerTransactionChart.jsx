@@ -7,7 +7,7 @@ import { getSourceNote } from '@/utils/calcDefinitions.mjs';
 
 const AvgTimePerTransactionChart = ({ data, title = "Average Time per Transaction Type" }) => {
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label={title}>
       <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data.slice(0, 10)} layout="vertical">

@@ -72,6 +72,7 @@ const TransactionsView = ({
 
   return (
     <div className="space-y-6">
+      <h2 className="sr-only">Transactions</h2>
       <DateRangeIndicator
         dateRangeLabel={dateRangeLabel}
         entryCount={transactionData?.length || 0}

@@ -141,6 +141,8 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
     // Create SVG
     const svg = d3.select(svgRef.current)
       .attr("viewBox", [-width / 2, -height / 2, width, width])
+      .attr("role", "group")
+      .attr("aria-label", `${title} — sunburst of ops time by category; click a segment to zoom in, click the center to zoom out`)
       .style("font", "10px sans-serif");
 
     // Get color for a node based on its top-level ancestor
@@ -178,9 +180,19 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
         return `${pathStr}\n${hours}h (${percentage}% of ${d.parent?.data.name || 'total'})\n${SOURCE_NOTE}`;
       });
 
-    // Click handler for zoom
+    // Click + keyboard handlers for zoom — only arcs with children are
+    // zoomable, so only those get button semantics and a tab stop.
     path.filter(d => d.children)
-      .on("click", clicked);
+      .attr("role", "button")
+      .attr("tabindex", d => arcVisible(d.current) ? 0 : -1)
+      .attr("aria-label", d => `${d.data.name}, ${formatHours(d.value)} hours — zoom in`)
+      .on("click", clicked)
+      .on("keydown", (event, d) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          clicked(event, d);
+        }
+      });
 
     // Track current zoom level for label display
     let currentZoomDepth = 0;
@@ -207,7 +219,12 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
       })
       .style("font-size", d => d.depth === 1 ? "11px" : "9px")
       .style("font-weight", d => d.depth === 1 ? "600" : "400")
-      .style("fill", GRAY[700]);
+      .style("fill", GRAY[700])
+      // White halo keeps labels legible over dark arc fills (WCAG 1.4.3)
+      .attr('paint-order', 'stroke')
+      .attr('stroke', 'white')
+      .attr('stroke-width', 3)
+      .attr('stroke-linejoin', 'round');
 
     // Secondary label (hours) - only for leaf nodes, hidden initially
     label.append("text")
@@ -216,16 +233,26 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
       .text(d => !d.children ? `${formatHours(d.value)}h` : "")
       .style("font-size", "8px")
       .style("font-weight", "500")
-      .style("fill", GRAY[500])
+      .style("fill", GRAY[600])
       .style("opacity", 0);
 
-    // Center circle for clicking back
+    // Center circle for clicking back (keyboard-operable too, so zooming
+    // out isn't mouse-only)
     const parent = svg.append("circle")
       .datum(root)
       .attr("r", radius)
       .attr("fill", "none")
       .attr("pointer-events", "all")
-      .on("click", clicked);
+      .attr("role", "button")
+      .attr("tabindex", 0)
+      .attr("aria-label", "Zoom out one level")
+      .on("click", clicked)
+      .on("keydown", (event, d) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          clicked(event, d);
+        }
+      });
 
     // Center text showing current level
     const centerText = svg.append("text")
@@ -240,7 +267,7 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
       .attr("text-anchor", "middle")
       .attr("dy", "1em")
       .style("font-size", "12px")
-      .style("fill", GRAY[500])
+      .style("fill", GRAY[600])
       .text(`${formatHours(root.value)}h total`);
 
     const centerHint = svg.append("text")
@@ -271,6 +298,10 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
         y0: Math.max(0, d.y0 - p.depth),
         y1: Math.max(0, d.y1 - p.depth)
       });
+
+      // Keep keyboard focusability in sync with arc visibility after zoom
+      path.filter(d => d.children)
+        .attr("tabindex", d => arcVisible(d.target) ? 0 : -1);
 
       const t = svg.transition().duration(750);
 
@@ -317,7 +348,7 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
       return `rotate(${x - 90}) translate(${y},0) rotate(${x < 180 ? 0 : 180})`;
     }
 
-  }, [data, dimensions, hierarchicalData]);
+  }, [data, dimensions, hierarchicalData, title]);
 
   if (data.length === 0) {
     return (

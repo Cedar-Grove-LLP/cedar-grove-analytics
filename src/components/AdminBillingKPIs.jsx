@@ -262,7 +262,7 @@ const AdminBillingKPIs = () => {
               <h3 className="font-medium text-gray-900">Per Client</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table aria-label="Payment time per client" className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <Th>Client</Th>
@@ -325,7 +325,7 @@ const AdminBillingKPIs = () => {
               <h3 className="font-medium text-gray-900">Per Client</h3>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table aria-label="Realization rate per client" className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <Th>Client</Th>
@@ -379,7 +379,7 @@ const AdminBillingKPIs = () => {
               <span className="text-sm text-gray-500">{arStats.overdue.length} flagged</span>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table aria-label="Overdue invoices 90 or more days outstanding" className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <Th>Client</Th>
@@ -450,7 +450,7 @@ const AgingCard = ({ label, sublabel, amount, count, iconColor, overdue }) => (
 );
 
 const Th = ({ children, right }) => (
-  <th className={`px-6 py-3 ${right ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 uppercase tracking-wider`}>
+  <th scope="col" className={`px-6 py-3 ${right ? 'text-right' : 'text-left'} text-xs font-medium text-gray-500 uppercase tracking-wider`}>
     {children}
   </th>
 );

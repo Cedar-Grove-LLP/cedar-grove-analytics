@@ -9,7 +9,8 @@ import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { getEntryDate, getPSTDate, getDateRangeLabel } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours } from '@/utils/formatters';
 import { DateRangeDropdown, CalcTooltip } from '@/components/shared';
-import { MatterRowTooltip } from '@/components/tooltips';
+import { MatterRowTooltip, useRowTooltip } from '@/components/tooltips';
+import { SortableTh } from '@/components/tables';
 
 const CategoryDetailView = ({ categoryName }) => {
   const router = useRouter();
@@ -22,8 +23,9 @@ const CategoryDetailView = ({ categoryName }) => {
   const [customDateEnd, setCustomDateEnd] = useState('');
   const [showDateDropdown, setShowDateDropdown] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'totalHours', direction: 'desc' });
-  const [hoveredMatter, setHoveredMatter] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  // Row-detail tooltip: hover + keyboard focus, Escape-dismissable (WCAG
+  // 1.4.13/2.1.1) — shared wiring in tooltips/useRowTooltip.
+  const rowTooltip = useRowTooltip();
 
   const loading = billableLoading || ratesLoading;
   const error = billableError || ratesError;
@@ -212,18 +214,13 @@ const CategoryDetailView = ({ categoryName }) => {
     return items;
   }, [matterBreakdown, sortConfig]);
 
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? ' ↑' : ' ↓';
-  };
-
   const totalHours = matterBreakdown.reduce((sum, m) => sum + m.totalHours, 0);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center" role="status">
+          <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-12 w-12 border-b-2 border-blue-600" aria-hidden="true"></div>
           <div className="mt-4 text-xl text-gray-700">Loading category data...</div>
         </div>
       </div>
@@ -233,7 +230,7 @@ const CategoryDetailView = ({ categoryName }) => {
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center max-w-md">
+        <div className="text-center max-w-md" role="alert">
           <div className="text-red-600 text-xl mb-4">Error loading data</div>
           <div className="text-gray-600 mb-4">{error}</div>
           <Link href="/" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
@@ -294,63 +291,66 @@ const CategoryDetailView = ({ categoryName }) => {
         {sortedMatters.length > 0 ? (
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-200" aria-label={`Matters in ${categoryName}`}>
                 <thead className="bg-gray-50">
                   <tr>
-                    <th
-                      onClick={() => handleSort('matter')}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                    <SortableTh
+                      label="Matter"
+                      sortKey="matter"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    />
+                    <SortableTh
+                      label="Client"
+                      sortKey="clientName"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    />
+                    <SortableTh
+                      label="Avg Hours"
+                      sortKey="avgHours"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      Matter{getSortIndicator('matter')}
-                    </th>
-                    <th
-                      onClick={() => handleSort('clientName')}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
+                    </SortableTh>
+                    <SortableTh
+                      label="Count"
+                      sortKey="count"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    />
+                    <SortableTh
+                      label="Total Hours"
+                      sortKey="totalHours"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      Client{getSortIndicator('clientName')}
-                    </th>
-                    <th
-                      onClick={() => handleSort('avgHours')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      <CalcTooltip calcKey="billableHours" position="bottom" />
+                    </SortableTh>
+                    <SortableTh
+                      label="Total Earnings"
+                      sortKey="grossBillables"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      <span className="inline-flex items-center gap-1">
-                        Avg Hours{getSortIndicator('avgHours')}
-                        <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
-                      </span>
-                    </th>
-                    <th
-                      onClick={() => handleSort('count')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
+                    </SortableTh>
+                    <SortableTh
+                      label="% of Total"
+                      sortKey="percentage"
+                      sortConfig={sortConfig}
+                      onSort={handleSort}
+                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                     >
-                      Count{getSortIndicator('count')}
-                    </th>
-                    <th
-                      onClick={() => handleSort('totalHours')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        Total Hours{getSortIndicator('totalHours')}
-                        <CalcTooltip calcKey="billableHours" position="bottom" />
-                      </span>
-                    </th>
-                    <th
-                      onClick={() => handleSort('grossBillables')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        Total Earnings{getSortIndicator('grossBillables')}
-                        <CalcTooltip calcKey="grossBillables" position="bottom" align="right" />
-                      </span>
-                    </th>
-                    <th
-                      onClick={() => handleSort('percentage')}
-                      className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        % of Total{getSortIndicator('percentage')}
-                        <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
-                      </span>
-                    </th>
+                      <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
+                    </SortableTh>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -358,18 +358,11 @@ const CategoryDetailView = ({ categoryName }) => {
                     <tr
                       key={idx}
                       className="hover:bg-blue-50 transition-colors"
-                      onMouseEnter={(e) => {
-                        setHoveredMatter(matter);
-                        setTooltipPosition({ x: e.clientX, y: e.clientY });
-                      }}
-                      onMouseMove={(e) => {
-                        setTooltipPosition({ x: e.clientX, y: e.clientY });
-                      }}
-                      onMouseLeave={() => setHoveredMatter(null)}
+                      {...rowTooltip.rowProps(matter)}
                     >
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900 max-w-[300px] truncate" title={matter.matter}>
+                      <th scope="row" className="px-6 py-4 text-sm font-medium text-gray-900 max-w-[300px] truncate text-left" title={matter.matter}>
                         {matter.matter}
-                      </td>
+                      </th>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <Link
                           href={`/clients/${encodeURIComponent(matter.clientName)}`}
@@ -387,7 +380,7 @@ const CategoryDetailView = ({ categoryName }) => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right">
                         {formatHours(matter.totalHours)}h
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium text-right">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-medium text-right">
                         {formatCurrency(matter.grossBillables)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right">
@@ -399,10 +392,11 @@ const CategoryDetailView = ({ categoryName }) => {
               </table>
             </div>
 
-            {hoveredMatter && (
+            {rowTooltip.active && (
               <MatterRowTooltip
-                matter={hoveredMatter}
-                position={tooltipPosition}
+                matter={rowTooltip.active}
+                position={rowTooltip.position}
+                {...rowTooltip.tooltipProps}
               />
             )}
           </div>

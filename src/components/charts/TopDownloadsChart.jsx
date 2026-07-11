@@ -38,7 +38,7 @@ const TopDownloadsChart = ({ data, mode = 'files', title }) => {
   if (chartData.length === 0) return null;
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label={displayTitle}>
       <h3 className="text-lg font-semibold text-gray-900 mb-4">{displayTitle}</h3>
       <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 36)}>
         <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 30 }}>

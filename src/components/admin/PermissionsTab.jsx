@@ -179,7 +179,7 @@ const PermissionsTab = ({ users, allUsers }) => {
       </div>
 
       {saveStatus && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg mb-6 ${saveStatus === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+        <div role={saveStatus === 'success' ? 'status' : 'alert'} className={`flex items-center gap-2 px-4 py-3 rounded-lg mb-6 ${saveStatus === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
           {saveStatus === 'success' ? (<><CheckCircle className="w-5 h-5" /><span>Permissions saved successfully!</span></>) : (<><AlertCircle className="w-5 h-5" /><span>Error saving changes. Please try again.</span></>)}
         </div>
       )}
@@ -221,6 +221,7 @@ const PermissionsTab = ({ users, allUsers }) => {
                         type="button"
                         role="switch"
                         aria-checked={rowEdits[f.key]}
+                        aria-label={`${f.label} for ${rowEdits.name}`}
                         onClick={() => handleToggle(email, f.key)}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${rowEdits[f.key] ? 'bg-green-500' : 'bg-gray-300'}`}
                       >

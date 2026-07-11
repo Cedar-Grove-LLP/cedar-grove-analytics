@@ -51,7 +51,7 @@ export const AnnualStatusPill = ({ status, paceDeltaHours, showDelta = true }) =
       {showHourDelta && (
         <span
           className={`text-xs font-medium tabular-nums ${
-            status === ANNUAL_STATUS.BEHIND ? 'text-status-danger' : 'text-status-success'
+            status === ANNUAL_STATUS.BEHIND ? 'text-status-danger' : 'text-status-success-text'
           }`}
         >
           {formatSignedHours(paceDeltaHours)}
@@ -94,7 +94,14 @@ const AnnualProgressBar = ({
   return (
     <div className="flex items-center gap-3">
       <div className="relative flex-1 min-w-[80px]">
-        <div className={`bg-gray-200 rounded-full overflow-hidden ${barClassName}`}>
+        <div
+          role="progressbar"
+          aria-label="Annual progress"
+          aria-valuenow={Math.round(fillPct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className={`bg-gray-200 rounded-full overflow-hidden ${barClassName}`}
+        >
           <div
             className={`h-full rounded-full transition-all ${FILL_CLASS[status] || 'bg-gray-300'}`}
             style={{ width: `${fillPct}%` }}

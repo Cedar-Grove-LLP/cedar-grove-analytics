@@ -1,16 +1,20 @@
 import { formatHours, formatDate } from '../../utils/formatters';
 
-const OpsRowTooltip = ({ ops, position }) => {
+const OpsRowTooltip = ({ ops, position, id, onMouseEnter, onMouseLeave }) => {
   if (!ops) return null;
 
   const attorneyBreakdown = Object.entries(ops.byAttorney || {})
     .sort((a, b) => b[1].hours - a[1].hours);
 
   return (
-    <div 
+    <div
+      role="tooltip"
+      id={id}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl p-5"
       style={{ 
-        left: Math.min(position.x + 15, window.innerWidth - 650),
+        left: Math.max(10, Math.min(position.x + 15, window.innerWidth - 650)),
         top: Math.max(10, Math.min(position.y - 200, window.innerHeight - 550)),
         width: '600px',
       }}
@@ -31,7 +35,7 @@ const OpsRowTooltip = ({ ops, position }) => {
             <div key={attorney} className="inline-flex items-center bg-green-50 px-3 py-1.5 rounded-full text-sm">
               <span className="font-medium text-gray-800">{attorney}</span>
               <span className="text-gray-500 ml-2">({stats.count})</span>
-              <span className="text-green-600 font-semibold ml-2">{formatHours(stats.hours)}h</span>
+              <span className="text-green-700 font-semibold ml-2">{formatHours(stats.hours)}h</span>
             </div>
           ))}
         </div>
@@ -63,7 +67,7 @@ const OpsRowTooltip = ({ ops, position }) => {
           </tbody>
         </table>
         {ops.count > 10 && (
-          <div className="text-xs text-gray-400 mt-2 text-center">
+          <div className="text-xs text-gray-500 mt-2 text-center">
             Showing 10 of {ops.count} entries
           </div>
         )}

@@ -69,7 +69,7 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -113,17 +113,17 @@ const AdminDashboard = () => {
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-4 h-4" aria-hidden="true" />
                 <span>Logout</span>
               </button>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <main id="main-content" className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <nav aria-label="Admin sections" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {adminLinks.filter(link => isAdmin || link.href !== '/admin/user-management').map((link) => (
             <Link
               key={link.href}
@@ -135,9 +135,9 @@ const AdminDashboard = () => {
                   <link.icon className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                  <h2 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
                     {link.title}
-                  </h3>
+                  </h2>
                   <p className="text-sm text-gray-600 mt-1">
                     {link.description}
                   </p>
@@ -145,7 +145,7 @@ const AdminDashboard = () => {
               </div>
             </Link>
           ))}
-        </div>
+        </nav>
 
         {/* Quick Stats or Info */}
         <div className="mt-8 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -161,11 +161,11 @@ const AdminDashboard = () => {
             </div>
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="text-sm text-gray-600">Session</div>
-              <div className="font-medium text-green-600 mt-1">Active</div>
+              <div className="font-medium text-green-700 mt-1">Active</div>
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };

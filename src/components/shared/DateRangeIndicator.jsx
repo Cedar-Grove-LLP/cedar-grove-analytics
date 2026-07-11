@@ -13,7 +13,7 @@ const DateRangeIndicator = ({
       <div className="flex items-center gap-2">
         <Calendar className="w-4 h-4 text-cg-green" />
         <span className="text-cg-dark">Showing data for:</span>
-        <span className="font-medium text-cg-green">{dateRangeLabel}</span>
+        <span className="font-medium text-cg-green-text">{dateRangeLabel}</span>
       </div>
       
       {isFiltered && (

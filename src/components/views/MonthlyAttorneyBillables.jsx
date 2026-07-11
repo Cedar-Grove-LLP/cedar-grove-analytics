@@ -80,13 +80,13 @@ const MonthlyAttorneyBillables = () => {
       {/* Body */}
       {loading ? (
         <div className="bg-white rounded-lg shadow p-12 flex items-center justify-center">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-cg-green"></div>
+          <div className="text-center" role="status">
+            <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-10 w-10 border-b-2 border-cg-green" aria-hidden="true"></div>
             <div className="mt-4 text-cg-dark">Loading billables...</div>
           </div>
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-600">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-600" role="alert">
           Could not load monthly billables: {error}
         </div>
       ) : months.length === 0 ? (

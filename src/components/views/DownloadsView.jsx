@@ -168,6 +168,7 @@ const DownloadsView = ({
 
   return (
     <div className="space-y-6">
+      <h2 className="sr-only">Downloads</h2>
       <DateRangeIndicator
         dateRangeLabel={dateRangeLabel}
         entryCount={selectedFolder ? selectedFolderData?.files?.length || 0 : totalFiles}
@@ -240,8 +241,9 @@ const DownloadsView = ({
                   <p className="text-xs text-gray-500">Who downloaded what, broken down by folder</p>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <label className="text-gray-600">Sort:</label>
+                  <label htmlFor="downloads-sort-select" className="text-gray-600">Sort:</label>
                   <select
+                    id="downloads-sort-select"
                     value={attorneySort}
                     onChange={(e) => setAttorneySort(e.target.value)}
                     className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-cg-green"

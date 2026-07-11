@@ -18,7 +18,7 @@ const KPICard = ({
           {title}
           {info && <CalcTooltip {...info} variant="icon" position="bottom" align="left" />}
         </span>
-        {Icon && <Icon className={`w-5 h-5 ${iconColor}`} />}
+        {Icon && <Icon className={`w-5 h-5 ${iconColor}`} aria-hidden="true" />}
       </div>
       <div className="flex-1 flex items-center justify-center">
         <div className="text-3xl font-bold text-cg-black">{value}</div>

@@ -1,6 +1,6 @@
 import { formatCurrency, formatHours } from '../../utils/formatters';
 
-const TransactionRowTooltip = ({ transaction, position }) => {
+const TransactionRowTooltip = ({ transaction, position, id, onMouseEnter, onMouseLeave }) => {
   if (!transaction) return null;
 
   const matterList = Object.values(transaction.matters || {})
@@ -8,9 +8,13 @@ const TransactionRowTooltip = ({ transaction, position }) => {
 
   return (
     <div
+      role="tooltip"
+      id={id}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className="fixed z-50 bg-white border border-gray-300 rounded-xl shadow-2xl p-5"
       style={{
-        left: Math.min(position.x + 15, window.innerWidth - 650),
+        left: Math.max(10, Math.min(position.x + 15, window.innerWidth - 650)),
         top: Math.max(10, Math.min(position.y - 200, window.innerHeight - 450)),
         width: '620px',
       }}
@@ -44,13 +48,13 @@ const TransactionRowTooltip = ({ transaction, position }) => {
                   <td className="px-3 py-2 text-gray-700 truncate max-w-[140px]" title={m.clientName}>{m.clientName}</td>
                   <td className="px-3 py-2 text-right text-gray-600">{m.count}</td>
                   <td className="px-3 py-2 text-right text-gray-900 font-medium">{formatHours(m.totalHours)}h</td>
-                  <td className="px-3 py-2 text-right text-green-600 font-medium">{formatCurrency(m.totalEarnings)}</td>
+                  <td className="px-3 py-2 text-right text-green-700 font-medium">{formatCurrency(m.totalEarnings)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {matterList.length > 10 && (
-            <div className="text-xs text-gray-400 mt-2 text-center">
+            <div className="text-xs text-gray-500 mt-2 text-center">
               Showing 10 of {matterList.length} matters
             </div>
           )}

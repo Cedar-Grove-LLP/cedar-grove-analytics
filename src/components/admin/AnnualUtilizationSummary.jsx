@@ -31,36 +31,36 @@ const GroupTable = ({ group, users, matrix, actuals, capacity, isFutureYear }) =
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className="bg-cg-green text-white px-4 py-3 font-semibold">{group.title}</div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table aria-label={`${group.title} annual utilization progress`} className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-gray-500 border-b border-gray-200">
-              <th className="px-4 py-2 font-medium">Name</th>
-              <th className="px-4 py-2 font-medium">Metric</th>
-              <th className="px-4 py-2 font-medium text-right">
+              <th scope="col" className="px-4 py-2 font-medium">Name</th>
+              <th scope="col" className="px-4 py-2 font-medium">Metric</th>
+              <th scope="col" className="px-4 py-2 font-medium text-right">
                 <span className="inline-flex items-center gap-1">
                   Target
                   <CalcTooltip calcKey="annualTarget" position="bottom" align="center" />
                 </span>
               </th>
-              <th className="px-4 py-2 font-medium text-right">
+              <th scope="col" className="px-4 py-2 font-medium text-right">
                 <span className="inline-flex items-center gap-1">
                   Actual YTD
                   <CalcTooltip calcKey="annualActualYtd" position="bottom" align="center" />
                 </span>
               </th>
-              <th className="px-4 py-2 font-medium text-right">
+              <th scope="col" className="px-4 py-2 font-medium text-right">
                 <span className="inline-flex items-center gap-1">
                   Remaining
                   <CalcTooltip calcKey="annualRemaining" position="bottom" align="center" />
                 </span>
               </th>
-              <th className="px-4 py-2 font-medium min-w-[200px]">
+              <th scope="col" className="px-4 py-2 font-medium min-w-[200px]">
                 <span className="inline-flex items-center gap-1">
                   % Complete
                   <CalcTooltip calcKey="annualPctComplete" position="bottom" align="center" />
                 </span>
               </th>
-              <th className="px-4 py-2 font-medium">
+              <th scope="col" className="px-4 py-2 font-medium">
                 <span className="inline-flex items-center gap-1">
                   Pace
                   <CalcTooltip calcKey="annualPaceDelta" position="bottom" align="right" />

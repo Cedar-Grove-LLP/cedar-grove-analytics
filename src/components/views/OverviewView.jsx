@@ -159,7 +159,8 @@ const OverviewView = ({
 
   return (
     <div className="space-y-6">
-      <DateRangeIndicator 
+      <h2 className="sr-only">Overview</h2>
+      <DateRangeIndicator
         dateRangeLabel={dateRangeLabel}
         entryCount={filteredEntriesCount}
         globalAttorneyFilter={globalAttorneyFilter}
@@ -193,7 +194,7 @@ const OverviewView = ({
       {/* Missing billing rates make rate × hours figures silently understate —
           surface them to admins instead (same amber styling as dataWarnings). */}
       {isAdmin && missingRateWarnings.length > 0 && (
-        <div className="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+        <div className="px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800" role="status">
           <div className="flex items-center gap-2 font-medium">
             <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-600" />
             <span>
@@ -235,7 +236,7 @@ const OverviewView = ({
           <KpiTitle label="Time Split" calcKey="timeSplitPct" icon={<Clock className="w-5 h-5 text-purple-500" />} />
           <div className="flex-1 flex items-center justify-center">
             <div className="flex items-baseline gap-1.5">
-              <div className="text-3xl font-bold text-green-600">{billablePercentage}%</div>
+              <div className="text-3xl font-bold text-green-700">{billablePercentage}%</div>
               <div className="text-xl text-gray-400">/</div>
               <div className="text-3xl font-bold text-gray-600">{opsPercentage}%</div>
             </div>

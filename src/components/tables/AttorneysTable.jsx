@@ -1,10 +1,12 @@
 "use client";
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle } from 'lucide-react';
 import { formatCurrency, formatHours } from '../../utils/formatters';
 import { getUtilizationBgColor } from '@/utils/statusStyles';
 import { CalcTooltip } from '../shared';
+import SortableTh from './SortableTh';
 
 const AttorneysTable = ({
   attorneys,
@@ -15,73 +17,69 @@ const AttorneysTable = ({
 }) => {
   const router = useRouter();
 
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? '↑' : '↓';
-  };
-
   const handleAttorneyClick = (attorneyName) => {
     router.push(`/users/${encodeURIComponent(attorneyName)}`);
   };
 
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      <table className="min-w-full divide-y divide-gray-200 table-fixed">
+    <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <table aria-label="Team members" className="min-w-full divide-y divide-gray-200 table-fixed">
         <thead className="bg-gray-50">
           <tr>
-            <th 
-              onClick={() => onSort('name')}
-              className="w-[16%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+            <SortableTh
+              label="Name"
+              sortKey="name"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[16%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
+            />
+            <SortableTh
+              label="Billable"
+              sortKey="billable"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
             >
-              Name {getSortIndicator('name')}
-            </th>
-            <th 
-              onClick={() => onSort('billable')}
-              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+              <CalcTooltip calcKey="billableHours" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Ops"
+              sortKey="ops"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
             >
-              <span className="inline-flex items-center gap-1">
-                Billable {getSortIndicator('billable')}
-                <CalcTooltip calcKey="billableHours" position="bottom" />
-              </span>
-            </th>
-            <th 
-              onClick={() => onSort('ops')}
-              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+              <CalcTooltip calcKey="opsHours" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Total"
+              sortKey="total"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
             >
-              <span className="inline-flex items-center gap-1">
-                Ops {getSortIndicator('ops')}
-                <CalcTooltip calcKey="opsHours" position="bottom" />
-              </span>
-            </th>
-            <th 
-              onClick={() => onSort('total')}
-              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+              <CalcTooltip calcKey="totalHours" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Earnings"
+              sortKey="earnings"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
             >
-              <span className="inline-flex items-center gap-1">
-                Total {getSortIndicator('total')}
-                <CalcTooltip calcKey="totalHours" position="bottom" />
-              </span>
-            </th>
-            <th 
-              onClick={() => onSort('earnings')}
-              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
+              <CalcTooltip calcKey="earnings" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Util."
+              sortKey="utilization"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
             >
-              <span className="inline-flex items-center gap-1">
-                Earnings {getSortIndicator('earnings')}
-                <CalcTooltip calcKey="earnings" position="bottom" />
-              </span>
-            </th>
-            <th 
-              onClick={() => onSort('utilization')}
-              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 whitespace-nowrap"
-            >
-              <span className="inline-flex items-center gap-1">
-                Util. {getSortIndicator('utilization')}
-                <CalcTooltip calcKey="utilizationPct" position="bottom" />
-              </span>
-            </th>
-            <th className="w-[30%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+              <CalcTooltip calcKey="utilizationPct" position="bottom" />
+            </SortableTh>
+            <th scope="col" className="w-[30%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
               Top Transactions
             </th>
           </tr>
@@ -97,11 +95,15 @@ const AttorneysTable = ({
                 className="hover:bg-blue-50 cursor-pointer transition-colors"
                 onClick={() => handleAttorneyClick(attorney.name)}
               >
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <th scope="row" className="px-6 py-4 whitespace-nowrap text-sm font-normal text-left">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-gray-900 hover:underline">
+                    <Link
+                      href={`/users/${encodeURIComponent(attorney.name)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-medium text-gray-900 hover:underline"
+                    >
                       {attorney.name}
-                    </span>
+                    </Link>
                     {attorney.role && attorney.role !== 'Attorney' && (
                       <span className="text-xs text-gray-500 font-normal">
                         ({attorney.role})
@@ -118,7 +120,7 @@ const AttorneysTable = ({
                       </span>
                     )}
                   </div>
-                </td>
+                </th>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {formatHours(attorney.billable)}h
                 </td>
@@ -128,13 +130,13 @@ const AttorneysTable = ({
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {formatHours(total)}h
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-medium">
                   {formatCurrency(attorney.earnings)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   {utilization === null ? (
                     <span
-                      className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-500"
+                      className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-600"
                       title={attorney.oooDays > 0 ? 'Out of office this period — no billable target' : 'No target for this period'}
                     >
                       N/A

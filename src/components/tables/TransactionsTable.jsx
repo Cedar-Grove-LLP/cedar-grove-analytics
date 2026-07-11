@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { formatCurrency, formatHours } from '../../utils/formatters';
-import { TransactionRowTooltip } from '../tooltips';
+import { TransactionRowTooltip, useRowTooltip } from '../tooltips';
 import { CalcTooltip } from '../shared';
+import SortableTh from './SortableTh';
 
 const TransactionsTable = ({
   transactions,
@@ -12,67 +12,65 @@ const TransactionsTable = ({
   onSort,
   totalHours
 }) => {
-  const [hoveredTransaction, setHoveredTransaction] = useState(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
-
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return '';
-    return sortConfig.direction === 'asc' ? '↑' : '↓';
-  };
+  // Row-detail tooltip: hover + keyboard focus, Escape-dismissable (WCAG
+  // 1.4.13/2.1.1) — shared wiring in tooltips/useRowTooltip.
+  const rowTooltip = useRowTooltip();
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
-      <table className="min-w-full divide-y divide-gray-200 table-fixed">
+    <div className="bg-white rounded-lg shadow overflow-x-auto">
+      <table aria-label="Transaction types" className="min-w-full divide-y divide-gray-200 table-fixed">
         <thead className="bg-gray-50">
           <tr>
-            <th
-              onClick={() => onSort('type')}
-              className="w-[28%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+            <SortableTh
+              label="Billing Category"
+              sortKey="type"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[28%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            />
+            <SortableTh
+              label="Avg Hours"
+              sortKey="avgHours"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              Billing Category {getSortIndicator('type')}
-            </th>
-            <th
-              onClick={() => onSort('avgHours')}
-              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Matters"
+              sortKey="count"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+            />
+            <SortableTh
+              label="Total Hours"
+              sortKey="totalHours"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[14%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              <span className="inline-flex items-center gap-1">
-                Avg Hours {getSortIndicator('avgHours')}
-                <CalcTooltip calcKey="avgHoursPerTransaction" position="bottom" />
-              </span>
-            </th>
-            <th
-              onClick={() => onSort('count')}
-              className="w-[10%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              <CalcTooltip calcKey="billableHours" position="bottom" />
+            </SortableTh>
+            <SortableTh
+              label="Total Earnings"
+              sortKey="totalEarnings"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[18%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              Matters {getSortIndicator('count')}
-            </th>
-            <th
-              onClick={() => onSort('totalHours')}
-              className="w-[14%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+              <CalcTooltip calcKey="earnings" position="bottom" align="right" />
+            </SortableTh>
+            <SortableTh
+              label="% of Total"
+              sortKey="percentage"
+              sortConfig={sortConfig}
+              onSort={onSort}
+              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              <span className="inline-flex items-center gap-1">
-                Total Hours {getSortIndicator('totalHours')}
-                <CalcTooltip calcKey="billableHours" position="bottom" />
-              </span>
-            </th>
-            <th
-              onClick={() => onSort('totalEarnings')}
-              className="w-[18%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              <span className="inline-flex items-center gap-1">
-                Total Earnings {getSortIndicator('totalEarnings')}
-                <CalcTooltip calcKey="earnings" position="bottom" align="right" />
-              </span>
-            </th>
-            <th
-              onClick={() => onSort('percentage')}
-              className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-            >
-              <span className="inline-flex items-center gap-1">
-                % of Total {getSortIndicator('percentage')}
-                <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
-              </span>
-            </th>
+              <CalcTooltip calcKey="pctOfTotalTransactions" position="bottom" align="right" />
+            </SortableTh>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -82,23 +80,16 @@ const TransactionsTable = ({
               <tr
                 key={idx}
                 className="hover:bg-blue-50 cursor-pointer transition-colors"
-                onMouseEnter={(e) => {
-                  setHoveredTransaction(txn);
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }}
-                onMouseMove={(e) => {
-                  setTooltipPosition({ x: e.clientX, y: e.clientY });
-                }}
-                onMouseLeave={() => setHoveredTransaction(null)}
+                {...rowTooltip.rowProps(txn)}
               >
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <th scope="row" className="px-6 py-4 whitespace-nowrap text-sm font-medium text-left">
                   <Link
                     href={`/categories/${encodeURIComponent(txn.type)}`}
                     className="text-gray-900 hover:underline"
                   >
                     {txn.type}
                   </Link>
-                </td>
+                </th>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {txn.avgHours}h
                 </td>
@@ -108,7 +99,7 @@ const TransactionsTable = ({
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {formatHours(txn.totalHours)}h
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-green-700 font-medium">
                   {formatCurrency(txn.totalEarnings)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -120,10 +111,11 @@ const TransactionsTable = ({
         </tbody>
       </table>
 
-      {hoveredTransaction && (
+      {rowTooltip.active && (
         <TransactionRowTooltip
-          transaction={hoveredTransaction}
-          position={tooltipPosition}
+          transaction={rowTooltip.active}
+          position={rowTooltip.position}
+          {...rowTooltip.tooltipProps}
         />
       )}
     </div>

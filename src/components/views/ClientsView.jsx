@@ -275,8 +275,8 @@ const ClientsView = ({
           globalAttorneyFilter={globalAttorneyFilter}
           allAttorneyNames={allAttorneyNames}
         />
-        <div className="bg-white p-8 rounded-lg shadow text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="bg-white p-8 rounded-lg shadow text-center" role="status">
+          <div className="inline-block animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-blue-600" aria-hidden="true"></div>
           <div className="mt-2 text-gray-500">Loading billing rates...</div>
         </div>
       </div>
@@ -285,13 +285,14 @@ const ClientsView = ({
 
   return (
     <div className="space-y-6">
+      <h2 className="sr-only">Clients</h2>
       {/* Reporting header */}
       <div>
         <p className="text-base text-cg-dark">
           Showing data for{' '}
-          <span className="font-semibold text-cg-green">{dateRangeLabel}</span>
+          <span className="font-semibold text-cg-green-text">{dateRangeLabel}</span>
         </p>
-        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+        <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-600">
           <span className="w-2 h-2 rounded-full bg-cg-green inline-block" />
           Totals update with the selected time range · deltas vs. prior period
           {isAttorneyFiltered && (
@@ -307,7 +308,7 @@ const ClientsView = ({
 
       {/* Status: Active vs Quiet (compact row) */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
           Status · {bookTotal} total clients
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -336,7 +337,7 @@ const ClientsView = ({
 
       {/* Payment status — auto-calculated from the synced invoice data */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600">
           Payment Status
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -374,6 +375,7 @@ const ClientsView = ({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
+            aria-label="Search clients"
             placeholder="Search clients..."
             value={clientSearch}
             onChange={(e) => setClientSearch(e.target.value)}
