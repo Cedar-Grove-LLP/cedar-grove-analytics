@@ -1,30 +1,76 @@
 "use client";
 
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Info } from 'lucide-react';
 import { getCalcTooltipLines } from '../../utils/calcDefinitions.mjs';
 
-// Full static class strings only — Tailwind's JIT cannot see interpolated
-// class names (same convention as ClientStatCard's ACCENT map).
-const POS = {
-  // Padding belongs to the positioned hover surface, so there is no dead
-  // zone between the trigger and the visible panel. A margin here causes the
-  // tooltip to disappear while the pointer crosses the gap, which presents as
-  // rapid flashing when someone tries to move from the icon into the panel.
-  top: 'bottom-full pb-2',
-  bottom: 'top-full pt-2',
-};
-const ALIGN = {
-  left: 'left-0',
-  right: 'right-0',
-  center: 'left-1/2 -translate-x-1/2',
-};
+// Gap between trigger and visible panel — mirrors Tailwind pt-2 / pb-2 (8px).
+const GAP = 8;
+const VIEWPORT_MARGIN = 8;
+
+function computePanelCoords(trigger, panel, position, align) {
+  const rect = trigger.getBoundingClientRect();
+  const panelWidth = panel.offsetWidth;
+  const panelHeight = panel.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let top;
+  if (position === 'bottom') {
+    top = rect.bottom;
+  } else {
+    top = rect.top - panelHeight;
+  }
+
+  let left;
+  if (align === 'right') {
+    left = rect.right - panelWidth;
+  } else if (align === 'center') {
+    left = rect.left + rect.width / 2 - panelWidth / 2;
+  } else {
+    left = rect.left;
+  }
+
+  left = Math.max(VIEWPORT_MARGIN, Math.min(left, vw - VIEWPORT_MARGIN - panelWidth));
+
+  if (position === 'bottom') {
+    const bottom = top + panelHeight;
+    if (bottom > vh - VIEWPORT_MARGIN) {
+      const flippedTop = rect.top - panelHeight;
+      if (flippedTop >= VIEWPORT_MARGIN) {
+        top = flippedTop;
+      } else {
+        top = Math.max(VIEWPORT_MARGIN, vh - VIEWPORT_MARGIN - panelHeight);
+      }
+    }
+  } else if (top < VIEWPORT_MARGIN) {
+    const flippedTop = rect.bottom;
+    if (flippedTop + panelHeight <= vh - VIEWPORT_MARGIN) {
+      top = flippedTop;
+    } else {
+      top = VIEWPORT_MARGIN;
+    }
+  }
+
+  return { top, left };
+}
+
+function applyPanelCoords(panel, coords) {
+  panel.style.top = `${coords.top}px`;
+  panel.style.left = `${coords.left}px`;
+  panel.style.visibility = 'visible';
+}
 
 /**
  * "What's this number?" hover/focus tooltip. Body text comes from the
  * calcDefinitions.mjs registry — the single source of truth for formulas
  * and Google Sheets provenance — so the same metric reads identically
  * everywhere it appears.
+ *
+ * The panel is portaled to document.body and positioned with fixed
+ * coordinates so it never expands an ancestor scroll container's overflow
+ * rect (which would shift tables inside overflow-x-auto cards).
  *
  * Accessibility: opens on hover AND keyboard focus, is hoverable (no gap
  * between trigger and panel), and is dismissable with Escape without moving
@@ -55,74 +101,138 @@ const CalcTooltip = ({
   children,
 }) => {
   const id = useId();
-  // Escape-dismissal override (WCAG 1.4.13): while true, the panel stays
-  // hidden even though hover/focus-within would normally reveal it. Cleared
-  // on mouseleave/blur so the tooltip works again on the next visit.
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const leaveTimerRef = useRef(null);
   const [dismissed, setDismissed] = useState(false);
-  // Hover-open tooltips must be Escape-dismissable even when DOM focus is
-  // elsewhere (a pure mouse user never focuses the trigger, so the wrapper's
-  // own onKeyDown would never fire). Track hover and listen document-wide
-  // only while hovered.
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  const body = lines ?? getCalcTooltipLines(calcKey, dynamic);
+  const visible = (hovered || focused) && !dismissed;
+  const canPortal = typeof document !== 'undefined';
+
+  const repositionPanel = useCallback(() => {
+    const trigger = triggerRef.current;
+    const panel = panelRef.current;
+    if (!trigger || !panel) return;
+    applyPanelCoords(panel, computePanelCoords(trigger, panel, position, align));
+  }, [position, align]);
 
   useEffect(() => {
-    if (!hovered) return undefined;
+    if (!visible) return undefined;
     const onDocKeyDown = (e) => {
       if (e.key === 'Escape') setDismissed(true);
     };
     document.addEventListener('keydown', onDocKeyDown);
     return () => document.removeEventListener('keydown', onDocKeyDown);
-  }, [hovered]);
+  }, [visible]);
 
-  const body = lines ?? getCalcTooltipLines(calcKey, dynamic);
+  useLayoutEffect(() => {
+    if (!visible) return;
+    repositionPanel();
+  }, [visible, repositionPanel, body]);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const onScrollOrResize = () => repositionPanel();
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
+    };
+  }, [visible, repositionPanel]);
+
+  const clearInteraction = () => {
+    setHovered(false);
+    setDismissed(false);
+  };
+
+  const cancelLeaveTimer = () => {
+    if (leaveTimerRef.current != null) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+  };
+
+  const scheduleLeave = () => {
+    cancelLeaveTimer();
+    // Portaled panels are outside the trigger DOM tree, so pointer
+    // leave fires before the panel receives enter — brief delay bridges
+    // the gap (same role as the old padding hit-area on the inline panel).
+    leaveTimerRef.current = setTimeout(clearInteraction, 100);
+  };
+
+  const openInteraction = () => {
+    cancelLeaveTimer();
+    setHovered(true);
+  };
+
+  useEffect(() => () => cancelLeaveTimer(), []);
+
   if (!body || body.length === 0) return children || null;
 
-  return (
-    <span
-      className={`relative inline-flex items-center group align-middle ${className}`}
-      tabIndex={0}
-      aria-describedby={id}
-      // Triggers often sit inside sortable <th onClick> headers — inspecting
-      // a tooltip must not bubble into a sort toggle.
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') setDismissed(true);
+  const panel = (
+    <div
+      ref={panelRef}
+      role="tooltip"
+      id={id}
+      className="fixed z-50 w-max max-w-xs text-white text-xs font-normal normal-case tracking-normal text-left whitespace-normal"
+      style={{
+        top: -9999,
+        left: 0,
+        paddingTop: position === 'bottom' ? GAP : 0,
+        paddingBottom: position === 'top' ? GAP : 0,
+        visibility: 'hidden',
       }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => {
-        setHovered(false);
-        setDismissed(false);
-      }}
-      onBlur={() => setDismissed(false)}
+      onMouseEnter={openInteraction}
+      onMouseLeave={clearInteraction}
     >
-      {variant === 'underline' ? (
-        <span className="underline decoration-dotted decoration-gray-300 cursor-help">
-          {children}
-        </span>
-      ) : (
-        // p-1 widens the hit target of the 14px glyph toward the 24px WCAG
-        // 2.5.8 minimum; the negative margin keeps the visual footprint.
-        <span className="p-1 -m-0.5 inline-flex">
-          <Info className="w-3.5 h-3.5 text-gray-500 cursor-help" aria-label={`About ${body[0]}`} />
-        </span>
-      )}
-      <span
-        role="tooltip"
-        id={id}
-        className={`absolute ${POS[position] || POS.top} ${ALIGN[align] || ALIGN.left} ${dismissed ? 'hidden' : 'hidden group-hover:block group-focus-within:block'} z-50 w-max max-w-xs text-white text-xs font-normal normal-case tracking-normal text-left whitespace-normal`}
-      >
-        <span className="block p-2 bg-gray-900 rounded shadow-lg">
-          {body.map((line, i) => (
-            <span
-              key={i}
-              className={`block ${i === 0 ? 'font-semibold mb-0.5' : ''}${i > 0 && i === body.length - 1 ? ' text-gray-300 mt-0.5' : ''}`}
-            >
-              {line}
-            </span>
-          ))}
-        </span>
+      <span className="block p-2 bg-gray-900 rounded shadow-lg">
+        {body.map((line, i) => (
+          <span
+            key={i}
+            className={`block ${i === 0 ? 'font-semibold mb-0.5' : ''}${i > 0 && i === body.length - 1 ? ' text-gray-300 mt-0.5' : ''}`}
+          >
+            {line}
+          </span>
+        ))}
       </span>
-    </span>
+    </div>
+  );
+
+  return (
+    <>
+      <span
+        ref={triggerRef}
+        className={`inline-flex items-center align-middle ${className}`}
+        tabIndex={0}
+        aria-describedby={visible ? id : undefined}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setDismissed(true);
+        }}
+        onMouseEnter={openInteraction}
+        onMouseLeave={scheduleLeave}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          setDismissed(false);
+        }}
+      >
+        {variant === 'underline' ? (
+          <span className="underline decoration-dotted decoration-gray-300 cursor-help">
+            {children}
+          </span>
+        ) : (
+          <span className="p-1 -m-0.5 inline-flex">
+            <Info className="w-3.5 h-3.5 text-gray-500 cursor-help" aria-label={`About ${body[0]}`} />
+          </span>
+        )}
+      </span>
+      {canPortal && visible ? createPortal(panel, document.body) : null}
+    </>
   );
 };
 
