@@ -13,6 +13,29 @@ source of truth for data locations and reusable calculation logic.
 
 ---
 
+## Current deployment (proof-of-concept, free tier)
+
+> Status as of 2026-07-13. Service `hermes` (`srv-d9a3ikm7r5hc73c4ok00`) in the
+> Cedar Grove LLP Render workspace, region `oregon`, **`free` plan — no
+> persistent disk**. The service URL is deliberately not recorded here (the
+> Hermes dashboard is unauthenticated, so the URL functions as a credential —
+> § 1a); find it on the service page in the Render dashboard.
+>
+> Free-tier deviations from this runbook, all resolved by upgrading the same
+> service to `standard` + 5 GB disk once the firm adds billing:
+>
+> - **No disk** → agent memory, installed skills, cron definitions, and any
+>   dashboard-entered keys reset on every restart/redeploy. Durable credentials
+>   must live in Render env vars (set via API), not the dashboard's API Keys
+>   tab.
+> - **Spin-down after ~15 min idle** → no email polling and no scheduled
+>   digests while asleep; first request after idle takes ~1 min to cold-start.
+>   Fine for evaluation; disqualifying for production.
+> - `RENDER_MCP_API_KEY` intentionally not set — the agent has no control over
+>   Render infrastructure. Add deliberately later if wanted.
+
+---
+
 ## Guiding principle
 
 Keep the agent **in line with what the dashboard shows** by pointing it at the
