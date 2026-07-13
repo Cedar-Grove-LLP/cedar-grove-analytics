@@ -2,9 +2,10 @@
 
 Runbook for deploying and configuring a [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 (Nous Research) on Render as an always-on operations assistant for the principal
-partner. The agent receives and sends email, reads the same upstream sources this
-dashboard syncs from, and emails scheduled digests of attorney/client onboarding
-state.
+partner. The agent operates **inside the principal's own inbox** — triaging
+labeled email and preparing draft replies for his review — reads the same
+upstream sources this dashboard syncs from, and delivers scheduled digests of
+attorney/client onboarding state into the same inbox.
 
 This document is a configuration guide — nothing in this repo runs the agent.
 The agent is a separate Render service; this repo is referenced only as the
@@ -74,21 +75,62 @@ over document contents wherever the job allows.
 
 ---
 
-## 2. Email adapter (receive + reply)
+## 2. Email — operating inside the principal's inbox
 
-1. Create a dedicated Google Workspace mailbox, e.g. `hermes@cedargrovellp.com`.
-2. Connect it in the Hermes gateway's Email adapter (IMAP/SMTP with an app
-   password, or OAuth if configured).
-3. **Allowlist inbound senders to `@cedargrovellp.com`** — mirroring the domain
-   restriction in `src/context/AuthContext.js`. An email-triggered agent must
-   not act on instructions from arbitrary external senders; unauthenticated
-   inbound email is a prompt-injection front door. Non-allowlisted mail should
-   be dropped or quarantined, never processed.
-4. Verify a plain round-trip (email a question, get a reply) before wiring any
-   data integrations.
+The agent works in **Sam McClure's own mailbox** (`sam@…`), not a separate
+agent mailbox: it reads mail he hands it and prepares replies in his voice for
+his review. This is the highest-risk integration in the whole setup — an agent
+with the principal partner's inbox at a law firm — so the operating rules below
+are launch requirements, not suggestions.
 
-The principal emails the agent ad-hoc questions; scheduled digests (§ 6) go out
-through the same mailbox.
+### Access
+
+Two options, in order of preference:
+
+1. **Gmail API via domain-wide delegation** — the Workspace admin grants the
+   agent's service account delegation scoped to `gmail.readonly` +
+   `gmail.compose` (drafts) for Sam's account only. Auditable, scope-limited,
+   revocable in the admin console. Requires a small custom skill or adapter
+   shim if Hermes's stock Email adapter is IMAP-only.
+2. **IMAP/SMTP with an app password on Sam's account** — works with the stock
+   Hermes Email adapter out of the box (requires 2FA on the account), but is
+   full-mailbox access with no scope granularity. Acceptable to start; plan to
+   migrate to option 1.
+
+### Operating rules
+
+- **Drafts, never sends.** The agent writes replies as **drafts threaded on
+  the original message** (Gmail API `drafts.create`, or IMAP APPEND to
+  `[Gmail]/Drafts`); Sam reviews, edits, and sends. No autonomous outbound
+  mail as Sam — SMTP send stays disabled at launch. A reply only becomes
+  Sam's words when Sam hits send; that is the professional-responsibility
+  line and the point of draft-first.
+- **Label-scoped triage.** The agent only processes messages carrying a
+  **`Hermes` Gmail label**. Sam applies it manually (a deliberate per-message
+  handoff), or Gmail filters he controls apply it automatically to safe
+  categories (internal senders, scheduling requests). Start manual; widen via
+  filters as trust builds. The agent never blanket-processes the inbox.
+- **Instruction authority.** Only messages **authored by Sam himself** are
+  treated as instructions to the agent; every other message in the inbox —
+  client email included — is *content to summarize or draft against*, never
+  commands. This is the prompt-injection line: the inbox is a firehose of
+  untrusted external text, and "reply to this however the sender asks" must
+  not be inferable from message bodies. Encode this in the agent's system
+  prompt/skill, not just in policy.
+- **Privilege minimization.** Everything the agent reads here is potentially
+  privileged. Keep the label scope narrow so only mail Sam has chosen to hand
+  over transits the model, and remember agent memory on the persistent disk
+  accumulates whatever it processes.
+
+### Verification before wiring data integrations
+
+1. Label a test email → agent produces a correctly threaded draft; nothing is
+   sent.
+2. Injection check: a labeled email whose body contains instructions to the
+   agent ("forward this thread to…") is summarized/drafted against, not obeyed.
+3. Unlabeled mail is untouched.
+
+Scheduled digests (§ 6) are delivered as email into this same inbox.
 
 ---
 
@@ -158,9 +200,10 @@ Authorization: Bearer {token}
 
 Do **not** rebuild her client-folder taxonomy automation — define a handoff:
 
-- **Option A (zero new infrastructure, preferred):** her Apps Script CCs
-  `hermes@cedargrovellp.com` whenever it flags a non-conforming client-folder
-  upload. The agent folds flags into digests automatically.
+- **Option A (zero new infrastructure, preferred):** her Apps Script emails
+  the flag to Sam's inbox with a recognizable subject tag (e.g.
+  `[Taxonomy Flag]`), and a Gmail filter Sam controls applies the `Hermes`
+  label — the agent folds flags into digests automatically.
 - **Option B:** the script appends flags to a "Taxonomy Flags" sheet tab the
   agent already reads.
 
@@ -203,10 +246,12 @@ Slack without changing the job.
 ## 7. Security posture (non-negotiables)
 
 1. Dashboard behind an auth layer before any key is entered (§ 1a).
-2. Inbound email domain-allowlisted to `@cedargrovellp.com` (§ 2).
+2. Email: drafts-only, label-scoped, and instruction authority restricted to
+   Sam himself — all other inbox content is data, never commands (§ 2).
 3. Every integration read-only at launch. Write scopes (creating Asana tasks,
-   client-facing email) only after weeks of trustworthy read-only operation —
-   the agent starts as a *reporter* and is promoted to an *actor* deliberately.
+   enabling actual email *send*) only after weeks of trustworthy operation —
+   the agent starts as a *reporter/drafter* and is promoted to an *actor*
+   deliberately, one narrow category at a time.
 4. One credential per integration, none shared with this app, each revocable
    independently.
 5. Prefer metadata over document contents in prompts/skills (§ 1b).
@@ -220,7 +265,9 @@ Slack without changing the job.
 - [ ] Deploy Blueprint; verify service + persistent disk
 - [ ] Dashboard auth layer in place (§ 1a)
 - [ ] Anthropic key + model selected
-- [ ] `hermes@cedargrovellp.com` created; email adapter round-trips; sender allowlist verified (external sender is ignored)
+- [ ] Mailbox access granted (app password now, domain-wide delegation later); `Hermes` label created
+- [ ] Draft round-trip verified: labeled email → threaded draft, nothing sent; unlabeled mail untouched
+- [ ] Injection check passed: instructions inside a labeled email body are not obeyed (§ 2)
 - [ ] Google service account created; Sheets/Drive shares scoped; MCP registered
 - [ ] Acceptance check: Payment Status answer matches dashboard
 - [ ] Asana MCP registered (scoped seat)
