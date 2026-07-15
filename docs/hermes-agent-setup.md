@@ -13,26 +13,43 @@ source of truth for data locations and reusable calculation logic.
 
 ---
 
-## Current deployment (proof-of-concept, free tier)
+## Current deployment (DigitalOcean droplet)
 
-> Status as of 2026-07-13. Service `hermes` (`srv-d9a3ikm7r5hc73c4ok00`) in the
-> Cedar Grove LLP Render workspace, region `oregon`, **`free` plan — no
-> persistent disk**. The service URL is deliberately not recorded here (the
-> Hermes dashboard is unauthenticated, so the URL functions as a credential —
-> § 1a); find it on the service page in the Render dashboard.
+> Status as of 2026-07-15. Deployment moved from Render (free-tier POC,
+> deleted) to a **DigitalOcean droplet** in the Cedar Grove LLP team account —
+> always-on with real persistent state, i.e. the production shape this runbook
+> assumes. The Render §§ 1–1a below are kept for historical context; the
+> lockdown principle (§ 1a) applies to this deployment unchanged.
 >
-> Free-tier deviations from this runbook, all resolved by upgrading the same
-> service to `standard` + 5 GB disk once the firm adds billing:
+> Architecture — droplet as disposable compute, volume as state:
 >
-> - **No disk** → agent memory, installed skills, cron definitions, and any
->   dashboard-entered keys reset on every restart/redeploy. Durable credentials
->   must live in Render env vars (set via API), not the dashboard's API Keys
->   tab.
-> - **Spin-down after ~15 min idle** → no email polling and no scheduled
->   digests while asleep; first request after idle takes ~1 min to cold-start.
->   Fine for evaluation; disqualifying for production.
-> - `RENDER_MCP_API_KEY` intentionally not set — the agent has no control over
->   Render infrastructure. Add deliberately later if wanted.
+> - **Droplet** `hermes` (id `584697460`), `s-1vcpu-2gb`, Ubuntu 24.04, `sfo3`
+>   (~$12/mo). Provisioned entirely by cloud-init: installs Docker, builds the
+>   image from [render-examples/hermes-render](https://github.com/render-examples/hermes-render)
+>   (upstream `nousresearch/hermes-agent:v2026.5.7` + dashboard fixes; the
+>   Render-specific skill bundle is inert without a Render key), runs it with
+>   `--restart unless-stopped`, dashboard on port 10000.
+> - **Volume** `hermes-data` (10 GB ext4, ~$1/mo) mounted at `/opt/data` —
+>   all agent state (config, keys, memory, skills, crons) lives here and
+>   survives droplet rebuilds. Host-level changes are made by **recreating the
+>   droplet with updated cloud-init**, never by hand: compute is cattle, the
+>   volume is the pet.
+> - **Cloud firewall** `hermes-fw`: inbound is **deny-all except TCP 10000
+>   from allowlisted IPs** (initially only the deploy session's egress IP).
+>   This replaces URL-secrecy as the § 1a lockdown: the unauthenticated
+>   dashboard is unreachable except from allowlisted addresses. Add a viewer's
+>   IP via DO → Networking → Firewalls → `hermes-fw`. SSH (22) is closed; the
+>   DO web console is the out-of-band access path.
+> - **No SSH key** on the droplet; the root password is emailed to the account
+>   owner by DigitalOcean for console use.
+> - **Known gap: no TLS yet** — the dashboard is plain HTTP on a raw IP.
+>   Tolerable only while the firewall allowlist is tight and no real secrets
+>   transit the dashboard. Before entering the Anthropic key or any mailbox
+>   credential via the dashboard, either (a) bake it into `/opt/data/.env`
+>   via a droplet recreate, or (b) put a domain + TLS (Caddy or Cloudflare)
+>   in front. Do not paste production secrets into a plain-HTTP page.
+> - `RENDER_MCP_API_KEY` / DO-control credentials intentionally not given to
+>   the agent — it has no power over its own infrastructure.
 
 ---
 
