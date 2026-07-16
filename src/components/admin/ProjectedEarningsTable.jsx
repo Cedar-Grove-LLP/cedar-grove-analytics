@@ -88,22 +88,22 @@ const EarningsCard = ({ title, rows, togglePromote }) => {
   return (
     <div className="bg-white rounded-lg shadow overflow-x-auto">
       <div className="bg-cg-green text-white px-4 py-3 font-semibold">{title}</div>
-      <table aria-label={`${title} projected earnings`} className="w-full min-w-[1380px] table-fixed text-xs border-collapse [&_th]:!px-2 [&_td]:!px-2">
+      <table aria-label={`${title} projected earnings`} className="w-full min-w-[1180px] table-fixed text-xs border-collapse [&_th]:!px-2 [&_td]:!px-2">
         {/* Both employment groups use the same column grid. Without explicit
             widths, each table sizes itself from its own currency values, so
             the Full-time headers wrap while the shorter Part-time values do
             not. Narrow viewports scroll horizontally instead of reflowing. */}
         <colgroup>
-          <col className="w-[175px]" />
-          <col className="w-[110px]" />
-          <col className="w-[145px]" />
-          <col className="w-[75px]" />
-          <col className="w-[140px]" />
-          <col className="w-[140px]" />
-          <col className="w-[145px]" />
-          <col className="w-[185px]" />
-          <col className="w-[140px]" />
-          <col className="w-[125px]" />
+          <col className="w-[12%]" />
+          <col className="w-[8%]" />
+          <col className="w-[10%]" />
+          <col className="w-[6%]" />
+          <col className="w-[10%]" />
+          <col className="w-[9%]" />
+          <col className="w-[10%]" />
+          <col className="w-[12%]" />
+          <col className="w-[11%]" />
+          <col className="w-[12%]" />
         </colgroup>
         <thead className="bg-gray-100 text-gray-700">
           <tr>
@@ -124,7 +124,7 @@ const EarningsCard = ({ title, rows, togglePromote }) => {
             </th>
             <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                YTD Earnings
+                YTD $
                 <CalcTooltip calcKey="earnings" position="bottom" />
               </span>
             </th>
@@ -136,7 +136,7 @@ const EarningsCard = ({ title, rows, togglePromote }) => {
             </th>
             <th scope="col" className="px-3 py-2 text-right font-semibold whitespace-nowrap">
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                Proj. Client Earnings
+                Proj. Client $
                 <CalcTooltip calcKey="projectedEarnings" position="bottom" />
               </span>
             </th>
