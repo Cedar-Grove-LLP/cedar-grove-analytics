@@ -54,15 +54,25 @@ export function monthKeyFromDate(date) {
  * (or any other mid-history gap) still reports found: false, never a
  * forward look at a later month's rate.
  *
- * Returns { rate, found, sourceMonthKey, requestedMonthKey } plus
- * retrospective: true on the earliest-rate path.
+ * Returns { rate, found, sourceMonthKey, requestedMonthKey, takeHomeRate } plus
+ * retrospective: true on the earliest-rate path. takeHomeRate is the source
+ * rate entry's own takeHomeRate (null if absent) — needed by the ORACLE leg
+ * (src/utils/verify/currency.mjs takeHomeRatio) to derive the client→take-home
+ * ratio without a second lookup.
  */
 export function findRateInfo(ratesMap, monthKey) {
-  const miss = { rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: monthKey };
+  const miss = {
+    rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: monthKey, takeHomeRate: null,
+  };
   if (!ratesMap || !monthKey) return miss;
 
   const found = (rate, sourceMonthKey, extra) => ({
-    rate, found: true, sourceMonthKey, requestedMonthKey: monthKey, ...extra,
+    rate,
+    found: true,
+    sourceMonthKey,
+    requestedMonthKey: monthKey,
+    takeHomeRate: ratesMap[sourceMonthKey]?.takeHomeRate ?? null,
+    ...extra,
   });
 
   const exactRate = ratesMap[monthKey]?.rate;
