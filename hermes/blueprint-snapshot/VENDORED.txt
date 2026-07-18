@@ -1,0 +1,1 @@
+render-examples/hermes-render @ d3f00670418d7d9eee1c125124dc1dcb7c2bbbd4 (vendored 2026-07-15 as rebuild insurance — see docs/hermes-agent-framework.md § 0)

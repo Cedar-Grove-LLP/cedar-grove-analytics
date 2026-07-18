@@ -34,6 +34,20 @@ worksheet covers the agent's job.
 - **Shared-account warning**: the org's cloud accounts contain non-agent
   resources (see fleet inventory, § 10). Never assume everything in an
   account belongs to this program.
+- **Reference resilience** — know which pointers are load-bearing:
+  - *Build-time external dependency*: droplet rebuilds clone
+    `render-examples/hermes-render` from public GitHub. If that repo ever
+    disappears or rewrites history, rebuilds break. Insurance: a full
+    snapshot at the pinned SHA is vendored in this repo at
+    **`hermes/blueprint-snapshot/`** (see its `VENDORED.txt`). Recovery
+    path: push the snapshot to any git host the droplet can reach (or serve
+    it to the build another way) and point the `docker build` URL at it.
+    When bumping the pin (§ 6), re-vendor the snapshot in the same commit.
+  - *Convenience pointers*: references to `docs/hermes-agent-setup.md` and
+    `src/utils/*.mjs` are canonical-source pointers, kept un-duplicated on
+    purpose (copies drift silently; a broken pointer fails loudly). This
+    framework is self-sufficient for deploying the chassis without them —
+    they matter only for the email rules and analytics integrations.
 
 ## 1. Architecture standard
 
