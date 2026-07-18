@@ -8,11 +8,32 @@ full runbook and integration plan).
 
 **How to use this document:** paste it (or reference it) as the starting
 instructions for a new Claude Code session, together with a filled-in copy of
-the *Per-Agent Worksheet* (§ 8) describing the specific agent to build. The
+the *Per-Agent Worksheet* (§ 9) describing the specific agent to build. The
 framework covers the chassis — infrastructure, security, process; the
 worksheet covers the agent's job.
 
 ---
+
+## 0. Where things live (read first in a new session)
+
+- **Canonical docs**: this file and the per-agent runbooks live in
+  `Cedar-Grove-LLP/cedar-grove-analytics` under `docs/`. As of this writing
+  they are on branch **`claude/hermes-cedar-grove-agent-c3zior`**, not yet
+  merged to `main` — a fresh clone of `main` will NOT contain them. Fetch
+  that branch first (`git fetch origin claude/hermes-cedar-grove-agent-c3zior`)
+  and treat the in-repo copy as canonical over any pasted copy, which may be
+  stale. (Once the branch merges, strike this paragraph.)
+- **Repo quirk**: `docs/` is in `.gitignore`; tracked docs are force-added
+  (`git add -f docs/<file>.md`) — the established convention in this repo.
+  You must force-add when updating the fleet inventory or adding a runbook.
+- **DigitalOcean account**: team account "My Team", owner
+  `valyria@cedargrovellp.com` (Val). Account-level actions route through
+  her: she receives droplet root-password emails, holds billing, and can
+  edit firewalls from the DO console. The deploy credential is a
+  `DIGITALOCEAN_TOKEN` env var per § 2.
+- **Shared-account warning**: the org's cloud accounts contain non-agent
+  resources (see fleet inventory, § 10). Never assume everything in an
+  account belongs to this program.
 
 ## 1. Architecture standard
 
@@ -54,7 +75,7 @@ stay portable between rebuilds).
    `github.com` for fetching build files). Health checks on droplets go to a
    raw IP — if the policy is domain-scoped, expect to verify health via the
    operator's browser instead.
-3. **The Per-Agent Worksheet** (§ 8), filled in.
+3. **The Per-Agent Worksheet** (§ 9), filled in.
 4. Awareness that **billing must already exist** on the DO team account —
    droplet creation fails with 402-equivalent errors otherwise. No free tier.
 
@@ -90,7 +111,11 @@ name (e.g. `hermes-kb`).
    fi
    curl -fsSL https://get.docker.com | sh   # get.docker.com, NOT apt docker.io (buildx needed)
    apt-get install -y git
-   docker build -t hermes-agent https://github.com/render-examples/hermes-render.git
+   # PIN the build to a commit SHA — an unpinned build tracks the Blueprint
+   # repo's main, so two rebuilds can silently produce different Hermes
+   # versions. Vet + bump the SHA deliberately; record it in the runbook.
+   # Known-good as of 2026-07-15: d3f00670418d7d9eee1c125124dc1dcb7c2bbbd4
+   docker build -t hermes-agent https://github.com/render-examples/hermes-render.git#<PINNED_SHA>
    docker run -d --name hermes --restart unless-stopped \
      -p 10000:10000 -v /opt/data:/opt/data \
      -e HERMES_DASHBOARD=1 -e HERMES_DASHBOARD_HOST=0.0.0.0 \
@@ -123,6 +148,11 @@ name (e.g. `hermes-kb`).
 
    Seed the allowlist with the deploy session's egress IP
    (`curl https://api.ipify.org`) so the session can verify health.
+   **Session-IP hygiene:** every Claude session may have a different egress
+   IP — a maintenance session's first firewall action is adding its own IP;
+   its last is pruning it (stale `/32` entries from dead sessions are
+   dormant open doors). Human viewers' IPs stay; label which is which by
+   keeping a note in the runbook.
 7. **Verify health** — two Claude-remote-session gotchas:
    - Plain `http://IP:10000` fails with **HTTP 405** (the sandbox proxy
      rejects non-CONNECT plain HTTP). Use a forced tunnel:
@@ -171,6 +201,13 @@ name (e.g. `hermes-kb`).
    people's services (e.g. `cedar-grove-redline` on the Render account —
    not ours, never touch). Prefer suspend over delete when
    decommissioning; it's reversible.
+9. **Law-firm confidentiality baseline**: assume anything an agent touches
+   may be client-confidential or privileged. Consequences: Anthropic API
+   only for model calls (API traffic is not used for training); narrowest
+   possible data scope per integration; a deliberate memory-retention
+   decision per agent *before* launch (worksheet line — an agent's `/opt/data`
+   accumulates whatever it processes); and volumes/snapshots are treated as
+   confidential records, including at decommission time (§ 6).
 
 ## 5. Post-deploy configuration order
 
@@ -188,7 +225,34 @@ name (e.g. `hermes-kb`).
    acceptance check against its source of truth.
 6. Cron jobs (digests etc.) last, once their inputs exist.
 
-## 6. Data-alignment rule (for agents touching firm analytics data)
+## 6. Lifecycle: rebuilds, upgrades, monitoring, decommission
+
+- **Rebuild** (the only way to change host config or bake secrets into
+  `/opt/data/.env`): snapshot the volume first
+  (`POST /v2/volumes/{id}/snapshots`) → destroy the droplet (volume
+  survives; it is a separate resource) → recreate with updated `user_data`
+  → re-attach the volume → verify health → delete the snapshot once stable.
+  ~10 minutes of downtime; agent state persists.
+- **Gateway token lifecycle**: regenerated per rebuild — nothing depends on
+  it persisting *unless* the OpenAI-compatible API server is enabled
+  (`API_SERVER_ENABLED`), in which case store it in `/opt/data/.env` as
+  `API_SERVER_KEY` so it survives rebuilds.
+- **Upgrades**: bump the pinned build SHA (or the `HERMES_IMAGE` tag it
+  pins) and rebuild. Never upgrade by tracking `main`/`latest`.
+- **Monitoring**: droplets are created with `"monitoring": true`; add a DO
+  alert policy (`POST /v2/monitoring/alerts`) so someone is emailed when a
+  droplet dies or pegs CPU — otherwise a dead agent is discovered by its
+  principal noticing silence. External uptime pingers will NOT work: the
+  firewall blocks them by design. `GET /api/status` from an allowlisted IP
+  is the health check.
+- **Decommission**: revoke every integration credential at its provider
+  first (the agent's copies are on the volume); destroy the droplet; delete
+  the firewall; **snapshot then retain the volume ≥ 30 days** before
+  deleting (it holds the agent's memory — per invariant § 4.9 treat it as a
+  confidential record and confirm with the principal before destruction);
+  update the fleet inventory (§ 10).
+
+## 7. Data-alignment rule (for agents touching firm analytics data)
 
 Agents must read the **same sources of truth** as the analytics dashboard —
 the Google Sheets workbooks, Mercury API, tracked Drive folders, or a
@@ -201,7 +265,7 @@ Node-importable and tested), not a paraphrase. See
 integration catalog (Sheets, Drive, Asana MCP, DocuSign, Mercury,
 Firestore).
 
-## 7. Known constraints of Claude Code remote deploy sessions
+## 8. Known constraints of Claude Code remote deploy sessions
 
 - Env vars are injected at container start; mid-session additions may not
   appear until a fresh session. Plan credential handoffs around this.
@@ -215,11 +279,14 @@ Firestore).
   session — put durable secrets in cloud-init/env before the session ends,
   and note in the runbook where they live.
 
-## 8. Per-Agent Worksheet (fill in per agent; supplied alongside this doc)
+## 9. Per-Agent Worksheet (fill in per agent; supplied alongside this doc)
 
 ```
 Agent name (short slug):          e.g. hermes-kb
 Human principal / end user:       who it serves; whose Anthropic key
+Model + Anthropic workspace:      model choice; use a separate Console
+                                  workspace per agent (per-agent spend
+                                  visibility and limits)
 Purpose (one paragraph):
 Messaging surface(s):             email (whose inbox? dedicated?), Slack, dashboard-only, ...
 Data sources + access mode:       e.g. Notion KB (read-only), Drive folder X (read-only)
@@ -243,11 +310,11 @@ cite the KB source (page/doc link), mirroring the analytics dashboard's
 provenance-tooltip convention (`calcDefinitions.mjs` — every displayed
 value knows where it came from).
 
-## 9. Current fleet inventory
+## 10. Current fleet inventory
 
 | Agent | Infra | Status |
 |---|---|---|
-| Principal's ops assistant (`hermes`) | DO droplet `584697460` + volume `hermes-data` + fw `hermes-fw`, sfo3 | Live, healthy; unconfigured (no model key yet); see `docs/hermes-agent-setup.md` |
+| Principal's ops assistant (`hermes`) | DO droplet `584697460` + volume `hermes-data` + fw `hermes-fw`, sfo3 | Live, healthy; unconfigured (no model key yet); built unpinned from `main` @ 2026-07-15 (`d3f0067…`) — pin on next rebuild; see `docs/hermes-agent-setup.md` |
 | — Render POC (`srv-d9a3ikm7r5hc73c4ok00`) | Render free tier | Suspended (superseded by droplet); reversible |
 | `cedar-grove-redline` (`srv-d96sr4naqgkc73cfat70`) | Render | **Not ours. Do not touch.** Pre-existing service, owner unknown (ask Val) |
 
