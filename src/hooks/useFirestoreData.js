@@ -2,53 +2,11 @@ import { useMemo } from 'react';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { buildPaymentStatusIndex } from '@/utils/paymentStatus.mjs';
 
-/**
- * Normalize a billable entry from the new schema.
- * New schema fields: client, date, hours, earnings, adjustment, billingCategory, matter, reimbursements, notes, sheetRowNumber
- * Normalized output adds: userId, billableHours, month, year
- */
-export const normalizeBillableEntry = (entryData, userId, month, year) => {
-  const billableHours = parseFloat(entryData.hours) || 0;
-  const earnings = parseFloat(entryData.earnings) || 0;
-
-  return {
-    ...entryData,
-    userId,
-    billableHours,
-    earnings,
-    billingCategory: entryData.billingCategory || 'Other',
-    client: entryData.client || 'Unknown',
-    matter: entryData.matter || '',
-    reimbursements: parseFloat(entryData.reimbursements) || 0,
-    // Manual month-end dollar adjustment (Sam McClure timesheet only): already
-    // folded into `earnings` via the sheet's Billables Earnings column; passed
-    // through here for transparency/display. Defaults to 0 when absent.
-    adjustment: parseFloat(entryData.adjustment) || 0,
-    notes: entryData.notes || '',
-    month: month || '',
-    year: year || new Date().getFullYear(),
-  };
-};
-
-/**
- * Normalize an ops entry from the new schema.
- * New schema fields: description, date, hours, category, sheetRowNumber
- * Normalized output adds: userId, opsHours, month, year
- */
-export const normalizeOpsEntry = (entryData, userId, month, year) => {
-  const opsHours = parseFloat(entryData.hours) || 0;
-
-  return {
-    ...entryData,
-    userId,
-    opsHours,
-    description: entryData.description || '',
-    category: entryData.category || 'Other',
-    notes: entryData.description || '',
-    month: month || '',
-    year: year || new Date().getFullYear(),
-  };
-};
+export {
+  normalizeBillableEntry,
+  normalizeOpsEntry,
+  normalizeEightThreeBEntry,
+} from '@/utils/entryNormalize.mjs';
 
 /**
  * Get all billable entries from the shared cache.
