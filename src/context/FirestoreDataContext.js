@@ -354,16 +354,24 @@ export const FirestoreDataProvider = ({ children }) => {
           const [yearStr, month] = docKey.split('_');
           const year = parseInt(yearStr, 10);
 
-          // Total hours check (from ops sheetTotals which has the combined total)
+          // Total hours check (from ops sheetTotals which has the combined total).
+          // Deliberately NOT zero-aware, unlike the per-collection rollups above:
+          // this cell is left unpopulated (stored as 0) for every attorney who
+          // doesn't track ops, so a 0 here means "absent", not "zero hours" —
+          // verified across Agate/Wilson/Skrodzka/Popkin, who bill real hours
+          // against a 0 total. Comparing zero-aware turns ~47 unpopulated cells
+          // into mismatch warnings and buries the rollup defects worth seeing.
           const opsSheetTotals = sheetTotalsByType.ops;
-          const computedTotalHours = round2(computed.billableHours + computed.opsHours);
-          if (zeroAwareCompare(computedTotalHours, opsSheetTotals?.totalHours).equal === false) {
-            addWarning(userName, {
-              type: 'total-hours-mismatch',
-              month,
-              year,
-              message: `Total hours mismatch in ${month} ${year}: entries sum to ${computedTotalHours}h but sheet total is ${opsSheetTotals.totalHours}h`,
-            });
+          if (opsSheetTotals?.totalHours > 0) {
+            const computedTotalHours = round2(computed.billableHours + computed.opsHours);
+            if (computedTotalHours !== opsSheetTotals.totalHours) {
+              addWarning(userName, {
+                type: 'total-hours-mismatch',
+                month,
+                year,
+                message: `Total hours mismatch in ${month} ${year}: entries sum to ${computedTotalHours}h but sheet total is ${opsSheetTotals.totalHours}h`,
+              });
+            }
           }
 
 
