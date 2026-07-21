@@ -39,7 +39,7 @@ const MONTH_NAMES = [
 ];
 
 /** Firestore Timestamp | {_seconds} | Date | string -> ISO string, or null. */
-function tsToISO(ts) {
+export function tsToISO(ts) {
   if (!ts) return null;
   if (typeof ts.toDate === 'function') return ts.toDate().toISOString();
   if (typeof ts._seconds === 'number') return new Date(ts._seconds * 1000).toISOString();
@@ -59,7 +59,7 @@ const PNL_LABELS = {
 };
 
 /** Scan column A of `grid` for `label`; return the numeric column-B value on that row, or null. */
-function findLabelValue(grid, label) {
+export function findLabelValue(grid, label) {
   for (let r = 0; r < grid.length; r += 1) {
     const cell = grid[r]?.[0];
     if (cell !== undefined && cell !== null && String(cell).trim() === label) {
@@ -196,14 +196,14 @@ const PAYMENT_STATUS_RANGE = "'Payment Status'!A1:H2000";
 const ENUM_STATUSES = new Set(['Paid', 'Not Paid', 'Payment Initiated']);
 
 /** Sheets serial date (days since 1899-12-30) -> ISO "YYYY-MM-DD", or null. */
-function serialToISO(n) {
+export function serialToISO(n) {
   if (typeof n !== 'number' || !Number.isFinite(n)) return null;
   const ms = Math.round((n - 25569) * 86400000);
   return new Date(ms).toISOString().slice(0, 10);
 }
 
 /** Live sheet date serial -> 'M/D' (no leading zeros, year dropped). */
-function sheetMonthDay(serial) {
+export function sheetMonthDay(serial) {
   const iso = serialToISO(serial);
   if (!iso) return null;
   const [, mo, d] = iso.split('-').map(Number);
@@ -217,7 +217,7 @@ function sheetMonthDay(serial) {
  * touched by the writeback. The ground-truth rule: sheet '2/5' vs Firestore
  * '2/5/2025' compare EQUAL on month/day, year ignored.
  */
-function fsMonthDay(value) {
+export function fsMonthDay(value) {
   if (value === undefined || value === null || value === '') return null;
   const s = String(value);
   let m = s.match(/^(\d{1,2})\/(\d{1,2})\//); // M/D/YYYY
