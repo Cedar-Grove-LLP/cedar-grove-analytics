@@ -13,6 +13,7 @@
  */
 
 import { findRateInfo, monthKeyFromDate } from '../../src/utils/rateLookup.mjs';
+import { zeroAwareCompare } from '../../src/utils/verify/divergence.mjs';
 
 export const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -108,28 +109,34 @@ export function summarizeMonthDoc(type, docId, docData) {
   let hours = 0;
   let earnings = 0;
   let flatFees = 0;
+  let clientFilingFees = 0;
   entries.forEach((entry) => {
     hours += parseFloat(entry.hours) || 0;
     earnings += parseFloat(entry.earnings) || 0;
     flatFees += parseFloat(entry.flatFee) || 0;
+    clientFilingFees += parseFloat(entry.clientFilingFees) || 0;
   });
   hours = round2(hours);
   earnings = round2(earnings);
   flatFees = round2(flatFees);
+  clientFilingFees = round2(clientFilingFees);
 
   const mismatches = [];
   if (sheetTotals) {
     if (type === 'billables') {
-      if (sheetTotals.totalBillableHours > 0 && hours !== sheetTotals.totalBillableHours) {
+      if (zeroAwareCompare(hours, sheetTotals.totalBillableHours).equal === false) {
         mismatches.push(`hours ${hours} != sheet ${sheetTotals.totalBillableHours}`);
       }
-      if (sheetTotals.billableEarnings > 0 && earnings !== sheetTotals.billableEarnings) {
+      if (zeroAwareCompare(earnings, sheetTotals.billableEarnings).equal === false) {
         mismatches.push(`earnings ${earnings} != sheet ${sheetTotals.billableEarnings}`);
       }
     } else if (type === 'ops') {
-      if (sheetTotals.opsHours > 0 && hours !== sheetTotals.opsHours) {
+      if (zeroAwareCompare(hours, sheetTotals.opsHours).equal === false) {
         mismatches.push(`hours ${hours} != sheet ${sheetTotals.opsHours}`);
       }
+    }
+    if (zeroAwareCompare(clientFilingFees, sheetTotals.clientFilingFees).equal === false) {
+      mismatches.push(`clientFilingFees ${clientFilingFees} != sheet ${sheetTotals.clientFilingFees}`);
     }
   }
 
