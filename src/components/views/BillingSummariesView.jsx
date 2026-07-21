@@ -14,18 +14,17 @@ import {
 import { useAllBillableEntries, useUsers } from '@/hooks/useFirestoreData';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
 import { getEntryDate } from '@/utils/dateHelpers';
+import {
+  isBillableRow,
+  buildBillingRow,
+  hasAdjustments as computeHasAdjustments,
+  computeTotals,
+} from '@/utils/billingSummaryCalc.mjs';
 import { formatCurrency, formatHours, formatDate } from '@/utils/formatters';
 import { sortBySeniority } from '@/utils/seniority.mjs';
 import { downloadCSV } from '@/utils/csv';
 import { CalcTooltip } from '../shared';
 import MonthlyAttorneyBillables from './MonthlyAttorneyBillables';
-
-// A row belongs on a bill if it carries hours OR a manual month-end
-// Adjustment ($) — pure adjustment rows have client + date, 0 hours
-// (Sam McClure only; `adjustment` is 0 everywhere else). Pure predicate with
-// no closure over component state, so it lives at module scope rather than
-// being recreated every render.
-const isBillableRow = (entry) => entry.billableHours > 0 || (entry.adjustment || 0) !== 0;
 
 const BillingSummariesView = () => {
   const { data: allEntries, loading: entriesLoading, error: entriesError } = useAllBillableEntries();
@@ -105,27 +104,17 @@ const BillingSummariesView = () => {
       .map(entry => {
         const entryDate = getEntryDate(entry);
         const attorneyName = userMap[entry.userId] || entry.userId;
-        const billableHours = entry.billableHours || 0;
-        const adjustment = entry.adjustment || 0;
 
         // Rate for this attorney and month; found:false means these hours
         // bill at $0 (no usable rate) and must be flagged, not hidden.
         const { rate, found: rateFound } = getRateInfo(attorneyName, entryDate);
 
-        return {
-          ...entry,
+        return buildBillingRow(entry, {
           attorneyName,
-          rate,
-          rateMissing: !rateFound && billableHours > 0,
-          billableHours,
-          adjustment,
-          // Mirrors the sheet's Billables Earnings construction: the manual
-          // month-end adjustment is part of the client's final bill.
-          amount: rate * billableHours + adjustment,
           date: entryDate,
-          category: entry.billingCategory || entry.category || 'Other',
-          notes: entry.notes || '',
-        };
+          rate,
+          found: rateFound,
+        });
       })
       .sort((a, b) => a.date - b.date);
   }, [allEntries, selectedMonth, selectedClient, getRateInfo, userMap]);
@@ -133,7 +122,7 @@ const BillingSummariesView = () => {
   // Only show the Adjustment column when the selection actually has one
   // (McClure months) — every other bill keeps the familiar layout.
   const hasAdjustments = useMemo(
-    () => filteredEntries.some(entry => entry.adjustment !== 0),
+    () => computeHasAdjustments(filteredEntries),
     [filteredEntries]
   );
 
@@ -153,16 +142,7 @@ const BillingSummariesView = () => {
   }, [filteredEntries]);
 
   // Calculate totals
-  const totals = useMemo(() => {
-    return filteredEntries.reduce(
-      (acc, entry) => ({
-        hours: acc.hours + entry.billableHours,
-        adjustment: acc.adjustment + entry.adjustment,
-        amount: acc.amount + entry.amount,
-      }),
-      { hours: 0, adjustment: 0, amount: 0 }
-    );
-  }, [filteredEntries]);
+  const totals = useMemo(() => computeTotals(filteredEntries), [filteredEntries]);
 
   // Format month for display
   const formatMonthDisplay = (monthKey) => {
