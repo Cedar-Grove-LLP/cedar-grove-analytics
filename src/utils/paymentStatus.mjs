@@ -87,10 +87,11 @@ export function normalizeInvoice(inv) {
   const sent = parseInvoiceDate(inv.dateSent, inv.year);
   const received = parseInvoiceDate(inv.dateReceived, inv.year);
   const isPaid = inv.status === 'Paid';
+  const isWriteOff = inv.status === 'Write Off';
   const daysToPay = sent && received
     ? Math.max(0, Math.round((received.getTime() - sent.getTime()) / DAY_MS))
     : null;
-  return { ...inv, sent, received, isPaid, daysToPay };
+  return { ...inv, sent, received, isPaid, isWriteOff, daysToPay };
 }
 
 /**
@@ -104,6 +105,7 @@ export function paymentMetricsAsOf(invoices, asOf, paymentTerms = DEFAULT_PAYMEN
 
   invoices.forEach((inv) => {
     if (!inv.sent || inv.sent.getTime() > t) return; // not yet sent as of t
+    if (inv.isWriteOff) return; // forgiven: settled, never outstanding/overdue, excluded from paid-timing stats
     const receivedTs = inv.received ? inv.received.getTime() : null;
     if (receivedTs !== null && receivedTs <= t) paid.push(inv);
     else if (receivedTs !== null) open.push(inv); // paid, but after t — open as of t
