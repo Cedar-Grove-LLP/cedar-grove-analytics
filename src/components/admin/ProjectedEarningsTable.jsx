@@ -7,77 +7,10 @@ import { formatCurrency, formatHours } from '@/utils/formatters';
 import { filterHiddenAttorneys } from '@/utils/hiddenAttorneys.mjs';
 import { sortBySeniority } from '@/utils/seniority.mjs';
 import { hasJoinedBy } from '@/utils/userActivation.mjs';
+import { buildProjectedRow, predictedAnnualProfit, sumTotals } from '@/utils/projectedEarnings.mjs';
 import { CalcTooltip } from '@/components/shared';
 
-const MAX_RANK = 19;
 const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-const isColin = (name) => /colin\s+van\s+loon/i.test(name || '');
-
-// Partners share the predicted firm profit: Sam 95%, Colin 5%. Everyone else 0.
-const PARTNER_SHARES = [
-  { test: (n) => /sam\s+mcclure/i.test(n || ''), pct: 0.95 },
-  { test: (n) => /colin\s+van\s+loon/i.test(n || ''), pct: 0.05 },
-];
-const partnerSharePct = (name) => PARTNER_SHARES.find((p) => p.test(name))?.pct || 0;
-
-const MONTH_INDEX = {
-  January: 1, February: 2, March: 3, April: 4, May: 5, June: 6,
-  July: 7, August: 8, September: 9, October: 10, November: 11, December: 12,
-};
-// Stored rates in users/{id}.rates are CLIENT billing rates, so rank is always
-// derived from clientRate. Projection pays out the take-home column instead:
-// colinRate for Colin (his bespoke ladder), attorneyRate for everyone else.
-const takeHomeField = (name) => (isColin(name) ? 'colinRate' : 'attorneyRate');
-
-const monthKey = (year, month) => `${year}-${String(month).padStart(2, '0')}`;
-
-// Find latest stored rate for an attorney (highest monthKey).
-const findLatestRate = (ratesByMonth) => {
-  if (!ratesByMonth) return null;
-  const keys = Object.keys(ratesByMonth).sort();
-  if (keys.length === 0) return null;
-  const last = keys[keys.length - 1];
-  return {
-    rate: ratesByMonth[last]?.rate || 0,
-    monthKey: last,
-  };
-};
-
-// Match a stored rate against rateCard.levels by the appropriate field.
-const findRankForRate = (levels, rate, field) => {
-  if (!rate || !Array.isArray(levels)) return -1;
-  return levels.findIndex((lvl) => Number(lvl[field]) === Number(rate));
-};
-
-// Predicted rank in a given month, with Q2 (Apr) and Q4 (Oct) bumps applied
-// only when the boundary lies on or after the current month.
-const predictedRankForMonth = (startRank, currentMonth, month) => {
-  let rank = startRank;
-  if (currentMonth < 4 && month >= 4) rank += 1;
-  if (currentMonth < 10 && month >= 10) rank += 1;
-  return Math.min(rank, MAX_RANK);
-};
-
-const sumTotals = (list) =>
-  list.reduce(
-    (acc, r) => ({
-      ytdEarnings: acc.ytdEarnings + r.ytdEarnings,
-      ytdHours: acc.ytdHours + r.ytdHours,
-      projectedHours: acc.projectedHours + r.projectedHours,
-      projectedEarnings: acc.projectedEarnings + r.projectedEarnings,
-      profitShare: acc.profitShare + r.profitShare,
-      totalProjectedEarnings: acc.totalProjectedEarnings + r.totalProjectedEarnings,
-    }),
-    {
-      ytdEarnings: 0,
-      ytdHours: 0,
-      projectedHours: 0,
-      projectedEarnings: 0,
-      profitShare: 0,
-      totalProjectedEarnings: 0,
-    }
-  );
 
 // One card (green title bar + table) per employment group, mirroring the
 // Targets page's Annual progress layout.
@@ -256,13 +189,7 @@ const ProjectedEarningsTable = () => {
     // Predicted full-year firm profit: average the completed-month firm profit
     // (invoices sheet B16, synced as `firmProfit` on monthlyMetrics) and × 12.
     // "Completed" = months of the current year that have fully ended.
-    const completedProfitMonths = (monthlyMetrics || []).filter((e) => {
-      const mi = MONTH_INDEX[e.month];
-      return Number(e.year) === currentYear && mi && mi < currentMonth && Number.isFinite(e.firmProfit);
-    });
-    const predictedAnnualProfit = completedProfitMonths.length
-      ? (completedProfitMonths.reduce((s, e) => s + Number(e.firmProfit), 0) / completedProfitMonths.length) * 12
-      : 0;
+    const annualProfit = predictedAnnualProfit(monthlyMetrics, currentMonth, currentYear);
 
     // User ids with at least one YTD billable entry this year — mirrors the
     // namesWithDataInRange escape hatch in useAnalyticsData.js so a mis-set/
@@ -282,105 +209,19 @@ const ProjectedEarningsTable = () => {
       (u) => u.name || u.id,
     );
 
-    return visibleAttorneys.map((u) => {
-      const name = u.name || u.id;
-      const payField = takeHomeField(name);
-      // Part-time attorneys don't ride the rate-card ladder: their stored rate
-      // is held flat for the whole year (no Q2/Q4 rank bumps, no take-home lookup).
-      const isPte = (u.employmentType || 'FTE') === 'PTE';
-      const promoted = promoteOverrides[u.id] !== false;
-
-      // YTD actual earnings + per-month actuals (for current-month partial blend).
-      let ytdEarnings = 0;
-      let ytdHours = 0;
-      const monthlyActualHours = {};
-      (allBillableEntries || []).forEach((e) => {
-        if (e.userId !== u.id) return;
-        if (e.year !== currentYear) return;
-        const d = getEntryDate(e);
-        if (!d || isNaN(d.getTime())) return;
-        if (d > today) return;
-        const m = d.getMonth() + 1;
-        ytdEarnings += e.earnings || 0;
-        ytdHours += e.billableHours || 0;
-        monthlyActualHours[m] = (monthlyActualHours[m] || 0) + (e.billableHours || 0);
-      });
-
-      const latest = findLatestRate(allRates?.[name]);
-      const startRank = latest ? findRankForRate(levels, latest.rate, 'clientRate') : -1;
-      // PTE rates are flat and don't need a rate-card match — the stored rate is
-      // paid directly, so the "No rank match" warning never applies to them.
-      const hasRankMatch = isPte ? true : startRank !== -1;
-      const currentRate = latest?.rate || 0;
-
-      // Project remaining months (current → Dec).
-      let projectedEarnings = 0;
-      let projectedHours = 0;
-      let endRank = startRank;
-
-      for (let m = currentMonth; m <= 12; m += 1) {
-        const targets = allTargets?.[name]?.[monthKey(currentYear, m)];
-        const targetHours = targets?.billableHours || 0;
-        if (!targetHours) continue;
-
-        let monthRate;
-        let rank;
-        if (isPte) {
-          // Flat stored rate, every month, no rank progression.
-          monthRate = currentRate;
-        } else if (hasRankMatch) {
-          // Held at current rank when promotion is toggled off.
-          rank = promoted ? predictedRankForMonth(startRank, currentMonth, m) : startRank;
-          endRank = Math.max(endRank, rank);
-          // Take-home payout for the predicted rank; colinRate is null below
-          // rank 13, so fall back to the standard attorneyRate there.
-          monthRate = Number(levels[rank]?.[payField]) || Number(levels[rank]?.attorneyRate) || 0;
-        } else {
-          // No rank match — currentRate is a client rate, so paying it out
-          // would overstate take-home. Project $0 and surface the badge.
-          monthRate = 0;
-        }
-
-        let hoursToProject = targetHours;
-        if (m === currentMonth) {
-          const actualThisMonth = monthlyActualHours[m] || 0;
-          hoursToProject = Math.max(0, targetHours - actualThisMonth);
-        }
-
-        projectedEarnings += hoursToProject * monthRate;
-        projectedHours += hoursToProject;
-      }
-
-      const startLevel = (!isPte && hasRankMatch) ? levels[startRank] : null;
-      const endLevel = (!isPte && hasRankMatch) ? levels[endRank] : null;
-
-      // Partner profit share — added on top of the labor projection.
-      const sharePct = partnerSharePct(name);
-      const isPartner = sharePct > 0;
-      const profitShare = predictedAnnualProfit * sharePct;
-
-      return {
-        userId: u.id,
-        name,
-        isColin: isColin(name),
-        isPte,
-        promoted,
-        // Promotion only matters for FTE attorneys with a rate-card match.
-        canPromote: !isPte && hasRankMatch,
-        currentRate,
-        hasRankMatch,
-        startLevelLabel: startLevel ? `${startLevel.level}/${startLevel.tier}` : '—',
-        endLevelLabel: endLevel ? `${endLevel.level}/${endLevel.tier}` : '—',
-        ytdEarnings,
-        ytdHours,
-        projectedEarnings,
-        projectedHours,
-        isPartner,
-        profitShare,
-        // Full-year projection: actual YTD earnings + projected remainder + partner profit share.
-        totalProjectedEarnings: ytdEarnings + projectedEarnings + profitShare,
-      };
-    });
+    return visibleAttorneys.map((u) => buildProjectedRow({
+      user: u,
+      levels,
+      allBillableEntries,
+      allRates,
+      allTargets,
+      today,
+      currentMonth,
+      currentYear,
+      promoted: promoteOverrides[u.id] !== false,
+      annualProfit,
+      getEntryDate,
+    }));
   }, [users, allBillableEntries, allRates, allTargets, rateCard, monthlyMetrics, promoteOverrides]);
 
   const fteRows = rows.filter((r) => !r.isPte);
