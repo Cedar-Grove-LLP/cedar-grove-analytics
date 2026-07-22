@@ -22,13 +22,13 @@ import {
   subjectFor, presentLeg, absentLeg, notCheckedLeg, naLeg, round2, sumColumn,
 } from './subject.mjs';
 
-const MONTH_NAMES = [
+export const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 /** 'YYYY-MM' -> the Firestore doc id '{year}_{MonthName}'. */
-function monthDocId(monthKey) {
+export function monthDocId(monthKey) {
   const [year, month] = monthKey.split('-').map(Number);
   return `${year}_${MONTH_NAMES[month - 1]}`;
 }
@@ -43,7 +43,7 @@ function tsToISO(ts) {
 }
 
 /** Non-blank cells below the header in `colIndex` — the row-count analogue of sumColumn. */
-function countRows(grid, headerRowIndex, colIndex) {
+export function countRows(grid, headerRowIndex, colIndex) {
   if (colIndex === null || colIndex === undefined) return 0;
   let n = 0;
   for (let i = headerRowIndex + 1; i < grid.length; i += 1) {
@@ -58,7 +58,7 @@ function sumEntryField(entries, field) {
 }
 
 /** Build a { 'YYYY-MM': {rate, takeHomeRate} } map from a users/{id}.rates[] array. */
-function buildRatesMap(rates) {
+export function buildRatesMap(rates) {
   const map = {};
   (rates || []).forEach((r) => {
     const monthNum = MONTH_NAMES.indexOf(r.month) + 1;
