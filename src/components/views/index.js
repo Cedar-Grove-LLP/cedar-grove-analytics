@@ -12,3 +12,4 @@ export { default as TargetsView } from './TargetsView';
 export { default as TechTeamView } from './TechTeamView';
 export { default as PracticeCompositionView } from './PracticeCompositionView';
 export { default as InvoicesTestingView } from './InvoicesTestingView';
+export { default as TimesheetsTestingView } from './TimesheetsTestingView';

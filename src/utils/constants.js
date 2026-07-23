@@ -31,6 +31,40 @@ export const MONTH_NAMES_ABBR = MONTH_NAMES_FULL.map((m) => m.slice(0, 3));
 // server-side via the GITHUB_REPO env var (see api/commit-history/route.js).
 export const DEFAULT_GITHUB_REPO = 'nmbroome/cedar-grove-analytics';
 
+// Ops category options for the Timesheets (testing) manual ops entry bar.
+// Seeded from the distinct categories the synced ops timesheets currently use;
+// edit this list to change the dropdown. Single source of truth for the tab.
+export const OPS_CATEGORIES = [
+  '1:1',
+  '83(b) Elections',
+  'Business Development',
+  'Employee Matters',
+  'Finance & Accounting',
+  'Invoicing',
+  'Knowledge Management',
+  'Systems & Automation',
+  'Team Meeting',
+];
+
+// Billing category options for the Timesheets (testing) manual billables
+// entry bar. Seeded from the distinct billingCategory values in the synced
+// billables timesheets (the sheet's own dropdown taxonomy); edit to change.
+export const BILLING_CATEGORIES = [
+  'Advisors & Consultants',
+  'Cap Table Management + 409A',
+  'Commercial (New Draft)',
+  'Commercial (Redline Review)',
+  'Compliance & Filings',
+  'Corporate Governance',
+  'Employee Matters',
+  'Employee Separation',
+  'Equity Financing',
+  'Formation',
+  'IP Matters',
+  'SAFE/CN Financing',
+  'Service Provider Equity',
+];
+
 export const DATE_RANGE_OPTIONS = [
   { value: 'all-time', label: 'All Time' },
   { value: 'current-week', label: 'Current Week' },

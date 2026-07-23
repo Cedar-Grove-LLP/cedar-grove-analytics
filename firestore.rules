@@ -146,6 +146,27 @@ service cloud.firestore {
         allow read: if isOwnUserId(userId) || hasFullDataAccess();
         allow write: if false;
       }
+
+      // Manual ops entries typed directly into the dashboard (Timesheets
+      // (testing) tab, beta). Unlike ops/{monthDocId} above — which is
+      // sheet-sync-only and write:false — this collection is the app's OWN
+      // write target, kept separate so it never collides with the Apps
+      // Script ops sync (Sheets stays source of truth for ops/). One doc per
+      // entry (auto-id). Writable by a full admin or by the owning attorney
+      // (isOwnUserId) so the same collection works when entry moves off the
+      // admin-only tab to per-attorney self-entry.
+      match /opsManual/{entryId} {
+        allow read: if isOwnUserId(userId) || hasFullDataAccess();
+        allow write: if isAdmin() || isOwnUserId(userId);
+      }
+
+      // Manual billable entries — same beta entry surface and rationale as
+      // opsManual above (app-owned, one doc per entry, never touched by the
+      // Apps Script sync).
+      match /billablesManual/{entryId} {
+        allow read: if isOwnUserId(userId) || hasFullDataAccess();
+        allow write: if isAdmin() || isOwnUserId(userId);
+      }
     }
 
     // ------------------------------------------------------------------

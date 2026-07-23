@@ -16,6 +16,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 export const FirestoreDataProvider = ({ children }) => {
   const [allBillableEntries, setAllBillableEntries] = useState([]);
   const [allOpsEntries, setAllOpsEntries] = useState([]);
+  const [allEightThreeBEntries, setAllEightThreeBEntries] = useState([]);
   const [users, setUsers] = useState([]);
   const [clients, setClients] = useState([]);
   const [allRates, setAllRates] = useState({});
@@ -26,6 +27,7 @@ export const FirestoreDataProvider = ({ children }) => {
   const [rateCard, setRateCard] = useState(null);
   const [timeOff, setTimeOff] = useState(null);
   const [dataWarnings, setDataWarnings] = useState({});
+  const [userMonthSheetTotalsState, setUserMonthSheetTotalsState] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -107,6 +109,10 @@ export const FirestoreDataProvider = ({ children }) => {
             const monthKey = `${rateEntry.year}-${String(monthNum).padStart(2, '0')}`;
             ratesMap[userName][monthKey] = {
               rate: rateEntry.rate || 0,
+              // Attorney take-home rate (the sheet's "Rate" cell) — distinct
+              // from `rate` (client billing rate); drives manual billable
+              // entry earnings (hours × take-home) on Timesheets (testing).
+              takeHomeRate: rateEntry.takeHomeRate || 0,
               month: monthNum,
               year: rateEntry.year,
             };
@@ -143,6 +149,7 @@ export const FirestoreDataProvider = ({ children }) => {
       // Process billable, ops, and 83(b) entries, validating dates and totals against parent document
       const billableEntries = [];
       const opsEntries = [];
+      const eightThreeBEntries = [];
       const warnings = {}; // keyed by userName
 
       // Helper: round to 2 decimal places for comparison
@@ -291,6 +298,19 @@ export const FirestoreDataProvider = ({ children }) => {
               // We need to look up the billable sheetTotals for the same month to get computed billable hours
               // This is done after all entries are processed — see totalHours validation below
             }
+          } else if (type === 'eightThreeB') {
+            entries.forEach((entry, idx) => {
+              eightThreeBEntries.push({
+                id: `${userId}_${doc.id}_${idx}`,
+                userId,
+                name: entry.name || '',
+                company: entry.company || '',
+                flatFee: parseFloat(entry.flatFee) || 0,
+                sheetRowNumber: entry.sheetRowNumber,
+                month,
+                year,
+              });
+            });
           }
         });
       });
@@ -403,6 +423,7 @@ export const FirestoreDataProvider = ({ children }) => {
 
       setAllBillableEntries(billableEntries);
       setAllOpsEntries(opsEntries);
+      setAllEightThreeBEntries(eightThreeBEntries);
       setUsers(userList);
       setClients(clientList);
       setAllDownloadEvents(downloadEvents);
@@ -413,6 +434,7 @@ export const FirestoreDataProvider = ({ children }) => {
       setAllRates(ratesMap);
       setAllTargets(targetsMap);
       setDataWarnings(warnings);
+      setUserMonthSheetTotalsState(userMonthSheetTotals);
       setError(null);
       lastFetchedAt.current = Date.now();
     } catch (err) {
@@ -454,6 +476,7 @@ export const FirestoreDataProvider = ({ children }) => {
   const value = {
     allBillableEntries,
     allOpsEntries,
+    allEightThreeBEntries,
     allDownloadEvents,
     monthlyMetrics,
     invoices,
@@ -464,6 +487,7 @@ export const FirestoreDataProvider = ({ children }) => {
     allRates,
     allTargets,
     dataWarnings,
+    userMonthSheetTotals: userMonthSheetTotalsState,
     loading,
     error,
     refetch,
