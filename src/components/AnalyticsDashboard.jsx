@@ -9,7 +9,7 @@ import { useAnalyticsData } from '@/hooks/useAnalyticsData';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { DateRangeDropdown, AttorneyFilterDropdown } from './shared';
-import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView, TargetsView, TechTeamView, PracticeCompositionView, InvoicesTestingView } from './views';
+import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView, TargetsView, TechTeamView, PracticeCompositionView, InvoicesTestingView, TimesheetsTestingView } from './views';
 
 const TRANSACTIONS_OPS_TABS = ['transactions', 'ops'];
 const DEFAULT_DASHBOARD_DATE_RANGE = 'current-month';
@@ -101,12 +101,12 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
   const [transactionAttorneyFilter, setTransactionAttorneyFilter] = useState('all');
 
   // View state — read initial tab from URL query param (?tab=clients)
-  const VALID_TABS = ['overview', 'attorneys', 'transactions', 'ops', 'clients', 'downloads', 'targets', 'practice-composition', 'tech-team', 'invoices-testing'];
+  const VALID_TABS = ['overview', 'attorneys', 'transactions', 'ops', 'clients', 'downloads', 'targets', 'practice-composition', 'tech-team', 'invoices-testing', 'timesheets-testing'];
   const defaultTab = downloadsOnly ? 'downloads' : transactionsOpsOnly ? 'transactions' : 'overview';
   const tabFromUrl = searchParams.get('tab');
   // Restricted (downloads-only / transactions+ops-only) users must not reach the
   // Tech Team tab via the ?tab=tech-team URL — it isn't in their allowed tab set.
-  const RESTRICTED_BLOCKED_TABS = new Set(['tech-team', 'invoices-testing']);
+  const RESTRICTED_BLOCKED_TABS = new Set(['tech-team', 'invoices-testing', 'timesheets-testing']);
   const isTabAllowed = (tab) => VALID_TABS.includes(tab) && !(restrictedMode && RESTRICTED_BLOCKED_TABS.has(tab));
   const initialTab = tabFromUrl && isTabAllowed(tabFromUrl) ? tabFromUrl : defaultTab;
   const [selectedView, setSelectedView] = useState(initialTab);
@@ -333,6 +333,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             { key: 'practice-composition', label: 'Practice Composition', adminOnly: true },
             { key: 'tech-team', label: 'Tech Team' },
             { key: 'invoices-testing', label: 'Invoices (testing)', adminOnly: true },
+            { key: 'timesheets-testing', label: 'Timesheets (testing)', adminOnly: true },
           ].filter(tab => {
             if (downloadsOnly) return tab.key === 'downloads';
             if (transactionsOpsOnly) return TRANSACTIONS_OPS_TABS.includes(tab.key);
@@ -438,6 +439,8 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
         {selectedView === 'tech-team' && !restrictedMode && <TechTeamView />}
 
         {selectedView === 'invoices-testing' && isAdmin && !restrictedMode && <InvoicesTestingView />}
+
+        {selectedView === 'timesheets-testing' && isAdmin && !restrictedMode && <TimesheetsTestingView />}
         </main>
       </div>
     </div>

@@ -223,3 +223,52 @@ export const useUserOpsEntries = (userNameOrId) => {
 
   return { data, loading, error };
 };
+
+/**
+ * Get 83(b) entries for a specific user from the shared cache.
+ * Supports lookup by display name or Firestore document ID.
+ */
+export const useUserEightThreeBEntries = (userNameOrId) => {
+  const { allEightThreeBEntries, users, loading, error } = useFirestoreCache();
+
+  const data = useMemo(() => {
+    if (!userNameOrId) return [];
+
+    // Build a set of matching userIds: check both direct ID match and display name match
+    const matchingIds = new Set();
+    users.forEach(user => {
+      if (user.id === userNameOrId || (user.name || user.id) === userNameOrId) {
+        matchingIds.add(user.id);
+      }
+    });
+
+    // Fallback: if no user matched, try direct ID match on entries
+    if (matchingIds.size === 0) {
+      matchingIds.add(userNameOrId);
+    }
+
+    return allEightThreeBEntries.filter(e => matchingIds.has(e.userId));
+  }, [allEightThreeBEntries, users, userNameOrId]);
+
+  return { data, loading, error };
+};
+
+/**
+ * Get per-month sheet totals for a specific user from the shared cache.
+ * Supports lookup by display name or Firestore document ID.
+ */
+export const useUserSheetTotals = (userNameOrId) => {
+  const { userMonthSheetTotals, users, loading, error } = useFirestoreCache();
+
+  const data = useMemo(() => {
+    if (!userNameOrId) return {};
+
+    const u = users.find(user => user.id === userNameOrId || (user.name || user.id) === userNameOrId);
+    if (u) {
+      return userMonthSheetTotals?.[u.name || u.id] || userMonthSheetTotals?.[userNameOrId] || {};
+    }
+    return userMonthSheetTotals?.[userNameOrId] || {};
+  }, [userMonthSheetTotals, users, userNameOrId]);
+
+  return { data, loading, error };
+};

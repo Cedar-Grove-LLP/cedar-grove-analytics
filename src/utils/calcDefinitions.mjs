@@ -412,6 +412,54 @@ export const CALC_DEFINITIONS = Object.freeze({
     inputs: ['Drive activity events across the 5 tracked folders'],
     source: SOURCE.DRIVE,
   },
+  timesheetMirrorComputedTotals: {
+    label: 'Timesheet Mirror — Computed Totals',
+    formula: 'Sum of the synced rows shown in the table for the selected month, recomputed by the dashboard',
+    inputs: ['per-row synced billable/ops/83(b) values for the selected user + month'],
+    source: SOURCE.COMPUTED,
+    notes: ['Shown alongside the sheet\'s own summary cells (see timesheetMirrorSheetTotals) to help spot drift — see timesheetMirrorDrift.'],
+  },
+  timesheetMirrorSheetTotals: {
+    label: 'Timesheet Mirror — Sheet Totals',
+    formula: 'The tab\'s own summary cells (sheetTotals), synced as-is from the attorney\'s timesheet workbook',
+    inputs: ['sheetTotals field on the users/{name}/billables|ops|eightThreeB month document'],
+    source: SOURCE.SHEET_LITERAL,
+    sheetRef: {
+      workbook: 'invoices',
+      label: 'sheet summary cells (Total Billable Hours, Billable Earnings, Reimbursements, Total Payment, Ops Hours, Total Hours, 83(b) Fee Earnings)',
+      scope: 'summary cell',
+      currentCell: 'B1–B7 (varies by row/tab)',
+      legacyCell: 'B1–B6 (varies by row/tab)',
+    },
+  },
+  timesheetMirrorDrift: {
+    label: 'Timesheet Mirror — Drift',
+    formula: 'Computed total minus the sheet summary total',
+    inputs: ['timesheetMirrorComputedTotals', 'timesheetMirrorSheetTotals'],
+    source: SOURCE.COMPUTED,
+    notes: ['Non-zero drift usually means a historical tab was edited after it froze — only the CURRENT month re-syncs, so edits to already-frozen months will show up here as a mismatch rather than updating the mirror.'],
+  },
+  billablesManualEntry: {
+    label: 'Manual Billable Entry',
+    formula: 'Earnings = hours × the attorney\'s take-home rate for the entry month, frozen at save time',
+    inputs: ['client', 'matter', 'billing category', 'date', 'hours', 'take-home rate (users/{name}.rates[])'],
+    source: SOURCE.ADMIN_ENTERED,
+    notes: [
+      'Stored in users/{name}/billablesManual (one doc per entry), separate from the sheet-synced billables/ collection so it never collides with the Google Sheets sync.',
+      "The take-home rate is the sheet's \"Rate\" cell — NOT the client billing rate (rates[].rate); the lookup uses the same backward fallback as historical billing.",
+      'Folded into the Billables table totals shown here, but NOT into the sheet-vs-computed drift cards (those stay a faithful mirror of the synced timesheet).',
+    ],
+  },
+  opsManualEntry: {
+    label: 'Manual Ops Entry',
+    formula: 'An ops row typed directly into the dashboard (Timesheets (testing) tab)',
+    inputs: ['description', 'category', 'date', 'hours'],
+    source: SOURCE.ADMIN_ENTERED,
+    notes: [
+      'Stored in users/{name}/opsManual (one doc per entry), separate from the sheet-synced ops/ collection so it never collides with the Google Sheets ops sync.',
+      'Folded into the Ops table total shown here, but NOT into the sheet-vs-computed drift cards above (those stay a faithful mirror of the synced timesheet).',
+    ],
+  },
 });
 
 export const REQUIRED_KEYS = Object.freeze(Object.keys(CALC_DEFINITIONS));
