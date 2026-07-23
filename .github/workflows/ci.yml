@@ -1,6 +1,6 @@
-# Future CI jobs (component tests, Firestore-rules emulator suite, Playwright E2E)
-# will be added as SEPARATE jobs later so this fast pure-Node lint+test job stays
-# fast and isolated.
+# Fast pure-Node lint+test job stays isolated in `test`; slower lanes
+# (component tests, Firestore-rules emulator suite, Playwright E2E) run as
+# separate jobs so they don't slow it down.
 
 name: CI
 
@@ -22,3 +22,63 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - name: Coverage (informational)
+        run: node --test --experimental-test-coverage tests/*.test.mjs
+        continue-on-error: true
+
+  components:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:components
+
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - run: npm ci
+      - run: npm run test:rules
+
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      # Dummy Firebase config — the app talks only to local emulators
+      # (project demo-cedar-grove), which accept any config. No secrets.
+      NEXT_PUBLIC_FIREBASE_API_KEY: demo-api-key
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-cedar-grove.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-cedar-grove
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: demo-cedar-grove.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '000000000000'
+      NEXT_PUBLIC_FIREBASE_APP_ID: 1:000000000000:web:0000000000000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:e2e
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/

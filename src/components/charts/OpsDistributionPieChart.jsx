@@ -2,6 +2,7 @@
 
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { CHART_COLORS, GRAY, LABEL_LINE_COLOR, TOOLTIP_BORDER } from '@/utils/colors';
+import { CHART_ANIMATIONS_DISABLED } from '@/utils/constants';
 import { getSourceNote } from '@/utils/calcDefinitions.mjs';
 import { SourceNote } from '../tooltips';
 
@@ -72,6 +73,7 @@ const OpsDistributionPieChart = ({ data, title = "Ops Time Distribution" }) => {
             outerRadius={100}
             label={renderCustomLabel}
             labelLine={{ stroke: LABEL_LINE_COLOR, strokeWidth: 1 }}
+            isAnimationActive={!CHART_ANIMATIONS_DISABLED}
           >
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />

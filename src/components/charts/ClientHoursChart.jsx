@@ -3,6 +3,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from '../tooltips';
 import { CHART } from '@/utils/colors';
+import { CHART_ANIMATIONS_DISABLED } from '@/utils/constants';
 import { getSourceNote } from '@/utils/calcDefinitions.mjs';
 
 const ClientHoursChart = ({ data, title = "Hours by Client" }) => {
@@ -17,7 +18,7 @@ const ClientHoursChart = ({ data, title = "Hours by Client" }) => {
           <XAxis dataKey="name" angle={-15} textAnchor="end" height={100} />
           <YAxis />
           <Tooltip content={<CustomTooltip sourceNote={getSourceNote('billableHours')} />} />
-          <Bar dataKey="totalHours" fill={CHART.billable} name="Total Hours" />
+          <Bar dataKey="totalHours" fill={CHART.billable} name="Total Hours" isAnimationActive={!CHART_ANIMATIONS_DISABLED} />
         </BarChart>
       </ResponsiveContainer>
     </div>

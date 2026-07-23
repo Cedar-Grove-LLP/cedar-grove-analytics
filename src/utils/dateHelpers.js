@@ -372,9 +372,10 @@ export const getDateRangeLabel = (dateRange, customDateStart, customDateEnd) => 
   }
 };
 
-// Calculate date range boundaries
-export const calculateDateRange = (dateRange, customDateStart, customDateEnd, allEntries = []) => {
-  const now = getPSTDate();
+// Calculate date range boundaries.
+// `now` is injectable for tests / callers that already resolved "today" (PST);
+// it defaults to the current PST time, preserving the original behavior.
+export const calculateDateRange = (dateRange, customDateStart, customDateEnd, allEntries = [], now = getPSTDate()) => {
   let startDate;
   let endDate = new Date(now);
 
@@ -430,6 +431,73 @@ export const calculateDateRange = (dateRange, customDateStart, customDateEnd, al
   }
 
   return { startDate, endDate };
+};
+
+/**
+ * Equivalent prior window for period-over-period deltas (e.g. last-month May
+ * → prior April). all-time has no meaningful prior period.
+ *
+ * In-progress periods (current-month / current-week) are partial (period
+ * start → now), so the prior window covers the SAME elapsed span aligned to
+ * the start of the previous period — otherwise an 8-day month-to-date would
+ * compare against a full ~30-day month and the delta would be systematically
+ * negative. Fixed-length / already-complete windows (last-week, trailing-60,
+ * custom) get the equal-length window immediately before the current one.
+ *
+ * @param {string} dateRange - the selected range key ('all-time', 'last-month', …)
+ * @param {{startDate: Date|null, endDate: Date|null}} currentWindow - the
+ *        boundaries computed by calculateDateRange for that key
+ * @param {Date} [now] - injectable "today" (PST), like calculateDateRange's
+ * @returns {{startDate: Date|null, endDate: Date|null, hasPrior: boolean}}
+ */
+export const derivePriorPeriodWindow = (dateRange, currentWindow = {}, now = getPSTDate()) => {
+  const { startDate: curStart, endDate: curEnd } = currentWindow;
+
+  if (dateRange === 'all-time' || !curStart || !curEnd) {
+    return { startDate: null, endDate: null, hasPrior: false };
+  }
+
+  // Completed calendar month → the whole previous calendar month.
+  if (dateRange === 'last-month') {
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0);
+    const endDate = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59, 999);
+    return { startDate, endDate, hasPrior: true };
+  }
+
+  const elapsedMs = curEnd.getTime() - curStart.getTime();
+  if (dateRange === 'current-month') {
+    const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+    const endDate = new Date(startDate.getTime() + elapsedMs);
+    return { startDate, endDate, hasPrior: true };
+  }
+  if (dateRange === 'current-week') {
+    const startDate = new Date(
+      curStart.getFullYear(), curStart.getMonth(), curStart.getDate() - 7, 0, 0, 0, 0
+    );
+    const endDate = new Date(startDate.getTime() + elapsedMs);
+    return { startDate, endDate, hasPrior: true };
+  }
+
+  // Fixed-length / already-complete windows → immediately-preceding window.
+  const endDate = new Date(curStart.getTime() - 1);
+  const startDate = new Date(endDate.getTime() - elapsedMs);
+  return { startDate, endDate, hasPrior: true };
+};
+
+/**
+ * List every 'YYYY-MM' month key touched by [startDate, endDate], inclusive
+ * of both boundary months. Empty when either boundary is missing.
+ */
+export const listRangeMonthKeys = (startDate, endDate) => {
+  const months = [];
+  if (!startDate || !endDate) return months;
+  const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+  while (cursor <= end) {
+    months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return months;
 };
 
 // Calculate client activity date range

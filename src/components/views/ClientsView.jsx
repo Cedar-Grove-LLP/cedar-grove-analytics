@@ -10,10 +10,16 @@ import { useUsers, usePaymentStatusIndex } from '@/hooks/useFirestoreData';
 import { getEntryDate } from '@/utils/dateHelpers';
 import {
   PAYMENT_STATUS,
-  PAYMENT_STATUS_RANK,
   HOLD_FLAG_MESSAGE,
   getClientPaymentStatus,
 } from '@/utils/paymentStatus.mjs';
+import {
+  isBillableClient,
+  matchesSearch,
+  matchesActivityFilter,
+  matchesPaymentFilter,
+  compareClients,
+} from '@/utils/clientSort.mjs';
 
 // Sum billable hours per client name across a set of entries (used to decide
 // which clients were "active" in a given window).
@@ -162,78 +168,18 @@ const ClientsView = ({
     setSortConfig({ key, direction });
   };
 
+  // Sort comparators + filter predicates live in utils/clientSort.mjs
+  // (pure, unit-tested) — this just composes them over the current state.
   const getSortedClients = () => {
-    let filtered = clientsWithBillables.filter(client =>
-      client.name.toLowerCase().includes(clientSearch.toLowerCase())
+    const filtered = clientsWithBillables.filter(client =>
+      matchesSearch(client, clientSearch) &&
+      matchesActivityFilter(client, clientFilter) &&
+      matchesPaymentFilter(client, paymentFilter)
     );
-
-    // Filter by billable status
-    if (clientFilter === 'billable') {
-      filtered = filtered.filter(client => isBillableClient(client));
-    } else if (clientFilter === 'non-billable') {
-      filtered = filtered.filter(client => !isBillableClient(client));
-    }
-
-    // Filter by calculated payment status tag
-    if (paymentFilter !== 'all') {
-      filtered = filtered.filter(client => client.paymentStatus === paymentFilter);
-    }
-
-    filtered.sort((a, b) => {
-      let aVal, bVal;
-      
-      switch (sortConfig.key) {
-        case 'name':
-          aVal = a.name.toLowerCase();
-          bVal = b.name.toLowerCase();
-          break;
-        case 'status':
-          aVal = (a.billableHours || a.totalHours) > 0 ? 'active' : 'inactive';
-          bVal = (b.billableHours || b.totalHours) > 0 ? 'active' : 'inactive';
-          break;
-        case 'paymentStatus':
-          // Rank healthy payers first, holds last.
-          aVal = PAYMENT_STATUS_RANK[a.paymentStatus] ?? 99;
-          bVal = PAYMENT_STATUS_RANK[b.paymentStatus] ?? 99;
-          break;
-        case 'avgPaymentDays':
-          // Clients with no paid invoices sort below 0-day payers.
-          aVal = a.avgPaymentDays ?? -1;
-          bVal = b.avgPaymentDays ?? -1;
-          break;
-        case 'outstandingInvoices':
-          aVal = a.outstandingInvoices || 0;
-          bVal = b.outstandingInvoices || 0;
-          break;
-        case 'billableHours':
-          aVal = a.billableHours || a.totalHours || 0;
-          bVal = b.billableHours || b.totalHours || 0;
-          break;
-        case 'grossBillables':
-          aVal = a.grossBillables || 0;
-          bVal = b.grossBillables || 0;
-          break;
-        case 'lastActivity':
-          aVal = a.lastActivity === 'No activity' ? '' : a.lastActivity;
-          bVal = b.lastActivity === 'No activity' ? '' : b.lastActivity;
-          break;
-        default:
-          aVal = a.billableHours || a.totalHours || 0;
-          bVal = b.billableHours || b.totalHours || 0;
-      }
-      
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-
+    filtered.sort((a, b) => compareClients(a, b, sortConfig));
     return filtered;
   };
 
-  // A client is "Active" when they have billable hours in the selected date
-  // range, otherwise "Quiet". (Previously keyed off recent invoicing, which
-  // mislabeled clients with billable hours but no invoice in the last 3 months.)
-  const isBillableClient = (client) => (client.billableHours || client.totalHours || 0) > 0;
   const activeCount = clientsWithBillables.filter(isBillableClient).length;
   const inactiveCount = clientsWithBillables.filter(c => !isBillableClient(c)).length;
 

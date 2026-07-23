@@ -16,6 +16,24 @@ function getAdminApp() {
     return cachedApp;
   }
 
+  // --- E2E TEST-ONLY EMULATOR WIRING ---------------------------------------
+  // Under `firebase emulators:exec` (npm run test:e2e) the emulator host env
+  // vars are set and GCLOUD_PROJECT is the demo project. Initialize without
+  // service-account credentials so verifyIdToken audiences and Firestore
+  // reads match the emulator's `demo-cedar-grove` namespace. These env vars
+  // are never set in production deployments, so this branch is unreachable
+  // there.
+  if (
+    process.env.FIRESTORE_EMULATOR_HOST ||
+    process.env.FIREBASE_AUTH_EMULATOR_HOST
+  ) {
+    cachedApp = initializeApp({
+      projectId: process.env.GCLOUD_PROJECT || "demo-cedar-grove",
+    });
+    return cachedApp;
+  }
+  // -------------------------------------------------------------------------
+
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (!raw) {
     throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY is not configured");

@@ -11,6 +11,7 @@ import { useMonthlyActualsVsTarget } from '@/hooks/useMonthlyActualsVsTarget';
 import { CalcTooltip } from '@/components/shared';
 import AnnualUtilizationSummary from '@/components/admin/AnnualUtilizationSummary';
 import { hasJoinedBy } from '@/utils/userActivation.mjs';
+import { buildTargetsPayload } from '@/utils/targetsPayload.mjs';
 
 const MONTHS = [
   { idx: 0, short: 'Jan', long: 'January' },
@@ -543,23 +544,8 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
         const userDoc = await getDoc(userRef);
         const data = userDoc.exists() ? userDoc.data() : {};
         const existing = data.targets || [];
-        const otherYears = existing.filter(t => t.year !== selectedYear);
 
-        const yearEntries = MONTHS.map(m => {
-          const cell = userMatrix[m.idx] || {};
-          const billable = parseFloat(cell.client) || 0;
-          const ops = parseFloat(cell.ops) || 0;
-          return {
-            month: m.long,
-            year: selectedYear,
-            billableHours: billable,
-            opsHours: ops,
-            totalHours: billable + ops,
-            earnings: 0,
-          };
-        });
-
-        await updateDoc(userRef, { targets: [...otherYears, ...yearEntries] });
+        await updateDoc(userRef, { targets: buildTargetsPayload(existing, userMatrix, selectedYear) });
       }
 
       if (refetch) {

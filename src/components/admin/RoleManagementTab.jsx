@@ -5,25 +5,9 @@ import { Save, Users, CheckCircle, AlertCircle } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, waitForAuth } from '@/firebase/config';
 import { sortBySeniority } from '@/utils/seniority.mjs';
+import { buildEditsFromUsers, buildRoleEdits, buildRoleSavePayload } from '@/utils/rolePayload.mjs';
 
 const EMPLOYMENT_TYPES = ['FTE', 'PTE'];
-
-const buildEditsFromUsers = (users) => {
-  const edits = {};
-  if (users && users.length > 0) {
-    users.forEach(u => {
-      edits[u.id] = {
-        email: u.email || '',
-        role: u.role || 'Attorney',
-        employmentType: u.employmentType || 'FTE',
-        active: u.active !== false,
-        activationDate: u.activationDate || '',
-        isDirty: false,
-      };
-    });
-  }
-  return edits;
-};
 
 const RoleManagementTab = ({ users, allUsers, refetch }) => {
   // Manage every user here (including inactive/hidden) so admins can toggle them
@@ -62,18 +46,9 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
       setSavingUser(userId);
       await waitForAuth();
 
-      await updateDoc(doc(db, 'users', userId), {
-        // Lower-cased so it matches the AddUserTab convention and the
-        // exact-match `where('email', '==', ...)` query
-        // FirestoreDataContext uses to scope a plain user's own data —
-        // a mixed-case stored email would silently return zero results
-        // for that user (see SEC-008 fix).
-        email: edits.email.trim().toLowerCase(),
-        role: edits.role,
-        employmentType: edits.employmentType,
-        active: edits.active,
-        activationDate: edits.activationDate || null,
-      });
+      // Email lower-casing + activationDate null-normalization live in
+      // buildRoleSavePayload (utils/rolePayload.mjs) — see SEC-008 fix.
+      await updateDoc(doc(db, 'users', userId), buildRoleSavePayload(edits));
 
       setRoleEdits(prev => ({
         ...prev,
@@ -100,17 +75,9 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
       await waitForAuth();
 
       for (const [userId, edits] of dirtyUsers) {
-        await updateDoc(doc(db, 'users', userId), {
-          // Lower-cased for the same reason as handleSaveIndividual above —
-          // must match AddUserTab's convention and the scoped
-          // where('email', '==', ...) query FirestoreDataContext relies on
-          // (see SEC-008 fix).
-          email: edits.email.trim().toLowerCase(),
-          role: edits.role,
-          employmentType: edits.employmentType,
-          active: edits.active,
-          activationDate: edits.activationDate || null,
-        });
+        // Same payload normalization as handleSaveIndividual above
+        // (utils/rolePayload.mjs, see SEC-008 fix).
+        await updateDoc(doc(db, 'users', userId), buildRoleSavePayload(edits));
       }
 
       setRoleEdits(prev => {
@@ -195,7 +162,7 @@ const RoleManagementTab = ({ users, allUsers, refetch }) => {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {manageableUsers.map((user) => {
-              const edits = roleEdits[user.id] || { email: user.email || '', role: user.role || 'Attorney', employmentType: user.employmentType || 'FTE', active: user.active !== false, activationDate: user.activationDate || '', isDirty: false };
+              const edits = roleEdits[user.id] || buildRoleEdits(user);
               return (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">

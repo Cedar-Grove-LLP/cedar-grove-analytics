@@ -13,19 +13,20 @@ import {
 } from 'lucide-react';
 import { useAllBillableEntries, useUsers } from '@/hooks/useFirestoreData';
 import { useAttorneyRates } from '@/hooks/useAttorneyRates';
-import { getEntryDate } from '@/utils/dateHelpers';
 import { formatCurrency, formatHours, formatDate } from '@/utils/formatters';
 import { sortBySeniority } from '@/utils/seniority.mjs';
 import { downloadCSV } from '@/utils/csv';
+import {
+  isBillableRow,
+  entryMonthKey,
+  buildBillingRows,
+  selectionHasAdjustments,
+  computeBillingTotals,
+  buildBillingCsvRows,
+  billingSummaryFilename,
+} from '@/utils/billingSummaryRows.mjs';
 import { CalcTooltip } from '../shared';
 import MonthlyAttorneyBillables from './MonthlyAttorneyBillables';
-
-// A row belongs on a bill if it carries hours OR a manual month-end
-// Adjustment ($) — pure adjustment rows have client + date, 0 hours
-// (Sam McClure only; `adjustment` is 0 everywhere else). Pure predicate with
-// no closure over component state, so it lives at module scope rather than
-// being recreated every render.
-const isBillableRow = (entry) => entry.billableHours > 0 || (entry.adjustment || 0) !== 0;
 
 const BillingSummariesView = () => {
   const { data: allEntries, loading: entriesLoading, error: entriesError } = useAllBillableEntries();
@@ -57,9 +58,7 @@ const BillingSummariesView = () => {
     const monthSet = new Set();
     allEntries.forEach(entry => {
       if (isBillableRow(entry)) {
-        const entryDate = getEntryDate(entry);
-        const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-        monthSet.add(monthKey);
+        monthSet.add(entryMonthKey(entry));
       }
     });
 
@@ -72,68 +71,32 @@ const BillingSummariesView = () => {
 
     const clientSet = new Set();
     allEntries.forEach(entry => {
-      if (isBillableRow(entry)) {
-        const entryDate = getEntryDate(entry);
-        const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-        if (monthKey === selectedMonth) {
-          const clientName = entry.client || 'Unknown';
-          clientSet.add(clientName);
-        }
+      if (isBillableRow(entry) && entryMonthKey(entry) === selectedMonth) {
+        const clientName = entry.client || 'Unknown';
+        clientSet.add(clientName);
       }
     });
 
     return Array.from(clientSet).sort();
   }, [allEntries, selectedMonth]);
 
-  // Filter entries for selected month and client
-  const filteredEntries = useMemo(() => {
-    if (!allEntries || !selectedMonth || !selectedClient) return [];
-
-    return allEntries
-      .filter(entry => {
-        if (!isBillableRow(entry)) return false;
-
-        const entryDate = getEntryDate(entry);
-        const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-        if (monthKey !== selectedMonth) return false;
-
-        const clientName = entry.client || 'Unknown';
-        if (clientName !== selectedClient) return false;
-
-        return true;
-      })
-      .map(entry => {
-        const entryDate = getEntryDate(entry);
-        const attorneyName = userMap[entry.userId] || entry.userId;
-        const billableHours = entry.billableHours || 0;
-        const adjustment = entry.adjustment || 0;
-
-        // Rate for this attorney and month; found:false means these hours
-        // bill at $0 (no usable rate) and must be flagged, not hidden.
-        const { rate, found: rateFound } = getRateInfo(attorneyName, entryDate);
-
-        return {
-          ...entry,
-          attorneyName,
-          rate,
-          rateMissing: !rateFound && billableHours > 0,
-          billableHours,
-          adjustment,
-          // Mirrors the sheet's Billables Earnings construction: the manual
-          // month-end adjustment is part of the client's final bill.
-          amount: rate * billableHours + adjustment,
-          date: entryDate,
-          category: entry.billingCategory || entry.category || 'Other',
-          notes: entry.notes || '',
-        };
-      })
-      .sort((a, b) => a.date - b.date);
-  }, [allEntries, selectedMonth, selectedClient, getRateInfo, userMap]);
+  // Build invoice-prep rows for the selected month and client (pure logic in
+  // utils/billingSummaryRows.mjs). rateMissing rows bill at $0 and must be
+  // flagged, not hidden.
+  const filteredEntries = useMemo(
+    () => buildBillingRows(allEntries, {
+      month: selectedMonth,
+      client: selectedClient,
+      userMap,
+      getRateInfo,
+    }),
+    [allEntries, selectedMonth, selectedClient, getRateInfo, userMap]
+  );
 
   // Only show the Adjustment column when the selection actually has one
   // (McClure months) — every other bill keeps the familiar layout.
   const hasAdjustments = useMemo(
-    () => filteredEntries.some(entry => entry.adjustment !== 0),
+    () => selectionHasAdjustments(filteredEntries),
     [filteredEntries]
   );
 
@@ -153,16 +116,7 @@ const BillingSummariesView = () => {
   }, [filteredEntries]);
 
   // Calculate totals
-  const totals = useMemo(() => {
-    return filteredEntries.reduce(
-      (acc, entry) => ({
-        hours: acc.hours + entry.billableHours,
-        adjustment: acc.adjustment + entry.adjustment,
-        amount: acc.amount + entry.amount,
-      }),
-      { hours: 0, adjustment: 0, amount: 0 }
-    );
-  }, [filteredEntries]);
+  const totals = useMemo(() => computeBillingTotals(filteredEntries), [filteredEntries]);
 
   // Format month for display
   const formatMonthDisplay = (monthKey) => {
@@ -172,34 +126,12 @@ const BillingSummariesView = () => {
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
-  // Export to CSV
+  // Export to CSV (row assembly in utils/billingSummaryRows.mjs)
   const exportToCSV = () => {
     if (filteredEntries.length === 0) return;
 
-    const headers = hasAdjustments
-      ? ['Date', 'Attorney', 'Rate', 'Hours', 'Adjustment', 'Amount', 'Category', 'Notes']
-      : ['Date', 'Attorney', 'Rate', 'Hours', 'Amount', 'Category', 'Notes'];
-    const rows = filteredEntries.map(entry => [
-      entry.date.toLocaleDateString(),
-      entry.attorneyName,
-      entry.rate,
-      entry.billableHours,
-      ...(hasAdjustments ? [entry.adjustment.toFixed(2)] : []),
-      entry.amount.toFixed(2),
-      entry.category,
-      entry.notes || '',
-    ]);
-
-    // Add totals row
-    rows.push([
-      '', '', '',
-      totals.hours.toFixed(1),
-      ...(hasAdjustments ? [totals.adjustment.toFixed(2)] : []),
-      totals.amount.toFixed(2),
-      '', '',
-    ]);
-
-    downloadCSV(`billing-summary-${selectedClient.replace(/\s+/g, '-')}-${selectedMonth}.csv`, headers, rows);
+    const { headers, rows } = buildBillingCsvRows(filteredEntries);
+    downloadCSV(billingSummaryFilename(selectedClient, selectedMonth), headers, rows);
   };
 
   if (loading) {

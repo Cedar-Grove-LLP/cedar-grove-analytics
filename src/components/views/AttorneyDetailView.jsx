@@ -37,10 +37,24 @@ import { useUserBillableEntries, useUserOpsEntries, useUsers, useDataWarnings } 
 import { useMonthlyActualsVsTarget } from '@/hooks/useMonthlyActualsVsTarget';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import {
+  calculateDateRange,
   getEntryDate,
   getPSTDate,
   getDateRangeLabel,
 } from '@/utils/dateHelpers';
+import {
+  buildClientBreakdown,
+  buildMatterBreakdown,
+  buildMonthlyTrend,
+  buildOpsBreakdown,
+  buildTransactionBreakdown,
+  collectActiveMonths,
+  computeAttorneyDetailStats,
+  computeAttorneyDetailTargets,
+  filterEntriesByWindow,
+  hasAdjustmentData,
+  selectRecentEntries,
+} from '@/utils/attorneyDetail.mjs';
 import {
   parseTimeOff,
   getHolidaySet,
@@ -187,51 +201,16 @@ const AttorneyDetailView = ({ attorneyName }) => {
   const loading = billableLoading || opsLoading;
   const error = billableError || opsError;
 
-  // Calculate date range boundaries
+  // Calculate date range boundaries (shared calculateDateRange, with one
+  // page-specific override: this view treats unbounded selections — all-time,
+  // and custom before both dates are picked — as "no filter" (null startDate),
+  // where the shared helper substitutes a first-of-month start instead.
   const dateRangeInfo = useMemo(() => {
     const now = getPSTDate();
-    let startDate = null;
-    let endDate = new Date(now);
-
-    switch (dateRange) {
-      case 'all-time':
-        startDate = null;
-        break;
-      case 'current-week': {
-        const dayOfWeek = now.getDay();
-        const daysSinceMonday = (dayOfWeek + 6) % 7;
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday, 0, 0, 0, 0);
-        break;
-      }
-      case 'last-week': {
-        const dow = now.getDay();
-        const dSinceMonday = (dow + 6) % 7;
-        const thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dSinceMonday, 0, 0, 0, 0);
-        startDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 7, 0, 0, 0, 0);
-        endDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 1, 23, 59, 59, 999);
-        break;
-      }
-      case 'current-month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        break;
-      case 'last-month':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-        break;
-      case 'trailing-60':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60, 0, 0, 0, 0);
-        break;
-      case 'custom':
-        if (customDateStart && customDateEnd) {
-          const [startYear, startMonth, startDay] = customDateStart.split('-').map(Number);
-          const [endYear, endMonth, endDay] = customDateEnd.split('-').map(Number);
-          startDate = new Date(startYear, startMonth - 1, startDay, 0, 0, 0, 0);
-          endDate = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
-        }
-        break;
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    }
+    const { startDate: boundedStart, endDate } = calculateDateRange(dateRange, customDateStart, customDateEnd, [], now);
+    const unbounded = dateRange === 'all-time' ||
+      (dateRange === 'custom' && !(customDateStart && customDateEnd));
+    const startDate = unbounded ? null : boundedStart;
 
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -239,30 +218,16 @@ const AttorneyDetailView = ({ attorneyName }) => {
   }, [dateRange, customDateStart, customDateEnd]);
 
   // Filter billable entries by date range
-  const filteredBillableEntries = useMemo(() => {
-    if (!billableEntries) return [];
-    let entries = billableEntries;
-    if (dateRange !== 'all-time' && dateRangeInfo.startDate) {
-      entries = entries.filter(entry => {
-        const entryDate = getEntryDate(entry);
-        return entryDate >= dateRangeInfo.startDate && entryDate <= dateRangeInfo.endDate;
-      });
-    }
-    return entries;
-  }, [billableEntries, dateRange, dateRangeInfo]);
+  const filteredBillableEntries = useMemo(
+    () => filterEntriesByWindow(billableEntries, dateRangeInfo.startDate, dateRangeInfo.endDate),
+    [billableEntries, dateRangeInfo]
+  );
 
   // Filter ops entries by date range
-  const filteredOpsEntries = useMemo(() => {
-    if (!opsEntries) return [];
-    let entries = opsEntries;
-    if (dateRange !== 'all-time' && dateRangeInfo.startDate) {
-      entries = entries.filter(entry => {
-        const entryDate = getEntryDate(entry);
-        return entryDate >= dateRangeInfo.startDate && entryDate <= dateRangeInfo.endDate;
-      });
-    }
-    return entries;
-  }, [opsEntries, dateRange, dateRangeInfo]);
+  const filteredOpsEntries = useMemo(
+    () => filterEntriesByWindow(opsEntries, dateRangeInfo.startDate, dateRangeInfo.endDate),
+    [opsEntries, dateRangeInfo]
+  );
 
   // Combined entries reference (used for active months, targets, etc.)
   const attorneyEntries = useMemo(() => {
@@ -272,163 +237,37 @@ const AttorneyDetailView = ({ attorneyName }) => {
   // Calculate targets based on active months
   const calculatedTargets = useMemo(() => {
     const { startDate, endDate, currentMonthKey } = dateRangeInfo;
-    
-    // Get unique months from entries
-    const activeMonths = new Set();
-    attorneyEntries.forEach(entry => {
-      const entryDate = getEntryDate(entry);
-      const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-      activeMonths.add(monthKey);
-    });
 
-    const defaultTarget = {
-      billableTarget: attorneyTargets[currentMonthKey]?.billableHours ?? 100,
-      opsTarget: attorneyTargets[currentMonthKey]?.opsHours ?? 50,
-      totalTarget: attorneyTargets[currentMonthKey]?.totalHours ?? 150,
-      oooDays: 0,
-      holidayDays: 0,
-    };
-
-    if (activeMonths.size === 0) {
-      return defaultTarget;
-    }
+    const activeMonths = collectActiveMonths(attorneyEntries);
 
     // Firm holidays for the range + this attorney's out-of-office days.
-    const rangeHolidaySet = getHolidaySet(parsedTimeOff, startDate, endDate);
-    const oooMap = getOooMapFor(parsedTimeOff, { name: attorneyName, email: attorneyEmail });
+    // Only needed when there are active months to pro-rate (getMonthProRate
+    // is never invoked otherwise).
+    const hasMonths = activeMonths.size > 0;
+    const rangeHolidaySet = hasMonths ? getHolidaySet(parsedTimeOff, startDate, endDate) : null;
+    const oooMap = hasMonths ? getOooMapFor(parsedTimeOff, { name: attorneyName, email: attorneyEmail }) : null;
 
-    let totalBillableTarget = 0;
-    let totalOpsTarget = 0;
-    let totalTarget = 0;
-    let oooDays = 0;
-    let holidayDays = 0;
-
-    Array.from(activeMonths).forEach(monthKey => {
-      const [year, month] = monthKey.split('-').map(Number);
-
-      const monthTarget = attorneyTargets[monthKey];
-      const billableTarget = monthTarget?.billableHours ?? defaultTarget.billableTarget;
-      const opsTarget = monthTarget?.opsHours ?? defaultTarget.opsTarget;
-      const monthTotalTarget = monthTarget?.totalHours ?? defaultTarget.totalTarget;
-
+    return computeAttorneyDetailTargets({
+      activeMonths,
+      monthTargets: attorneyTargets,
+      currentMonthKey,
       // Capacity-model fraction — the attorney's OOO reduces the target for any
       // period (in-progress or completed); firm holidays only affect intra-month
       // pace (they cancel for a full month, leaving a full clean month at 1).
-      const pm = proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooMap);
-
-      totalBillableTarget += billableTarget * pm.fraction;
-      totalOpsTarget += opsTarget * pm.fraction;
-      totalTarget += monthTotalTarget * pm.fraction;
-      oooDays += pm.oooDays;        // OOO / holiday context (UI messaging only)
-      holidayDays += pm.holidayDays;
+      getMonthProRate: (monthKey, year, month) =>
+        proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooMap),
     });
-
-    return {
-      billableTarget: Math.round(totalBillableTarget * 10) / 10,
-      opsTarget: Math.round(totalOpsTarget * 10) / 10,
-      totalTarget: Math.round(totalTarget * 10) / 10,
-      oooDays,
-      holidayDays,
-    };
   }, [attorneyEntries, attorneyTargets, dateRangeInfo, parsedTimeOff, attorneyName, attorneyEmail]);
 
   // Process attorney statistics
-  const attorneyStats = useMemo(() => {
-    if (!attorneyEntries.length) {
-      return {
-        totalHours: 0,
-        billableHours: 0,
-        opsHours: 0,
-        totalEarnings: 0,
-        totalAdjustments: 0,
-        matterCount: 0,
-        uniqueTransactionTypes: 0,
-        uniqueClients: 0,
-        avgHoursPerMatter: 0,
-        lastActivity: null,
-        firstActivity: null,
-        utilization: calculatedTargets.totalTarget > 0 ? 0 : null,
-        billableUtilization: calculatedTargets.billableTarget > 0 ? 0 : null,
-        opsUtilization: calculatedTargets.opsTarget > 0 ? 0 : null,
-      };
-    }
-
-    const stats = {
-      totalHours: 0,
-      billableHours: 0,
-      opsHours: 0,
-      totalEarnings: 0,
-      totalAdjustments: 0,
-      matters: new Set(),
-      transactionTypes: new Set(),
-      clients: new Set(),
-      lastActivity: null,
-      firstActivity: null,
-    };
-
-    filteredBillableEntries.forEach(entry => {
-      const billable = entry.billableHours || 0;
-      stats.billableHours += billable;
-      stats.totalHours += billable;
-      stats.totalEarnings += entry.earnings || 0;
-      stats.totalAdjustments += entry.adjustment || 0;
-
-      if (entry.matter) {
-        stats.matters.add(entry.matter);
-      }
-      if (entry.billingCategory) {
-        stats.transactionTypes.add(entry.billingCategory);
-      }
-      if (entry.client) {
-        stats.clients.add(entry.client);
-      }
-
-      const entryDate = getEntryDate(entry);
-      if (!stats.lastActivity || entryDate > stats.lastActivity) {
-        stats.lastActivity = entryDate;
-      }
-      if (!stats.firstActivity || entryDate < stats.firstActivity) {
-        stats.firstActivity = entryDate;
-      }
-    });
-
-    filteredOpsEntries.forEach(entry => {
-      const ops = entry.opsHours || 0;
-      stats.opsHours += ops;
-      stats.totalHours += ops;
-
-      const entryDate = getEntryDate(entry);
-      if (!stats.lastActivity || entryDate > stats.lastActivity) {
-        stats.lastActivity = entryDate;
-      }
-      if (!stats.firstActivity || entryDate < stats.firstActivity) {
-        stats.firstActivity = entryDate;
-      }
-    });
-
-    const utilization = calculatedTargets.totalTarget > 0
-      ? Math.round((stats.totalHours / calculatedTargets.totalTarget) * 100)
-      : null;
-    const billableUtilization = calculatedTargets.billableTarget > 0
-      ? Math.round((stats.billableHours / calculatedTargets.billableTarget) * 100)
-      : null;
-    const opsUtilization = calculatedTargets.opsTarget > 0
-      ? Math.round((stats.opsHours / calculatedTargets.opsTarget) * 100)
-      : null;
-
-    return {
-      ...stats,
-      matterCount: stats.matters.size,
-      uniqueTransactionTypes: stats.transactionTypes.size,
-      uniqueClients: stats.clients.size,
-      avgHoursPerMatter: stats.matters.size > 0
-        ? stats.billableHours / stats.matters.size
-        : 0,
-      utilization,
-      billableUtilization,
-      opsUtilization,
-    };
-  }, [attorneyEntries, filteredBillableEntries, filteredOpsEntries, calculatedTargets]);
+  const attorneyStats = useMemo(
+    () => computeAttorneyDetailStats({
+      billableEntries: filteredBillableEntries,
+      opsEntries: filteredOpsEntries,
+      targets: calculatedTargets,
+    }),
+    [filteredBillableEntries, filteredOpsEntries, calculatedTargets]
+  );
 
   // Annual utilization progress for this person — the same capacity-weighted
   // pacing shown on the Targets page, scoped to one member. The year follows the
@@ -450,154 +289,38 @@ const AttorneyDetailView = ({ attorneyName }) => {
   }, [currentUser, attorneyTargets, summaryYear, annualActuals, annualCapacity]);
 
   // Client breakdown data (billable entries only — ops entries have no client)
-  const clientBreakdown = useMemo(() => {
-    const breakdown = {};
-
-    filteredBillableEntries.forEach(entry => {
-      const client = entry.client || 'Unknown';
-      const billableHours = entry.billableHours || 0;
-      if (!breakdown[client]) {
-        breakdown[client] = {
-          name: client,
-          hours: 0,
-          billableHours: 0,
-          earnings: 0,
-          count: 0,
-        };
-      }
-      breakdown[client].billableHours += billableHours;
-      breakdown[client].hours += billableHours;
-      breakdown[client].earnings += entry.earnings || 0;
-      breakdown[client].count += 1;
-    });
-
-    return Object.values(breakdown).sort((a, b) => b.hours - a.hours);
-  }, [filteredBillableEntries]);
+  const clientBreakdown = useMemo(
+    () => buildClientBreakdown(filteredBillableEntries),
+    [filteredBillableEntries]
+  );
 
   // Matter breakdown data (billable entries only)
-  const matterBreakdown = useMemo(() => {
-    const breakdown = {};
-
-    filteredBillableEntries.forEach(entry => {
-      const matter = entry.matter;
-      if (!matter) return;
-      const billableHours = entry.billableHours || 0;
-      if (!breakdown[matter]) {
-        breakdown[matter] = { name: matter, hours: 0, count: 0 };
-      }
-      breakdown[matter].hours += billableHours;
-      breakdown[matter].count += 1;
-    });
-
-    return Object.values(breakdown).sort((a, b) => b.hours - a.hours);
-  }, [filteredBillableEntries]);
+  const matterBreakdown = useMemo(
+    () => buildMatterBreakdown(filteredBillableEntries),
+    [filteredBillableEntries]
+  );
 
   // Transaction type breakdown data (billable entries only)
-  const transactionBreakdown = useMemo(() => {
-    const breakdown = {};
-
-    filteredBillableEntries.forEach(entry => {
-      const category = entry.billingCategory || 'Other';
-      const billable = entry.billableHours || 0;
-
-      if (billable > 0) {
-        if (!breakdown[category]) {
-          breakdown[category] = {
-            type: category,
-            hours: 0,
-            earnings: 0,
-            count: 0,
-          };
-        }
-        breakdown[category].hours += billable;
-        breakdown[category].earnings += entry.earnings || 0;
-        breakdown[category].count += 1;
-      }
-    });
-
-    const result = Object.values(breakdown).sort((a, b) => b.hours - a.hours);
-    const totalHours = result.reduce((sum, t) => sum + t.hours, 0);
-
-    return result.map(t => ({
-      ...t,
-      percentage: totalHours > 0 ? Math.round((t.hours / totalHours) * 100) : 0,
-    }));
-  }, [filteredBillableEntries]);
+  const transactionBreakdown = useMemo(
+    () => buildTransactionBreakdown(filteredBillableEntries),
+    [filteredBillableEntries]
+  );
 
   // Ops category breakdown (ops entries only)
-  const opsBreakdown = useMemo(() => {
-    const breakdown = {};
-
-    filteredOpsEntries.forEach(entry => {
-      const opsHours = entry.opsHours || 0;
-      if (opsHours > 0) {
-        const category = entry.category || 'Other';
-        if (!breakdown[category]) {
-          breakdown[category] = {
-            category,
-            hours: 0,
-            count: 0,
-          };
-        }
-        breakdown[category].hours += opsHours;
-        breakdown[category].count += 1;
-      }
-    });
-
-    const result = Object.values(breakdown).sort((a, b) => b.hours - a.hours);
-    const totalHours = result.reduce((sum, t) => sum + t.hours, 0);
-
-    return result.map(t => ({
-      ...t,
-      percentage: totalHours > 0 ? Math.round((t.hours / totalHours) * 100) : 0,
-    }));
-  }, [filteredOpsEntries]);
+  const opsBreakdown = useMemo(
+    () => buildOpsBreakdown(filteredOpsEntries),
+    [filteredOpsEntries]
+  );
 
   // Monthly trend data
-  const monthlyTrend = useMemo(() => {
-    const monthlyData = {};
-    
-    attorneyEntries.forEach(entry => {
-      const entryDate = getEntryDate(entry);
-      const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-      
-      if (!monthlyData[monthKey]) {
-        monthlyData[monthKey] = {
-          month: monthKey,
-          label: new Date(entryDate.getFullYear(), entryDate.getMonth(), 1)
-            .toLocaleDateString('en-US', { month: 'short' }),
-          billableHours: 0,
-          opsHours: 0,
-          totalHours: 0,
-          earnings: 0,
-          count: 0,
-        };
-      }
-      
-      monthlyData[monthKey].billableHours += entry.billableHours || 0;
-      monthlyData[monthKey].opsHours += entry.opsHours || 0;
-      monthlyData[monthKey].totalHours += (entry.billableHours || 0) + (entry.opsHours || 0);
-      monthlyData[monthKey].earnings += entry.earnings || 0;
-      monthlyData[monthKey].count += 1;
-    });
-
-    return Object.values(monthlyData).sort((a, b) => a.month.localeCompare(b.month));
-  }, [attorneyEntries]);
+  const monthlyTrend = useMemo(() => buildMonthlyTrend(attorneyEntries), [attorneyEntries]);
 
   // Recent entries
-  const recentEntries = useMemo(() => {
-    return [...attorneyEntries]
-      .sort((a, b) => {
-        const dateA = getEntryDate(a);
-        const dateB = getEntryDate(b);
-        return dateB - dateA;
-      })
-      .slice(0, 50);
-  }, [attorneyEntries]);
+  const recentEntries = useMemo(() => selectRecentEntries(attorneyEntries), [attorneyEntries]);
 
   // Sam McClure's manual month-end adjustments (folded into earnings). Only show
   // the Adjustments KPI/column when this attorney actually has adjustment data.
-  const hasAdjustments = attorneyStats.totalAdjustments !== 0 || recentEntries.some((e) => e.adjustment);
+  const hasAdjustments = hasAdjustmentData(attorneyStats, recentEntries);
 
   const dateRangeLabel = getDateRangeLabel(dateRange, customDateStart, customDateEnd);
 

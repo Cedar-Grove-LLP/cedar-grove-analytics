@@ -3,6 +3,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from '../tooltips';
 import { CHART } from '@/utils/colors';
+import { CHART_ANIMATIONS_DISABLED } from '@/utils/constants';
 import { getSourceNote } from '@/utils/calcDefinitions.mjs';
 
 const SOURCE_NOTE = getSourceNote('serviceBreadth');
@@ -19,7 +20,7 @@ const ServiceBreadthChart = ({ data, title = "Service Breadth (Unique Transactio
           <XAxis dataKey="name" angle={-15} textAnchor="end" height={100} />
           <YAxis />
           <Tooltip content={<CustomTooltip sourceNote={SOURCE_NOTE} />} />
-          <Bar dataKey="uniqueTransactions" fill={CHART.accent} name="Unique Transaction Types" />
+          <Bar dataKey="uniqueTransactions" fill={CHART.accent} name="Unique Transaction Types" isAnimationActive={!CHART_ANIMATIONS_DISABLED} />
         </BarChart>
       </ResponsiveContainer>
     </div>

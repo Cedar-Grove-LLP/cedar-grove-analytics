@@ -4,6 +4,15 @@
 // Node-importable — see MONTH_NAMES_FULL/ABBR below).
 export { CHART_COLORS } from './colors.js';
 
+// E2E determinism switch: the emulator-targeted build (`npm run build:e2e`,
+// which sets NEXT_PUBLIC_USE_FIREBASE_EMULATORS=1 — never set in production)
+// disables Recharts series animations so Playwright structural assertions
+// (element counts, geometry) see the final render immediately. Every Recharts
+// series component (Bar/Pie/Area/…) passes
+// `isAnimationActive={!CHART_ANIMATIONS_DISABLED}`.
+export const CHART_ANIMATIONS_DISABLED =
+  process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATORS === '1';
+
 export const MONTHS = [
   { value: 1, label: 'January' },
   { value: 2, label: 'February' },

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { PerBarTooltip } from '../tooltips';
 import { CHART } from '@/utils/colors';
+import { CHART_ANIMATIONS_DISABLED } from '@/utils/constants';
 import { getSourceNote } from '@/utils/calcDefinitions.mjs';
 import { sortBySeniority } from '@/utils/seniority.mjs';
 
@@ -12,11 +13,20 @@ const SOURCE_NOTES = {
   ops: getSourceNote('opsHours'),
 };
 
+// Recharts spreads each data row's props onto the rendered SVG elements, so
+// non-plotted metadata must be stripped before the rows reach <BarChart>.
+// The attorney aggregation rows carry `role` ('Attorney'/'Partner' — cohort
+// logic, see cohortFilter.mjs), which would otherwise render as an invalid
+// ARIA role attribute on the bar <path>s (axe-core critical "aria-roles").
+// Exported for unit tests.
+export const toPlottedRows = (data) =>
+  (data || []).map(({ name, billable, ops }) => ({ name, billable, ops }));
+
 const BillableVsOpsChart = ({ data, title = "Billable vs Ops Time by Attorney" }) => {
   const [hoveredBarKey, setHoveredBarKey] = useState(null);
 
-  // Bars run left→right in firm seniority order.
-  const sortedData = sortBySeniority(data, (d) => d.name);
+  // Bars run left→right in firm seniority order, carrying only plotted fields.
+  const sortedData = sortBySeniority(toPlottedRows(data), (d) => d.name);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow" role="figure" aria-label={title}>
@@ -37,16 +47,18 @@ const BillableVsOpsChart = ({ data, title = "Billable vs Ops Time by Attorney" }
           />
           <Legend />
           <Bar 
-            dataKey="billable" 
+            dataKey="billable"
             fill={CHART.billable}
             name="Billable Hours"
+            isAnimationActive={!CHART_ANIMATIONS_DISABLED}
             onMouseEnter={() => setHoveredBarKey('billable')}
             onMouseLeave={() => setHoveredBarKey(null)}
           />
           <Bar 
-            dataKey="ops" 
+            dataKey="ops"
             fill={CHART.ops}
             name="Ops Hours"
+            isAnimationActive={!CHART_ANIMATIONS_DISABLED}
             onMouseEnter={() => setHoveredBarKey('ops')}
             onMouseLeave={() => setHoveredBarKey(null)}
           />

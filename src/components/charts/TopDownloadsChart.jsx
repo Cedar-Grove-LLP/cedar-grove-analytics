@@ -2,6 +2,7 @@
 
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CHART } from '@/utils/colors';
+import { CHART_ANIMATIONS_DISABLED } from '@/utils/constants';
 import { getSourceNote } from '@/utils/calcDefinitions.mjs';
 import { SourceNote } from '../tooltips';
 
@@ -51,7 +52,7 @@ const TopDownloadsChart = ({ data, mode = 'files', title }) => {
             tick={{ fontSize: 12 }}
           />
           <Tooltip content={<DownloadTooltip />} />
-          <Bar dataKey="downloads" fill={CHART.accent} name="Downloads" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="downloads" fill={CHART.accent} name="Downloads" radius={[0, 4, 4, 0]} isAnimationActive={!CHART_ANIMATIONS_DISABLED} />
         </BarChart>
       </ResponsiveContainer>
     </div>

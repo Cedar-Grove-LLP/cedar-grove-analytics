@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
+import { decideRoute } from '@/utils/authzLogic.mjs';
 
 export default function ProtectedRoute({
   children,
@@ -12,54 +13,33 @@ export default function ProtectedRoute({
   allowedAttorneyName = null // If set, only this attorney (or admins) can access
 }) {
   const { user, isAdmin, isPartialAdmin, isAuthorized, loading, userEmail } = useAuth();
-  const { users } = useFirestoreCache();
+  const { users, loading: usersLoading } = useFirestoreCache();
   const router = useRouter();
 
-  // Check if the logged-in user's email matches the email on this attorney's
-  // user doc. Memoized so the useEffect dep array has a stable reference —
-  // react-hooks/exhaustive-deps. Behavior unchanged: identity changes only
-  // when [isAdmin, allowedAttorneyName, userEmail, users] change, which were
-  // already direct deps of the effect.
-  const canAccessAttorneyPage = useCallback(() => {
-    if (isAdmin) return true;
-    if (!allowedAttorneyName) return true;
-    if (!userEmail) return false;
-
-    // Find the user doc for this attorney page and compare emails
-    const attorneyUser = users.find(u => (u.name || u.id) === allowedAttorneyName);
-    if (!attorneyUser || !attorneyUser.email) return false;
-
-    return attorneyUser.email.toLowerCase() === userEmail;
-  }, [isAdmin, allowedAttorneyName, userEmail, users]);
-
+  // The allow/redirect decision (including the attorney-page email match) is
+  // the pure decideRoute helper in src/utils/authzLogic.mjs — evaluated once
+  // in the redirect effect and once for the render gate below, with the same
+  // inputs. `usersLoading` makes the attorney-page email match wait for the
+  // users cache instead of bouncing on a not-yet-loaded cache (a direct load
+  // of one's own page used to race to /login?error=access_denied); a
+  // definitive mismatch still redirects once the cache has loaded, and
+  // unauthenticated/unauthorized users redirect immediately.
   useEffect(() => {
-    if (!loading) {
-      // Redirect if: no user, anonymous user, or not authorized
-      if (!user || user.isAnonymous || !isAuthorized) {
-        router.push('/login');
-        return;
-      }
-
-      // If admin is required but user is not admin (partial admins are allowed through)
-      if (requireAdmin && !isAdmin && !isPartialAdmin) {
-        router.push('/login?error=admin_required');
-        return;
-      }
-
-      // If page denies partial admins and user is not a full admin
-      if (denyPartialAdmin && isPartialAdmin && !isAdmin) {
-        router.push('/admin');
-        return;
-      }
-
-      // If trying to access another attorney's page
-      if (allowedAttorneyName && !canAccessAttorneyPage()) {
-        router.push('/login?error=access_denied');
-      }
+    const decision = decideRoute(
+      { user, isAuthorized, isAdmin, isPartialAdmin, loading, userEmail, users, usersLoading },
+      { requireAdmin, denyPartialAdmin, allowedAttorneyName }
+    );
+    if (decision.outcome === 'redirect') {
+      router.push(decision.redirectTo);
     }
-  }, [user, isAdmin, isPartialAdmin, isAuthorized, loading, router, requireAdmin, denyPartialAdmin, allowedAttorneyName, canAccessAttorneyPage]);
+  }, [user, isAdmin, isPartialAdmin, isAuthorized, loading, router, requireAdmin, denyPartialAdmin, allowedAttorneyName, userEmail, users, usersLoading]);
 
-  if (loading) {
+  const decision = decideRoute(
+    { user, isAuthorized, isAdmin, isPartialAdmin, loading, userEmail, users, usersLoading },
+    { requireAdmin, denyPartialAdmin, allowedAttorneyName }
+  );
+
+  if (decision.outcome === 'loading') {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="text-center" role="status">
@@ -70,23 +50,9 @@ export default function ProtectedRoute({
     );
   }
 
-  // Don't render children if not authenticated properly
-  if (!user || user.isAnonymous || !isAuthorized) {
-    return null;
-  }
-
-  // Don't render if admin is required but user is not admin or partial admin
-  if (requireAdmin && !isAdmin && !isPartialAdmin) {
-    return null;
-  }
-
-  // Don't render if page denies partial admins
-  if (denyPartialAdmin && isPartialAdmin && !isAdmin) {
-    return null;
-  }
-
-  // Don't render if trying to access another attorney's page
-  if (allowedAttorneyName && !canAccessAttorneyPage()) {
+  // Don't render children unless every gate passes (the effect above handles
+  // the matching redirect)
+  if (decision.outcome !== 'allow') {
     return null;
   }
 

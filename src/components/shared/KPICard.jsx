@@ -21,7 +21,14 @@ const KPICard = ({
         {Icon && <Icon className={`w-5 h-5 ${iconColor}`} aria-hidden="true" />}
       </div>
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-3xl font-bold text-cg-black">{value}</div>
+        {/* data-testid ships only when a calcKey identifies the metric — E2E
+            specs (tests/e2e/) address KPI values as kpi-<calcKey>. */}
+        <div
+          className="text-3xl font-bold text-cg-black"
+          data-testid={info?.calcKey ? `kpi-${info.calcKey}` : undefined}
+        >
+          {value}
+        </div>
       </div>
       {subtitle && (
         <div className="text-sm text-cg-dark text-center">{subtitle}</div>

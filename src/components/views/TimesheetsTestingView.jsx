@@ -15,7 +15,19 @@ import {
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { CalcTooltip } from '@/components/shared';
 import { getEntryDate } from '@/utils/dateHelpers';
-import { findRateInfo } from '@/utils/rateLookup.mjs';
+import {
+  MONTHS,
+  monthIndex,
+  buildMonthKey,
+  parseMonthKey,
+  sortMonthKeysDesc,
+  collectMonthKeys,
+  sortBySheetRow,
+  resolveTakeHomeRate,
+  computeManualEarnings,
+  buildManualOpsEntry,
+  buildManualBillableEntry,
+} from '@/utils/manualEntry.mjs';
 import { OPS_CATEGORIES, BILLING_CATEGORIES } from '@/utils/constants';
 
 // ---------------------------------------------------------------------------
@@ -68,30 +80,9 @@ const StatCard = ({ label, value, tone, calcKey }) => (
 );
 const SourceNote = ({ children }) => <p className="text-[12px] leading-relaxed text-gray-600 mb-2">{children}</p>;
 
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const monthIndex = (name) => MONTHS.indexOf(name);
-
-const buildMonthKey = (year, month) => `${year}_${month}`;
-const parseMonthKey = (key) => {
-  const idx = key.indexOf('_');
-  if (idx < 0) return { year: 0, month: '' };
-  return { year: Number(key.slice(0, idx)), month: key.slice(idx + 1) };
-};
-
-const sortMonthKeysDesc = (keys) => [...keys].sort((a, b) => {
-  const pa = parseMonthKey(a);
-  const pb = parseMonthKey(b);
-  if (pb.year !== pa.year) return pb.year - pa.year;
-  return monthIndex(pb.month) - monthIndex(pa.month);
-});
-
-const collectMonthKeys = (billables, ops, eightThreeB, sheetTotals) => {
-  const keys = new Set(Object.keys(sheetTotals || {}));
-  for (const entry of [...billables, ...ops, ...eightThreeB]) {
-    if (entry?.year != null && entry?.month) keys.add(buildMonthKey(entry.year, entry.month));
-  }
-  return sortMonthKeysDesc([...keys]);
-};
+// Month-key helpers (buildMonthKey/parseMonthKey/sortMonthKeysDesc/
+// collectMonthKeys), sheet-row sorting, and the save-time earnings math all
+// live in @/utils/manualEntry.mjs (pure, unit-tested).
 
 const fmtHrsText = (n) => {
   const v = Number(n) || 0;
@@ -154,8 +145,6 @@ const SheetOnlyStatCard = ({ label, value, formatValue = fmt, calcKey = 'timeshe
     value={value == null ? <NotSynced /> : formatValue(value)}
   />
 );
-
-const sortBySheetRow = (rows) => [...rows].sort((a, b) => (a.sheetRowNumber ?? Infinity) - (b.sheetRowNumber ?? Infinity));
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const toLocalIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -352,17 +341,18 @@ const TimesheetsTestingView = () => {
 
   const handleAddOps = async () => {
     if (!canSubmit) { setAddError('Fill in description, category, date, and hours (> 0).'); return; }
-    const [y, m, d] = formDate.split('-').map(Number);
+    const entry = buildManualOpsEntry({
+      dateIso: formDate,
+      description: form.description,
+      category: form.category,
+      hours: hoursNum,
+    });
     setSaving(true);
     setAddError('');
     try {
       await addDoc(collection(db, 'users', selectedUserId, 'opsManual'), {
-        date: Timestamp.fromDate(new Date(y, m - 1, d, 12, 0, 0)),
-        description: form.description.trim(),
-        category: form.category,
-        hours: hoursNum,
-        month: MONTHS[m - 1],
-        year: y,
+        ...entry,
+        date: Timestamp.fromDate(entry.date),
         createdAt: serverTimestamp(),
         createdBy: auth.currentUser?.email || '',
       });
@@ -401,13 +391,10 @@ const TimesheetsTestingView = () => {
   // Take-home rate for the entry month (the sheet's "Rate" cell — NOT the
   // client billing rate), resolved with the same backward fallback as every
   // other rate lookup. Earnings = hours × take-home, frozen at save time.
+  // Both computations live in @/utils/manualEntry.mjs (pure, unit-tested).
   const userRates = allRates?.[effectiveUserName] || null;
-  const bTakeHome = useMemo(() => {
-    if (!userRates || !bFormDate) return 0;
-    const info = findRateInfo(userRates, bFormDate.slice(0, 7));
-    return info.sourceMonthKey ? (Number(userRates[info.sourceMonthKey]?.takeHomeRate) || 0) : 0;
-  }, [userRates, bFormDate]);
-  const bEarnings = bHoursNum > 0 ? Math.round(bHoursNum * bTakeHome * 100) / 100 : 0;
+  const bTakeHome = useMemo(() => resolveTakeHomeRate(userRates, bFormDate), [userRates, bFormDate]);
+  const bEarnings = computeManualEarnings(bHoursNum, bTakeHome);
   const canSubmitBill = !!selectedUserId && bForm.client !== '' && bForm.category !== ''
     && bFormDate !== '' && bHoursNum > 0 && bTakeHome > 0 && !bSaving;
 
@@ -418,22 +405,21 @@ const TimesheetsTestingView = () => {
         : `No take-home rate configured for ${effectiveUserName} this month — add it in User Management first.`);
       return;
     }
-    const [y, m, d] = bFormDate.split('-').map(Number);
+    const entry = buildManualBillableEntry({
+      dateIso: bFormDate,
+      client: bForm.client,
+      matter: bForm.matter,
+      hours: bHoursNum,
+      earnings: bEarnings,
+      billingCategory: bForm.category,
+      notes: bForm.notes,
+    });
     setBSaving(true);
     setBAddError('');
     try {
       await addDoc(collection(db, 'users', selectedUserId, 'billablesManual'), {
-        date: Timestamp.fromDate(new Date(y, m - 1, d, 12, 0, 0)),
-        client: bForm.client,
-        matter: bForm.matter.trim(),
-        hours: bHoursNum,
-        earnings: bEarnings,
-        billingCategory: bForm.category,
-        notes: bForm.notes.trim(),
-        adjustment: 0,
-        reimbursements: 0,
-        month: MONTHS[m - 1],
-        year: y,
+        ...entry,
+        date: Timestamp.fromDate(entry.date),
         createdAt: serverTimestamp(),
         createdBy: auth.currentUser?.email || '',
       });

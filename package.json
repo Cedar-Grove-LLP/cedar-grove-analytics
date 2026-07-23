@@ -2,12 +2,17 @@
   "name": "cedar-grove-analytics-next",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:e2e": "NEXT_PUBLIC_USE_FIREBASE_EMULATORS=1 next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "test:e2e": "firebase emulators:exec --only auth,firestore --project demo-cedar-grove 'node scripts/seed-e2e-data.mjs && playwright test'",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-cedar-grove 'node --test tests/rules/*.test.mjs'",
+    "test:components": "vitest run"
   },
   "dependencies": {
     "d3": "^7.9.0",
@@ -20,10 +25,19 @@
     "recharts": "^3.5.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "@playwright/test": "^1.54.0",
     "@tailwindcss/postcss": "^4.1.17",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.3.0",
+    "@vitejs/plugin-react": "^5.0.0",
     "baseline-browser-mapping": "^2.10.29",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
-    "tailwindcss": "^4"
+    "firebase-tools": "^14.0.0",
+    "jsdom": "^26.0.0",
+    "tailwindcss": "^4",
+    "vitest": "^3.2.0"
   }
 }

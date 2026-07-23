@@ -135,6 +135,7 @@ const ClientsTable = ({
                   client gets a tag, so no empty state is needed here */}
               <td className="px-6 py-4 whitespace-nowrap text-sm">
                 <span
+                  data-testid="payment-status-tag"
                   title={client.holdFlag ? HOLD_FLAG_MESSAGE : undefined}
                   className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusBadge(client.paymentStatus)}`}
                 >

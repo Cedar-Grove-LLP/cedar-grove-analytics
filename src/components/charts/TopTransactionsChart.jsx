@@ -3,6 +3,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { CustomTooltip } from '../tooltips';
 import { CHART } from '@/utils/colors';
+import { CHART_ANIMATIONS_DISABLED } from '@/utils/constants';
 import { getSourceNote } from '@/utils/calcDefinitions.mjs';
 
 const TopTransactionsChart = ({ data, title = "Top Transaction Types by Time" }) => {
@@ -16,7 +17,7 @@ const TopTransactionsChart = ({ data, title = "Top Transaction Types by Time" })
           <YAxis />
           <Tooltip content={<CustomTooltip sourceNote={getSourceNote('billableHours')} />} />
           <Legend />
-          <Bar dataKey="totalHours" fill={CHART.billable} name="Total Hours" />
+          <Bar dataKey="totalHours" fill={CHART.billable} name="Total Hours" isAnimationActive={!CHART_ANIMATIONS_DISABLED} />
         </BarChart>
       </ResponsiveContainer>
     </div>

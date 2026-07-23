@@ -10,8 +10,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { DateRangeDropdown, AttorneyFilterDropdown } from './shared';
 import { OverviewView, AttorneysView, TransactionsView, OpsView, ClientsView, DownloadsView, TargetsView, TechTeamView, PracticeCompositionView, InvoicesTestingView, TimesheetsTestingView } from './views';
+import { TRANSACTIONS_OPS_TABS, defaultDashboardTab, resolveDashboardTab } from '@/utils/authzLogic.mjs';
 
-const TRANSACTIONS_OPS_TABS = ['transactions', 'ops'];
 const DEFAULT_DASHBOARD_DATE_RANGE = 'current-month';
 const VALID_DATE_RANGES = new Set([
   'current-week',
@@ -102,13 +102,18 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
 
   // View state — read initial tab from URL query param (?tab=clients)
   const VALID_TABS = ['overview', 'attorneys', 'transactions', 'ops', 'clients', 'downloads', 'targets', 'practice-composition', 'tech-team', 'invoices-testing', 'timesheets-testing'];
-  const defaultTab = downloadsOnly ? 'downloads' : transactionsOpsOnly ? 'transactions' : 'overview';
+  const defaultTab = defaultDashboardTab({ downloadsOnly, transactionsOpsOnly });
   const tabFromUrl = searchParams.get('tab');
-  // Restricted (downloads-only / transactions+ops-only) users must not reach the
-  // Tech Team tab via the ?tab=tech-team URL — it isn't in their allowed tab set.
-  const RESTRICTED_BLOCKED_TABS = new Set(['tech-team', 'invoices-testing', 'timesheets-testing']);
-  const isTabAllowed = (tab) => VALID_TABS.includes(tab) && !(restrictedMode && RESTRICTED_BLOCKED_TABS.has(tab));
-  const initialTab = tabFromUrl && isTabAllowed(tabFromUrl) ? tabFromUrl : defaultTab;
+  // Restricted (downloads-only / transactions+ops-only) users may only reach
+  // their allowlisted tabs via ?tab= — anything else (blocked, admin-only,
+  // unknown) falls back to their default tab. See resolveDashboardTab in
+  // src/utils/authzLogic.mjs (tested by tests/authz-logic.test.mjs).
+  const initialTab = resolveDashboardTab({
+    requestedTab: tabFromUrl,
+    downloadsOnly,
+    transactionsOpsOnly,
+    validTabs: VALID_TABS,
+  });
   const [selectedView, setSelectedView] = useState(initialTab);
 
   const updateDashboardUrl = useCallback((overrides = {}) => {

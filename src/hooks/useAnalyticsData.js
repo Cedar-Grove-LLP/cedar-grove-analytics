@@ -5,6 +5,9 @@ import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import {
   getEntryDate,
   getPSTDate,
+  calculateDateRange,
+  derivePriorPeriodWindow,
+  listRangeMonthKeys,
 } from '../utils/dateHelpers';
 import {
   parseTimeOff,
@@ -12,13 +15,17 @@ import {
   getOooMapFor,
   proRateMonth,
 } from '../utils/timeOff';
-import {
-  isAttorneyHidden,
-  shouldIncludeAttorneyData,
-  filterHiddenAttorneys,
-} from '../utils/hiddenAttorneys.mjs';
-import { monthKeyFromDate } from '../utils/rateLookup.mjs';
+import { filterHiddenAttorneys } from '../utils/hiddenAttorneys.mjs';
 import { sortBySeniority } from '../utils/seniority.mjs';
+import {
+  buildUserActivity,
+  buildAttorneyStats,
+  selectVisibleAttorneys,
+  buildAttorneyTotalsIncludingHidden,
+  calculateUtilization,
+  computeGrossBillables,
+  computeFirmTotals,
+} from '../utils/analyticsAggregation.mjs';
 import { hasJoinedBy } from '@/utils/userActivation.mjs';
 
 export const useAnalyticsData = ({
@@ -89,66 +96,18 @@ export const useAnalyticsData = ({
     return userRoleMap[name] || 'Attorney';
   }, [userRoleMap]);
 
-  // Calculate the date range boundaries
+  // Calculate the date range boundaries (canonical implementation lives in
+  // dateHelpers.calculateDateRange; all-time derives its start from the
+  // earliest billable OR ops entry, hence the concatenated array).
   const dateRangeInfo = useMemo(() => {
     const now = getPSTDate();
-    let startDate;
-    let endDate = new Date(now);
-
-    switch (dateRange) {
-      case 'all-time':
-        if ((allBillableEntries && allBillableEntries.length > 0) || (allOpsEntries && allOpsEntries.length > 0)) {
-          const billableDates = (allBillableEntries || []).map(e => getEntryDate(e)).filter(d => d);
-          const opsDates = (allOpsEntries || []).map(e => getEntryDate(e)).filter(d => d);
-          const allDates = [...billableDates, ...opsDates];
-          if (allDates.length > 0) {
-            startDate = new Date(Math.min(...allDates.map(d => d.getTime())));
-          } else {
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          }
-        } else {
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        }
-        break;
-      case 'current-week': {
-        const dayOfWeek = now.getDay();
-        // Monday = 1, so days since last Monday: (dow + 6) % 7
-        const daysSinceMonday = (dayOfWeek + 6) % 7;
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday, 0, 0, 0, 0);
-        break;
-      }
-      case 'last-week': {
-        const dow = now.getDay();
-        // Monday = 1, so days since last Monday: (dow + 6) % 7
-        const daysSinceMonday = (dow + 6) % 7;
-        const thisMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday, 0, 0, 0, 0);
-        startDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 7, 0, 0, 0, 0);
-        endDate = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate() - 1, 23, 59, 59, 999);
-        break;
-      }
-      case 'current-month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        break;
-      case 'last-month':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-        break;
-      case 'trailing-60':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60, 0, 0, 0, 0);
-        break;
-      case 'custom':
-        if (customDateStart && customDateEnd) {
-          const [startYear, startMonth, startDay] = customDateStart.split('-').map(Number);
-          const [endYear, endMonth, endDay] = customDateEnd.split('-').map(Number);
-          startDate = new Date(startYear, startMonth - 1, startDay);
-          endDate = new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
-        } else {
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        }
-        break;
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    }
+    const { startDate, endDate } = calculateDateRange(
+      dateRange,
+      customDateStart,
+      customDateEnd,
+      [...(allBillableEntries || []), ...(allOpsEntries || [])],
+      now,
+    );
 
     // Current month key for comparison
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -158,45 +117,10 @@ export const useAnalyticsData = ({
 
   // Equivalent prior window for period-over-period deltas (e.g. last-month May
   // → prior April). all-time has no meaningful prior period.
-  const priorDateRangeInfo = useMemo(() => {
-    const now = getPSTDate();
-    const { startDate: curStart, endDate: curEnd } = dateRangeInfo;
-
-    if (dateRange === 'all-time' || !curStart || !curEnd) {
-      return { startDate: null, endDate: null, hasPrior: false };
-    }
-
-    // Completed calendar month → the whole previous calendar month.
-    if (dateRange === 'last-month') {
-      const startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0);
-      const endDate = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59, 999);
-      return { startDate, endDate, hasPrior: true };
-    }
-
-    // In-progress periods are partial (period start → now), so the prior window
-    // must cover the SAME elapsed span aligned to the start of the previous
-    // period — otherwise an 8-day month-to-date would compare against a full
-    // ~30-day month and the delta would be systematically negative.
-    const elapsedMs = curEnd.getTime() - curStart.getTime();
-    if (dateRange === 'current-month') {
-      const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-      const endDate = new Date(startDate.getTime() + elapsedMs);
-      return { startDate, endDate, hasPrior: true };
-    }
-    if (dateRange === 'current-week') {
-      const startDate = new Date(
-        curStart.getFullYear(), curStart.getMonth(), curStart.getDate() - 7, 0, 0, 0, 0
-      );
-      const endDate = new Date(startDate.getTime() + elapsedMs);
-      return { startDate, endDate, hasPrior: true };
-    }
-
-    // Fixed-length / already-complete windows (last-week, trailing-60, custom)
-    // → the equal-length window immediately before the current one.
-    const endDate = new Date(curStart.getTime() - 1);
-    const startDate = new Date(endDate.getTime() - elapsedMs);
-    return { startDate, endDate, hasPrior: true };
-  }, [dateRange, dateRangeInfo]);
+  const priorDateRangeInfo = useMemo(
+    () => derivePriorPeriodWindow(dateRange, dateRangeInfo),
+    [dateRange, dateRangeInfo]
+  );
 
   // Names of attorneys explicitly toggled inactive in the admin panel.
   // Inactive attorneys are only surfaced when the selected range overlaps their data.
@@ -349,266 +273,77 @@ export const useAnalyticsData = ({
   }, [dateRangeInfo, userTargets]);
 
   // Calculate the months spanned by the selected date range (for target calculation)
-  const dateRangeMonths = useMemo(() => {
-    const { startDate, endDate } = dateRangeInfo;
-    const months = [];
-    if (!startDate || !endDate) return months;
-    const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-    const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
-    while (cursor <= end) {
-      months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`);
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
-    return months;
-  }, [dateRangeInfo]);
+  const dateRangeMonths = useMemo(
+    () => listRangeMonthKeys(dateRangeInfo.startDate, dateRangeInfo.endDate),
+    [dateRangeInfo]
+  );
 
-  // Process user data with proper target calculations
+  // Process user data with proper target calculations (pure passes live in
+  // utils/analyticsAggregation.mjs; this memo wires in the fetched data).
   const attorneyData = useMemo(() => {
-    const userStats = {};
-    const userMonthlyActivity = {};
-
     const { startDate, endDate } = dateRangeInfo;
 
     // Seed all users from the database so they appear even with zero hours
+    // (respecting the global attorney filter).
+    const seedNames = [];
     firebaseUsers.forEach(user => {
       const userName = user.name || user.id;
-
-      // Respect global attorney filter
       if (globalAttorneyFilter.length > 0 && !globalAttorneyFilter.includes(userName)) {
         return;
       }
-
-      userMonthlyActivity[userName] = {
-        months: new Set(),
-        billable: 0,
-        ops: 0,
-        earnings: 0,
-        adjustment: 0,
-        transactions: {},
-        clients: {}
-      };
+      seedNames.push(userName);
     });
 
-    // First pass: collect billable hours per user
-    filteredBillableEntries.forEach(entry => {
-      const userName = userMap[entry.userId] || entry.userId;
-      const entryDate = getEntryDate(entry);
-
-      if (!userMonthlyActivity[userName]) {
-        userMonthlyActivity[userName] = {
-          months: new Set(),
-          billable: 0,
-          ops: 0,
-          earnings: 0,
-          adjustment: 0,
-          transactions: {},
-          clients: {}
-        };
-      }
-
-      if (entryDate) {
-        const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-        userMonthlyActivity[userName].months.add(monthKey);
-      }
-
-      const billableHours = entry.billableHours || 0;
-      const earnings = entry.earnings || 0;
-
-      userMonthlyActivity[userName].billable += billableHours;
-      userMonthlyActivity[userName].earnings += earnings;
-      userMonthlyActivity[userName].adjustment += entry.adjustment || 0;
-      if (entry.adjustment) userMonthlyActivity[userName].hasAdjustment = true;
-      // Gross billables = rate × hours (distinct from take-home `earnings`)
-      if (billableHours > 0) {
-        userMonthlyActivity[userName].grossBillables =
-          (userMonthlyActivity[userName].grossBillables || 0) + getRate(userName, entryDate) * billableHours;
-      }
-
-      const category = entry.billingCategory || 'Other';
-      const client = entry.client || 'Unknown';
-      const isAdjustment = category.toLowerCase() === 'adjustment' || category.toLowerCase() === 'adjustments';
-
-      // Track transactions, but exclude adjustments
-      if (billableHours > 0 && !isAdjustment) {
-        if (!userMonthlyActivity[userName].transactions[category]) {
-          userMonthlyActivity[userName].transactions[category] = 0;
-        }
-        userMonthlyActivity[userName].transactions[category] += billableHours;
-      }
-
-      if (!userMonthlyActivity[userName].clients[client]) {
-        userMonthlyActivity[userName].clients[client] = 0;
-      }
-      userMonthlyActivity[userName].clients[client] += billableHours;
-    });
-
-    // Second pass: collect ops hours per user
-    filteredOpsEntries.forEach(entry => {
-      const userName = userMap[entry.userId] || entry.userId;
-      const entryDate = getEntryDate(entry);
-
-      if (!userMonthlyActivity[userName]) {
-        userMonthlyActivity[userName] = {
-          months: new Set(),
-          billable: 0,
-          ops: 0,
-          earnings: 0,
-          adjustment: 0,
-          transactions: {},
-          clients: {}
-        };
-      }
-
-      if (entryDate) {
-        const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-        userMonthlyActivity[userName].months.add(monthKey);
-      }
-
-      const opsHours = entry.opsHours || 0;
-      userMonthlyActivity[userName].ops += opsHours;
+    const activity = buildUserActivity({
+      billableEntries: filteredBillableEntries,
+      opsEntries: filteredOpsEntries,
+      getUserName: (entry) => userMap[entry.userId] || entry.userId,
+      getRate,
+      seedNames,
     });
 
     // Firm holidays for the active range (calendar-sourced, or federal fallback).
     // Range-dependent only, so resolve once for all attorneys.
     const rangeHolidaySet = getHolidaySet(parsedTimeOff, startDate, endDate);
 
-    // Third pass: calculate targets for each user based on date range months
-    Object.entries(userMonthlyActivity).forEach(([userName, data]) => {
-      let totalBillableTarget = 0;
-      let totalOpsTarget = 0;
-      let totalTarget = 0;
-      let oooDays = 0;
-      let holidayDays = 0;
-
-      const userTargetData = userTargets[userName] || {};
-      const defaultTarget = getDefaultTarget(userName);
-
-      // This attorney's out-of-office days (joined by email, then name).
-      const oooMap = getOooMapFor(parsedTimeOff, { name: userName, email: userEmailMap[userName] || '' });
-
-      // Use date range months for target calculation so users with zero hours
-      // still get proper pro-rated targets for the selected period
-      const monthsForTargets = dateRangeMonths.length > 0 ? dateRangeMonths : Array.from(data.months);
-
-      // If no months at all, use defaults for one month
-      if (monthsForTargets.length === 0) {
-        totalBillableTarget = defaultTarget.billableHours;
-        totalOpsTarget = defaultTarget.opsHours;
-        totalTarget = defaultTarget.totalHours;
-      } else {
-        monthsForTargets.forEach(monthKey => {
-          const [year, month] = monthKey.split('-').map(Number);
-
-          // Get the target for this month
-          const monthTarget = userTargetData[monthKey];
-          const billableTarget = monthTarget?.billableHours ?? defaultTarget.billableHours;
-          const opsTarget = monthTarget?.opsHours ?? defaultTarget.opsHours;
-          const monthTotalTarget = monthTarget?.totalHours ?? defaultTarget.totalHours;
-
-          // Capacity-model fraction: firm holidays cancel for a full month (they
-          // only affect intra-month pace), while the attorney's OOO reduces the
-          // target for any period — in-progress or completed. A fully-OOO month
-          // yields 0; a full clean month yields exactly 1 (unchanged behavior).
-          const pm = proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooMap);
-
-          totalBillableTarget += billableTarget * pm.fraction;
-          totalOpsTarget += opsTarget * pm.fraction;
-          totalTarget += monthTotalTarget * pm.fraction;
-          oooDays += pm.oooDays;        // OOO / holiday context (UI messaging only)
-          holidayDays += pm.holidayDays;
-        });
-      }
-
-      userStats[userName] = {
-        name: userName,
-        billable: data.billable,
-        ops: data.ops,
-        earnings: data.earnings,
-        adjustment: data.adjustment || 0,
-        hasAdjustment: !!data.hasAdjustment,
-        grossBillables: data.grossBillables || 0,
-        target: Math.round(totalTarget * 10) / 10,
-        billableTarget: Math.round(totalBillableTarget * 10) / 10,
-        opsTarget: Math.round(totalOpsTarget * 10) / 10,
-        oooDays,
-        holidayDays,
-        role: getUserRole(userName),
-        employmentType: userEmploymentTypeMap[userName] || 'FTE',
-        transactions: data.transactions,
-        clients: data.clients,
-        topTransactions: Object.entries(data.transactions)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([name]) => name)
-      };
+    const allUserData = buildAttorneyStats({
+      activity,
+      rangeMonths: dateRangeMonths,
+      userTargets,
+      getDefaultTarget,
+      // Capacity-model fraction: firm holidays cancel for a full month (they
+      // only affect intra-month pace), while the attorney's OOO reduces the
+      // target for any period — in-progress or completed. A fully-OOO month
+      // yields 0; a full clean month yields exactly 1 (unchanged behavior).
+      getMonthProRateFor: (userName) => {
+        // This attorney's out-of-office days (joined by email, then name),
+        // resolved once per user.
+        const oooMap = getOooMapFor(parsedTimeOff, { name: userName, email: userEmailMap[userName] || '' });
+        return (monthKey, year, month) =>
+          proRateMonth(year, month, dateRangeInfo, rangeHolidaySet, oooMap);
+      },
+      getUserRole,
+      getEmploymentType: (userName) => userEmploymentTypeMap[userName] || 'FTE',
     });
 
-    // Convert to array and filter out hidden users from display
-    const allUserData = Object.values(userStats);
-
-    const visibleUserData = allUserData.filter(user => {
-      // Inactive attorneys only show when the timeframe overlaps their data.
-      if (inactiveAttorneyNames.has(user.name) && !namesWithDataInRange.has(user.name)) {
-        return false;
-      }
-      // Not-yet-joined attorneys only show when the timeframe overlaps their data.
-      if (notYetJoinedAttorneyNames.has(user.name) && !namesWithDataInRange.has(user.name)) {
-        return false;
-      }
-      return shouldIncludeAttorneyData(user.name, startDate, endDate) &&
-             !isAttorneyHidden(user.name);
+    // Filter out hidden users from display; firm-seniority order.
+    return selectVisibleAttorneys(allUserData, {
+      inactiveNames: inactiveAttorneyNames,
+      notYetJoinedNames: notYetJoinedAttorneyNames,
+      namesWithData: namesWithDataInRange,
+      startDate,
+      endDate,
     });
-
-    // Default per-attorney order is firm seniority, so any consumer that renders
-    // this list as-is (and not via its own sort) shows staff most→least tenured.
-    return sortBySeniority(visibleUserData, user => user.name || user.id);
   }, [filteredBillableEntries, filteredOpsEntries, userMap, getRate, dateRangeInfo, userTargets, getUserRole, userEmploymentTypeMap, userEmailMap, parsedTimeOff, getDefaultTarget, firebaseUsers, globalAttorneyFilter, dateRangeMonths, inactiveAttorneyNames, namesWithDataInRange, notYetJoinedAttorneyNames]);
 
   // Create a separate dataset that includes hidden users for totals calculation
   const allAttorneyDataIncludingHidden = useMemo(() => {
-    const userStats = {};
-    const userMonthlyActivity = {};
-
-    // Collect billable hours
-    filteredBillableEntries.forEach(entry => {
-      const userName = userMap[entry.userId] || entry.userId;
-
-      if (!userMonthlyActivity[userName]) {
-        userMonthlyActivity[userName] = { billable: 0, ops: 0, earnings: 0, adjustment: 0 };
-      }
-
-      userMonthlyActivity[userName].billable += (entry.billableHours || 0);
-      userMonthlyActivity[userName].earnings += (entry.earnings || 0);
-      userMonthlyActivity[userName].adjustment += (entry.adjustment || 0);
+    return buildAttorneyTotalsIncludingHidden({
+      billableEntries: filteredBillableEntries,
+      opsEntries: filteredOpsEntries,
+      getUserName: (entry) => userMap[entry.userId] || entry.userId,
+      getDefaultTarget,
     });
-
-    // Collect ops hours
-    filteredOpsEntries.forEach(entry => {
-      const userName = userMap[entry.userId] || entry.userId;
-
-      if (!userMonthlyActivity[userName]) {
-        userMonthlyActivity[userName] = { billable: 0, ops: 0, earnings: 0, adjustment: 0 };
-      }
-
-      userMonthlyActivity[userName].ops += (entry.opsHours || 0);
-    });
-
-    Object.entries(userMonthlyActivity).forEach(([userName, data]) => {
-      const defaultTarget = getDefaultTarget(userName);
-
-      userStats[userName] = {
-        name: userName,
-        billable: data.billable,
-        ops: data.ops,
-        earnings: data.earnings,
-        adjustment: data.adjustment || 0,
-        target: defaultTarget.totalHours,
-        billableTarget: defaultTarget.billableHours,
-        opsTarget: defaultTarget.opsHours,
-      };
-    });
-
-    return Object.values(userStats);
     // userTargets is intentionally NOT in this dep array: this memo body
     // does not read userTargets directly; it only calls getDefaultTarget
     // (a useCallback with [dateRangeInfo, userTargets] deps). When
@@ -1156,14 +891,9 @@ export const useAnalyticsData = ({
     return { active, quiet, terminated, total };
   }, [firebaseClients]);
 
-  // Calculate utilization. Returns null (→ "N/A") when the pro-rated target is 0,
-  // which now happens when an attorney is out of office for the entire period —
-  // reporting 0% there would misread leave as underperformance.
-  const calculateUtilization = (user) => {
-    const total = user.billable + user.ops;
-    if (!user.target || user.target <= 0) return null;
-    return Math.round((total / user.target) * 100);
-  };
+  // Utilization now lives in utils/analyticsAggregation.mjs
+  // (calculateUtilization — null → "N/A" when the pro-rated target is 0);
+  // re-exported unchanged from this hook's return object below.
 
   // Total firm-wide revenue accrued across all months (from monthlyMetrics/all)
   const totalRevenueAccrued = useMemo(() => {
@@ -1245,92 +975,23 @@ export const useAnalyticsData = ({
   // attorneys with no usable rates at all. Surfaced as an explicit warning
   // instead of silently understating every rate × hours figure.
   const grossBillablesInfo = useMemo(() => {
-    const rateInfoCache = new Map(); // `${userName}|${monthKey}` -> { rate, found }
-    const byUser = new Map();        // userName -> { monthKeys: Set, hours: number }
-    let total = 0;
-
-    filteredBillableEntries.forEach(entry => {
-      const billableHours = entry.billableHours || 0;
-      if (billableHours <= 0) return;
-
-      const entryDate = getEntryDate(entry);
-      const userName = userMap[entry.userId] || entry.userId;
-      const monthKey = monthKeyFromDate(entryDate);
-      if (!monthKey) return;
-
-      const cacheKey = `${userName}|${monthKey}`;
-      let info = rateInfoCache.get(cacheKey);
-      if (!info) {
-        info = getRateInfo(userName, entryDate);
-        rateInfoCache.set(cacheKey, info);
-      }
-
-      total += info.rate * billableHours;
-      if (info.found) return;
-
-      if (!byUser.has(userName)) {
-        byUser.set(userName, { monthKeys: new Set(), hours: 0 });
-      }
-      const record = byUser.get(userName);
-      record.monthKeys.add(monthKey);
-      record.hours += billableHours;
+    return computeGrossBillables({
+      billableEntries: filteredBillableEntries,
+      getUserName: (entry) => userMap[entry.userId] || entry.userId,
+      getRateInfo,
     });
-
-    const warnings = sortBySeniority(
-      [...byUser.entries()].map(([userName, record]) => ({
-        userName,
-        monthKeys: [...record.monthKeys].sort(),
-        hours: record.hours,
-      })),
-      (w) => w.userName,
-    );
-
-    return { totalGrossBillables: total, missingRateWarnings: warnings };
   }, [filteredBillableEntries, userMap, getRateInfo]);
 
   const { totalGrossBillables, missingRateWarnings } = grossBillablesInfo;
 
   // Calculate totals - use allAttorneyDataIncludingHidden for accurate totals
-  const totals = useMemo(() => {
-    const totalBillable = allAttorneyDataIncludingHidden.reduce((acc, att) => acc + att.billable, 0);
-    const totalOps = allAttorneyDataIncludingHidden.reduce((acc, att) => acc + att.ops, 0);
-    const totalEarnings = allAttorneyDataIncludingHidden.reduce((acc, att) => acc + att.earnings, 0);
-
-    const totalBillableTarget = attorneyData.reduce((acc, att) => acc + att.billableTarget, 0);
-    const totalOpsTarget = attorneyData.reduce((acc, att) => acc + att.opsTarget, 0);
-
-    // Use all visible tracked users (attorneyData already excludes hidden users)
-    const attorneysOnly = attorneyData;
-    const fteAttorneys = attorneysOnly.filter(att => att.employmentType === 'FTE');
-    const pteAttorneys = attorneysOnly.filter(att => att.employmentType === 'PTE');
-
-    // Average utilization, skipping attorneys with no target for the period
-    // (fully out of office) so their N/A doesn't drag the cohort average.
-    const avgOf = (list) => {
-      const vals = list.map(att => calculateUtilization(att)).filter(v => v !== null);
-      return vals.length > 0
-        ? Math.round(vals.reduce((acc, v) => acc + v, 0) / vals.length)
-        : 0;
-    };
-
-    const avgUtilization = avgOf(attorneysOnly);
-    const avgUtilizationFTE = avgOf(fteAttorneys);
-    const avgUtilizationPTE = avgOf(pteAttorneys);
-
-    return {
-      totalBillable,
-      totalOps,
-      totalEarnings,
-      totalBillableTarget,
-      totalOpsTarget,
-      avgUtilization,
-      avgUtilizationFTE,
-      avgUtilizationPTE,
-      attorneyCountFTE: fteAttorneys.length,
-      attorneyCountPTE: pteAttorneys.length,
-      attorneyCountTotal: attorneysOnly.length,
-    };
-  }, [attorneyData, allAttorneyDataIncludingHidden]);
+  const totals = useMemo(
+    () => computeFirmTotals({
+      visibleAttorneys: attorneyData,
+      attorneysIncludingHidden: allAttorneyDataIncludingHidden,
+    }),
+    [attorneyData, allAttorneyDataIncludingHidden]
+  );
 
   return {
     loading,

@@ -9,16 +9,11 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/firebase/config';
-import { isPartialAdminEmail } from '@/utils/partialAdminAccess';
-import { hasDownloadsAccessEmail } from '@/utils/downloadsAccess';
-import { hasTransactionsOpsAccessEmail } from '@/utils/transactionsOpsAccess';
+import { isAllowedDomain, deriveAuthorization, derivePermissionFlags } from '@/utils/authzLogic.mjs';
 
 const AuthContext = createContext({});
 
 export const useAuth = () => useContext(AuthContext);
-
-// Allowed email domain
-const ALLOWED_DOMAIN = 'cedargrovellp.com';
 
 
 export const AuthProvider = ({ children }) => {
@@ -28,12 +23,6 @@ export const AuthProvider = ({ children }) => {
   const [permissions, setPermissions] = useState(null);
   const [loading, setLoading] = useState(true);
   const isSigningIn = useRef(false);
-
-  // Check if email is from allowed domain
-  const isAllowedDomain = (email) => {
-    if (!email) return false;
-    return email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`);
-  };
 
   const checkAdminStatus = async (email) => {
     if (!email) return false;
@@ -66,20 +55,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Check if user is authorized (either from allowed domain or is an admin)
+  // Check if user is authorized (either from allowed domain or is an admin).
+  // The fetch results are combined by the pure deriveAuthorization helper
+  // (src/utils/authzLogic.mjs).
   const checkAuthorization = async (email) => {
-    if (!email) return { isAuthorized: false, isAdmin: false, permissions: null };
+    if (!email) return deriveAuthorization(null);
 
     const [adminStatus, permissionsData] = await Promise.all([
       checkAdminStatus(email),
       checkPermissions(email),
     ]);
 
-    // Authorized if from the allowed domain, or if manually granted admin
-    // (e.g. an external account added via Manage Admins).
-    const authorized = isAllowedDomain(email) || adminStatus;
-
-    return { isAuthorized: authorized, isAdmin: adminStatus, permissions: permissionsData };
+    return deriveAuthorization(email, { adminDocExists: adminStatus, permissionsDoc: permissionsData });
   };
 
   useEffect(() => {
@@ -166,13 +153,16 @@ export const AuthProvider = ({ children }) => {
   // Current user's email (lowercased for comparison)
   const userEmail = user?.email ? user.email.toLowerCase() : null;
 
+  // Restricted-mode flags (partial admin, downloads-only, transactions+ops-only)
+  const permissionFlags = derivePermissionFlags(permissions);
+
   return (
     <AuthContext.Provider value={{
       user,
       isAdmin,
-      isPartialAdmin: isPartialAdminEmail(permissions),
-      hasDownloadsAccess: hasDownloadsAccessEmail(permissions),
-      hasTransactionsOpsAccess: hasTransactionsOpsAccessEmail(permissions),
+      isPartialAdmin: permissionFlags.isPartialAdmin,
+      hasDownloadsAccess: permissionFlags.hasDownloadsAccess,
+      hasTransactionsOpsAccess: permissionFlags.hasTransactionsOpsAccess,
       isAuthorized,
       loading,
       signInWithGoogle,

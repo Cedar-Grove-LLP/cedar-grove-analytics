@@ -2,6 +2,7 @@
 
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { PRACTICE_AREA_COLORS } from '@/utils/colors';
+import { CHART_ANIMATIONS_DISABLED } from '@/utils/constants';
 import { PRACTICE_AREAS } from '@/utils/practiceArea.mjs';
 import { getSourceNote } from '@/utils/calcDefinitions.mjs';
 import { SourceNote } from '../tooltips';
@@ -63,6 +64,7 @@ const PracticeAreaTrendChart = ({ data, title = "Practice Area Composition Over 
               stroke={PRACTICE_AREA_COLORS[area]}
               fill={PRACTICE_AREA_COLORS[area]}
               name={area}
+              isAnimationActive={!CHART_ANIMATIONS_DISABLED}
             />
           ))}
         </AreaChart>
