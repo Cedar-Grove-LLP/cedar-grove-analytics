@@ -1,0 +1,24 @@
+# Future CI jobs (component tests, Firestore-rules emulator suite, Playwright E2E)
+# will be added as SEPARATE jobs later so this fast pure-Node lint+test job stays
+# fast and isolated.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test

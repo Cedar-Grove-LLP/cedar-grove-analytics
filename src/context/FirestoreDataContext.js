@@ -6,6 +6,7 @@ import { db, waitForAuth } from '@/firebase/config';
 import { useAuth } from './AuthContext';
 import { normalizeBillableEntry, normalizeOpsEntry } from '@/hooks/useFirestoreData';
 import { getMonthNumber, getEntryDate } from '@/utils/dateHelpers';
+import { parseMoney } from '@/utils/parseMoney.mjs';
 
 const FirestoreDataContext = createContext({});
 
@@ -305,7 +306,7 @@ export const FirestoreDataProvider = ({ children }) => {
                 userId,
                 name: entry.name || '',
                 company: entry.company || '',
-                flatFee: parseFloat(entry.flatFee) || 0,
+                flatFee: parseMoney(entry.flatFee),
                 sheetRowNumber: entry.sheetRowNumber,
                 month,
                 year,
@@ -346,8 +347,8 @@ export const FirestoreDataProvider = ({ children }) => {
           if (type === 'billables') {
             entries.forEach(entry => {
               userMonthComputedTotals[userName][docKey].billableHours += parseFloat(entry.hours) || 0;
-              userMonthComputedTotals[userName][docKey].billableEarnings += parseFloat(typeof entry.earnings === 'string' ? entry.earnings.replace(/[$,]/g, '') : entry.earnings) || 0;
-              userMonthComputedTotals[userName][docKey].reimbursements += parseFloat(typeof entry.reimbursements === 'string' ? entry.reimbursements.replace(/[$,]/g, '') : entry.reimbursements) || 0;
+              userMonthComputedTotals[userName][docKey].billableEarnings += parseMoney(entry.earnings);
+              userMonthComputedTotals[userName][docKey].reimbursements += parseMoney(entry.reimbursements);
             });
           } else if (type === 'ops') {
             entries.forEach(entry => {
@@ -355,7 +356,7 @@ export const FirestoreDataProvider = ({ children }) => {
             });
           } else if (type === 'eightThreeB') {
             entries.forEach(entry => {
-              userMonthComputedTotals[userName][docKey].eightThreeBFees += parseFloat(entry.flatFee) || 0;
+              userMonthComputedTotals[userName][docKey].eightThreeBFees += parseMoney(entry.flatFee);
             });
           }
         });

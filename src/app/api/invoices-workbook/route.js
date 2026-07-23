@@ -1,5 +1,6 @@
 import { createSign } from "node:crypto";
 import { getAdminDb, getAdminAuth } from "@/firebase/admin";
+import { authenticateRequest } from "@/app/api/_lib/authGate";
 import { WORKBOOK_ID, RANGES, assembleWorkbook } from "@/utils/invoicesSheetRanges.mjs";
 import { REAL_WORKBOOK } from "@/utils/invoicesRealData.mjs";
 
@@ -12,7 +13,6 @@ import { REAL_WORKBOOK } from "@/utils/invoicesRealData.mjs";
 export const dynamic = "force-dynamic";
 
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly";
-const ALLOWED_EMAIL_DOMAIN = "cedargrovellp.com";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Server-side, module-scoped cache. Shared across requests on a warm instance;
@@ -155,32 +155,18 @@ async function fetchWorkbook() {
 }
 
 export async function GET(request) {
-  // --- AuthN: Bearer <Firebase ID token> (the sensitive data — comp figures —
-  //     must not sit on an open endpoint; mirror the sync-transactions gate). --
-  const authHeader = request.headers.get("authorization") || "";
-  if (!authHeader.toLowerCase().startsWith("bearer ")) return unauthorized();
-  const idToken = authHeader.slice(7).trim();
-  if (!idToken) return unauthorized();
-
-  let decoded;
-  try {
-    decoded = await getAdminAuth().verifyIdToken(idToken, true);
-  } catch (err) {
-    console.warn("invoices-workbook: token verification failed:", err && err.code ? err.code : "unknown");
-    return unauthorized();
-  }
-
-  // --- AuthZ: verified allowed-domain email that has an admins/{email} record. -
-  const email = typeof decoded.email === "string" ? decoded.email.toLowerCase() : null;
-  if (!email || decoded.email_verified !== true) return forbidden();
-  if (!email.endsWith(`@${ALLOWED_EMAIL_DOMAIN}`)) return forbidden();
-  try {
-    const adminDoc = await getAdminDb().collection("admins").doc(email).get();
-    if (!adminDoc.exists) return forbidden();
-  } catch (err) {
-    console.error("invoices-workbook: admin lookup failed:", err && err.code ? err.code : "unknown");
-    return Response.json({ error: "Internal error" }, { status: 500 });
-  }
+  const gate = await authenticateRequest(request, {
+    auth: getAdminAuth(),
+    db: getAdminDb(),
+    logPrefix: "invoices-workbook",
+    buildError: (status) =>
+      status === 401
+        ? unauthorized()
+        : status === 403
+          ? forbidden()
+          : Response.json({ error: "Internal error" }, { status: 500 }),
+  });
+  if (!gate.ok) return gate.response;
 
   // --- Serve from cache unless ?refresh=1. ------------------------------------
   const refresh = new URL(request.url).searchParams.get("refresh") === "1";

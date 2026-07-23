@@ -9,7 +9,7 @@
 // All consumers are read-only; the app never writes `timeOff/all`. Everything
 // here tolerates a null/missing doc so behavior is unchanged before the sync ships.
 
-import { getUSFederalHolidays, toDateKey, getMonthProRateFraction } from './dateHelpers';
+import { getUSFederalHolidays, toDateKey, getMonthProRateFraction } from './dateHelpers.js';
 
 // Normalize a person name for matching: trim, lowercase, collapse inner whitespace.
 const normalizeName = (name) => (name || '').trim().toLowerCase().replace(/\s+/g, ' ');

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useFirestoreCache } from '@/context/FirestoreDataContext';
 import { buildPaymentStatusIndex } from '@/utils/paymentStatus.mjs';
+import { parseMoney } from '@/utils/parseMoney.mjs';
 
 /**
  * Normalize a billable entry from the new schema.
@@ -9,7 +10,7 @@ import { buildPaymentStatusIndex } from '@/utils/paymentStatus.mjs';
  */
 export const normalizeBillableEntry = (entryData, userId, month, year) => {
   const billableHours = parseFloat(entryData.hours) || 0;
-  const earnings = parseFloat(entryData.earnings) || 0;
+  const earnings = parseMoney(entryData.earnings);
 
   return {
     ...entryData,
@@ -19,11 +20,11 @@ export const normalizeBillableEntry = (entryData, userId, month, year) => {
     billingCategory: entryData.billingCategory || 'Other',
     client: entryData.client || 'Unknown',
     matter: entryData.matter || '',
-    reimbursements: parseFloat(entryData.reimbursements) || 0,
+    reimbursements: parseMoney(entryData.reimbursements),
     // Manual month-end dollar adjustment (Sam McClure timesheet only): already
     // folded into `earnings` via the sheet's Billables Earnings column; passed
     // through here for transparency/display. Defaults to 0 when absent.
-    adjustment: parseFloat(entryData.adjustment) || 0,
+    adjustment: parseMoney(entryData.adjustment),
     notes: entryData.notes || '',
     month: month || '',
     year: year || new Date().getFullYear(),

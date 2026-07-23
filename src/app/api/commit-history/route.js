@@ -1,4 +1,5 @@
 import { getAdminAuth } from "@/firebase/admin";
+import { authenticateRequest } from "@/app/api/_lib/authGate";
 import { DEFAULT_GITHUB_REPO } from "@/utils/constants";
 
 // GET /api/commit-history
@@ -13,7 +14,6 @@ import { DEFAULT_GITHUB_REPO } from "@/utils/constants";
 // (revalidate window) so we don't pull on every request; the client adds a
 // localStorage layer on top, and `?refresh=1` busts both.
 
-const ALLOWED_EMAIL_DOMAIN = "cedargrovellp.com";
 const PER_PAGE = 100;
 const MAX_PAGES = 20; // safety cap (≤ 2000 commits)
 const REVALIDATE_SECONDS = 3600; // 1h server-side cache for GitHub responses
@@ -23,32 +23,17 @@ const unauthorized = () => json({ success: false, error: "Unauthorized" }, 401);
 const forbidden = () => json({ success: false, error: "Forbidden" }, 403);
 
 export async function GET(request) {
-  // ---------------------------------------------------------------------------
-  // 1. Authentication: require Authorization: Bearer <Firebase ID token>.
-  // ---------------------------------------------------------------------------
-  const authHeader = request.headers.get("authorization") || "";
-  if (!authHeader.toLowerCase().startsWith("bearer ")) return unauthorized();
-  const idToken = authHeader.slice(7).trim();
-  if (!idToken) return unauthorized();
-
-  let decoded;
-  try {
-    decoded = await getAdminAuth().verifyIdToken(idToken, true);
-  } catch (err) {
-    console.warn(
-      "commit-history: token verification failed:",
-      err && err.code ? err.code : "unknown"
-    );
-    return unauthorized();
-  }
-
-  const email =
-    typeof decoded.email === "string" ? decoded.email.toLowerCase() : null;
-  if (!email || decoded.email_verified !== true) return forbidden();
-  if (!email.endsWith(`@${ALLOWED_EMAIL_DOMAIN}`)) return forbidden();
+  const gate = await authenticateRequest(request, {
+    auth: getAdminAuth(),
+    requireAdminDoc: false,
+    logPrefix: "commit-history",
+    buildError: (status) =>
+      status === 401 ? unauthorized() : forbidden(),
+  });
+  if (!gate.ok) return gate.response;
 
   // ---------------------------------------------------------------------------
-  // 2. Fetch commits from GitHub. Token optional (public repo).
+  // Fetch commits from GitHub. Token optional (public repo).
   // ---------------------------------------------------------------------------
   const repo = process.env.GITHUB_REPO || DEFAULT_GITHUB_REPO;
   const token = process.env.GITHUB_TOKEN || process.env.GITHUB_PAT || "";

@@ -1,5 +1,6 @@
 import { createSign } from "node:crypto";
 import { getAdminDb, getAdminAuth } from "@/firebase/admin";
+import { authenticateRequest } from "@/app/api/_lib/authGate";
 
 // Detect whether pending invoice-reminder DRAFTS have actually been SENT, and
 // only then advance the per-invoice reminder count.
@@ -23,7 +24,6 @@ export const dynamic = "force-dynamic";
 
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
-const ALLOWED_EMAIL_DOMAIN = "cedargrovellp.com";
 // Allow small clock skew between our client-stamped createdAt and Gmail's
 // server internalDate when deciding a SENT message belongs to this draft.
 const SKEW_MS = 5 * 60 * 1000;
@@ -143,40 +143,22 @@ async function classifyDraft(token, pending) {
 }
 
 export async function POST(request) {
-  // --- AuthN: Bearer <Firebase ID token> (mirror sync-transactions). ----------
-  const authHeader = request.headers.get("authorization") || "";
-  if (!authHeader.toLowerCase().startsWith("bearer ")) return unauthorized();
-  const idToken = authHeader.slice(7).trim();
-  if (!idToken) return unauthorized();
-
-  let decoded;
-  try {
-    decoded = await getAdminAuth().verifyIdToken(idToken, true);
-  } catch (err) {
-    console.warn(
-      "check-reminder-sends: token verification failed:",
-      err && err.code ? err.code : "unknown"
-    );
-    return unauthorized();
-  }
-
-  // --- AuthZ: verified allowed-domain email with an admins/{email} record. -----
-  const email =
-    typeof decoded.email === "string" ? decoded.email.toLowerCase() : null;
-  if (!email || decoded.email_verified !== true) return forbidden();
-  if (!email.endsWith(`@${ALLOWED_EMAIL_DOMAIN}`)) return forbidden();
-
   const db = getAdminDb();
-  try {
-    const adminDoc = await db.collection("admins").doc(email).get();
-    if (!adminDoc.exists) return forbidden();
-  } catch (err) {
-    console.error(
-      "check-reminder-sends: admin lookup failed:",
-      err && err.code ? err.code : "unknown"
-    );
-    return Response.json({ success: false, error: "Internal error" }, { status: 500 });
-  }
+  const gate = await authenticateRequest(request, {
+    auth: getAdminAuth(),
+    db,
+    logPrefix: "check-reminder-sends",
+    buildError: (status) =>
+      status === 401
+        ? unauthorized()
+        : status === 403
+          ? forbidden()
+          : Response.json(
+              { success: false, error: "Internal error" },
+              { status: 500 }
+            ),
+  });
+  if (!gate.ok) return gate.response;
 
   // --- Gather pending reminders from invoices/all. ----------------------------
   const invRef = db.collection("invoices").doc("all");
