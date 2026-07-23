@@ -157,6 +157,15 @@ const SheetOnlyStatCard = ({ label, value, formatValue = fmt, calcKey = 'timeshe
 
 const sortBySheetRow = (rows) => [...rows].sort((a, b) => (a.sheetRowNumber ?? Infinity) - (b.sheetRowNumber ?? Infinity));
 
+// Legal-ops staff (role like "Legal Operations Associate") log almost entirely
+// ops time, so the tab opens them on Ops; every attorney role opens on
+// Billables. Matches on the role string so a future "Legal Ops" / "Operations
+// Manager" title lands the same way without a code change.
+const isOpsFirstRole = (role) => {
+  const r = (role || '').toLowerCase();
+  return r.includes('operations') || r.includes('legal ops') || /\bops\b/.test(r);
+};
+
 const pad2 = (n) => String(n).padStart(2, '0');
 const toLocalIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
@@ -184,10 +193,6 @@ const TimesheetsTestingView = () => {
 
   const [selectedUserName, setSelectedUserName] = useState('');
   const [selectedMonthKey, setSelectedMonthKey] = useState('');
-  // Which entry surface is on screen — 'billables' | 'ops', one at a time.
-  // Defaults to ops since that's the live entry beta; sticky across
-  // user/month switches (a view preference, not a data filter).
-  const [entryMode, setEntryMode] = useState('ops');
 
   const effectiveUserName = selectedUserName || (sortedUsers[0]?.name || sortedUsers[0]?.id || '');
 
@@ -198,6 +203,17 @@ const TimesheetsTestingView = () => {
     [sortedUsers, effectiveUserName],
   );
   const selectedUserId = selectedUser?.id || effectiveUserName;
+
+  // Which entry surface shows — 'billables' | 'ops', one at a time. The
+  // default follows the person's function: legal-ops staff (e.g. Valery,
+  // role "Legal Operations Associate") log almost entirely ops, so they open
+  // on Ops; attorneys — part-time, full-time, and the ops-heavy partners
+  // alike — open on Billables. A manual toggle overrides until the user
+  // switches (derived-default + override, matching the reset-on-change
+  // pattern used for the entry forms below).
+  const defaultEntryMode = isOpsFirstRole(selectedUser?.role) ? 'ops' : 'billables';
+  const [entryModeOverride, setEntryModeOverride] = useState(null);
+  const entryMode = entryModeOverride || defaultEntryMode;
 
   // Manual ops entries (users/{id}/opsManual) — the app's own write target,
   // kept separate from the sheet-synced ops/. Live listener so adds/deletes
@@ -479,6 +495,7 @@ const TimesheetsTestingView = () => {
             onChange={(e) => {
               setSelectedUserName(e.target.value);
               setSelectedMonthKey('');
+              setEntryModeOverride(null); // new user → their role's default surface
               resetForm();
             }}
             disabled={usersLoading || sortedUsers.length === 0}
@@ -529,52 +546,6 @@ const TimesheetsTestingView = () => {
         <p className="py-8 text-center text-red-700">Failed to load timesheet data.</p>
       ) : (
         <>
-          <div className="flex flex-wrap gap-3">
-            <DriftStatCard
-              label="Total Billable Hours"
-              sheetVal={monthTotals?.billables?.totalBillableHours}
-              computed={sumBillableHours}
-              formatValue={fmtHrsText}
-              formatDelta={fmtDeltaHrs}
-            />
-            <DriftStatCard
-              label="Billable Earnings"
-              sheetVal={monthTotals?.billables?.billableEarnings}
-              computed={sumEarnings}
-              formatValue={fmt}
-              formatDelta={fmtDeltaMoney}
-            />
-            <DriftStatCard
-              label="Reimbursements"
-              sheetVal={monthTotals?.billables?.reimbursements}
-              computed={sumReimbursements}
-              formatValue={fmt}
-              formatDelta={fmtDeltaMoney}
-            />
-            <SheetOnlyStatCard
-              label="Total Payment"
-              value={monthTotals?.billables?.totalPayment}
-            />
-            <DriftStatCard
-              label="Ops Hours"
-              sheetVal={monthTotals?.ops?.opsHours}
-              computed={sumOpsHours}
-              formatValue={fmtHrsText}
-              formatDelta={fmtDeltaHrs}
-            />
-            <DriftStatCard
-              label="Total Hours"
-              sheetVal={monthTotals?.ops?.totalHours}
-              computed={sumTotalHours}
-              formatValue={fmtHrsText}
-              formatDelta={fmtDeltaHrs}
-            />
-            <SheetOnlyStatCard
-              label="83(b) Fee Earnings"
-              value={monthTotals?.eightThreeB?.eightThreeBFeeEarnings}
-            />
-          </div>
-
           {/* Billables | Ops segmented switch — only one entry surface shows
               at a time (the toggle doubles as the section heading). */}
           <div className="flex items-center gap-2" role="group" aria-label="Entry type">
@@ -582,7 +553,7 @@ const TimesheetsTestingView = () => {
               <button
                 key={key}
                 type="button"
-                onClick={() => setEntryMode(key)}
+                onClick={() => setEntryModeOverride(key)}
                 aria-pressed={entryMode === key}
                 className={cx(
                   'rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
@@ -594,6 +565,62 @@ const TimesheetsTestingView = () => {
                 {label}
               </button>
             ))}
+          </div>
+
+          {/* KPI cards scoped to the active entry surface: billables cards in
+              Billables mode, ops cards in Ops mode. Total Hours lives with ops
+              (it comes from the ops sheetTotals rollup). */}
+          <div className="flex flex-wrap gap-3">
+            {entryMode === 'billables' ? (
+              <>
+                <DriftStatCard
+                  label="Total Billable Hours"
+                  sheetVal={monthTotals?.billables?.totalBillableHours}
+                  computed={sumBillableHours}
+                  formatValue={fmtHrsText}
+                  formatDelta={fmtDeltaHrs}
+                />
+                <DriftStatCard
+                  label="Billable Earnings"
+                  sheetVal={monthTotals?.billables?.billableEarnings}
+                  computed={sumEarnings}
+                  formatValue={fmt}
+                  formatDelta={fmtDeltaMoney}
+                />
+                <DriftStatCard
+                  label="Reimbursements"
+                  sheetVal={monthTotals?.billables?.reimbursements}
+                  computed={sumReimbursements}
+                  formatValue={fmt}
+                  formatDelta={fmtDeltaMoney}
+                />
+                <SheetOnlyStatCard
+                  label="Total Payment"
+                  value={monthTotals?.billables?.totalPayment}
+                />
+                <SheetOnlyStatCard
+                  label="83(b) Fee Earnings"
+                  value={monthTotals?.eightThreeB?.eightThreeBFeeEarnings}
+                />
+              </>
+            ) : (
+              <>
+                <DriftStatCard
+                  label="Ops Hours"
+                  sheetVal={monthTotals?.ops?.opsHours}
+                  computed={sumOpsHours}
+                  formatValue={fmtHrsText}
+                  formatDelta={fmtDeltaHrs}
+                />
+                <DriftStatCard
+                  label="Total Hours"
+                  sheetVal={monthTotals?.ops?.totalHours}
+                  computed={sumTotalHours}
+                  formatValue={fmtHrsText}
+                  formatDelta={fmtDeltaHrs}
+                />
+              </>
+            )}
           </div>
 
           {entryMode === 'billables' && (
