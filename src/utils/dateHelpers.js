@@ -22,6 +22,16 @@ const PST_DATE_PARTS = new Intl.DateTimeFormat('en-US', {
 });
 
 export const getEntryDate = (entry) => {
+  // Date-only strings ("YYYY-MM-DD", no time or zone) are already a calendar day.
+  // `new Date("2026-06-01")` parses as UTC midnight, and the PST normalization
+  // below then shifts it back a day (a June-1 entry becomes May 31), which both
+  // mis-buckets month-boundary entries and puts every bare-date entry one day
+  // early. Read the literal Y/M/D as a local-midnight date instead — day-granular
+  // and timezone-stable, matching how the "…T07:00:00Z" timestamp entries resolve.
+  if (typeof entry.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry.date.trim())) {
+    const [y, m, d] = entry.date.trim().split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
   let raw;
   if (entry.date?.toDate) {
     raw = entry.date.toDate();

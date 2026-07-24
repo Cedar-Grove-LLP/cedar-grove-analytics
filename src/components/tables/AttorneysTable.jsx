@@ -89,6 +89,10 @@ const AttorneysTable = ({
             const utilization = calculateUtilization(attorney);
             const total = attorney.billable + attorney.ops;
             const warnings = dataWarnings[attorney.name];
+            // Tooltip opens downward by default so top rows aren't clipped by the
+            // container's top edge (overflow-x-auto also clips vertically); the
+            // last couple rows open upward to avoid clipping at the bottom.
+            const warnAbove = idx >= attorneys.length - 2;
             return (
               <tr
                 key={idx}
@@ -112,7 +116,7 @@ const AttorneysTable = ({
                     {warnings && warnings.length > 0 && (
                       <span className="relative group">
                         <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                        <span className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-max max-w-xs sm:max-w-sm md:max-w-md p-2 bg-gray-900 text-white text-xs rounded shadow-lg whitespace-normal wrap-break-word">
+                        <span className={`absolute ${warnAbove ? 'bottom-full mb-2' : 'top-full mt-2'} left-0 hidden group-hover:block z-50 w-max max-w-xs sm:max-w-sm md:max-w-md p-2 bg-gray-900 text-white text-xs rounded shadow-lg whitespace-normal wrap-break-word`}>
                           {warnings.map((w, i) => (
                             <span key={i} className="block">{w.message}</span>
                           ))}
