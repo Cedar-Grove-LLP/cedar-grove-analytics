@@ -11,7 +11,8 @@ import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge, getMatchTypeBadge } from '@/utils/statusStyles';
 import { downloadCSV } from '@/utils/csv';
-import { parseInvoiceDate } from '@/utils/paymentStatus.mjs';
+import { parseInvoiceDate, DEFAULT_PAYMENT_TERMS } from '@/utils/paymentStatus.mjs';
+import { invoiceDueDate } from '@/utils/invoicesCalc.mjs';
 import {
   buildPaymentAllocations,
   canFullyAllocateInvoice,
@@ -103,11 +104,10 @@ function invoiceKey(inv) {
   return `${client}|${amount}|${dateSent}|${year}`;
 }
 
-// TODO(team): confirm which address to CC on the third/final reminder.
-// The Invoice Reminders System doc says "Please CC Sam on the third reminder
-// email." Left blank until the team confirms Sam's address — while empty, no
-// Cc header is added, so drafts still work; fill this in to enable the CC.
-const SAM_CC_EMAIL = '';
+// Sam is CC'd on the third/final reminder per the Invoice Reminders System doc
+// ("Please CC Sam on the third reminder email"). Appended on top of the original
+// thread's CC list (Colin, Valery, …) for stage 2+ reminders.
+const SAM_CC_EMAIL = 'sam@cedargrovellp.com';
 
 // Ordinal labels for the three sequential reminders.
 const REMINDER_ORDINALS = ['1st', '2nd', '3rd'];
@@ -222,7 +222,7 @@ const AdminInvoices = () => {
 
     try {
       const apiBase = 'https://gmail.googleapis.com/gmail/v1/users/me';
-      const metaParams = 'format=metadata&metadataHeaders=Subject&metadataHeaders=To&metadataHeaders=From&metadataHeaders=Message-ID';
+      const metaParams = 'format=metadata&metadataHeaders=Subject&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=From&metadataHeaders=Message-ID';
       const authHeader = { Authorization: `Bearer ${token}` };
 
       const gmailFetch = async (url) => {
@@ -243,11 +243,12 @@ const AdminInvoices = () => {
           threadId: msg.threadId,
           subject: hdrs.find((h) => h.name === 'Subject')?.value || '',
           to: hdrs.find((h) => h.name === 'To')?.value || '',
+          cc: hdrs.find((h) => h.name === 'Cc')?.value || '',
           messageId: hdrs.find((h) => h.name === 'Message-ID')?.value || '',
         };
       };
 
-      let threadId, subject, to, messageId;
+      let threadId, subject, to, cc, messageId;
       let found = false;
 
       const searchAndExtract = async (query) => {
@@ -259,7 +260,7 @@ const AdminInvoices = () => {
         if (!matchId) return false;
         const fullRes = await gmailFetch(`${apiBase}/messages/${matchId}?${metaParams}`);
         if (!fullRes.ok) return false;
-        ({ threadId, subject, to, messageId } = extractHeaders(await fullRes.json()));
+        ({ threadId, subject, to, cc, messageId } = extractHeaders(await fullRes.json()));
         return true;
       };
 
@@ -283,7 +284,7 @@ const AdminInvoices = () => {
       if (!found && inv.emailId) {
         const msgRes = await gmailFetch(`${apiBase}/messages/${inv.emailId}?${metaParams}`);
         if (msgRes.ok) {
-          ({ threadId, subject, to, messageId } = extractHeaders(await msgRes.json()));
+          ({ threadId, subject, to, cc, messageId } = extractHeaders(await msgRes.json()));
           found = true;
         }
       }
@@ -295,7 +296,7 @@ const AdminInvoices = () => {
           const thread = await threadRes.json();
           const firstMsg = thread.messages?.[0];
           if (firstMsg) {
-            ({ threadId, subject, to, messageId } = extractHeaders(firstMsg));
+            ({ threadId, subject, to, cc, messageId } = extractHeaders(firstMsg));
             found = true;
           }
         }
@@ -306,10 +307,6 @@ const AdminInvoices = () => {
       }
 
       // Build the reminder email body
-      const dueDateParsed = parseDateSent(inv.dueDate, inv.year);
-      const dueDateStr = dueDateParsed
-        ? `${dueDateParsed.getMonth() + 1}/${dueDateParsed.getDate()}`
-        : '[DUE DATE]';
       const replySubject = subject.startsWith('Re:') ? subject : `Re: ${subject}`;
 
       // Look up billing contact first name from clients data
@@ -318,6 +315,16 @@ const AdminInvoices = () => {
       );
       const billingContactFirst = matchedClient?.billingContact?.split(' ')[0] || '';
       const greeting = billingContactFirst ? `Hi ${billingContactFirst}` : 'Hi [NAME]';
+
+      // Due date = Date Sent + the client's payment terms (Net 15/30). Invoice
+      // entries carry no stored `dueDate`, so it's derived here; fall back to the
+      // firm default terms when the client can't be matched, and only to the
+      // [DUE DATE] placeholder when Date Sent itself is unparseable.
+      const dueTerms = matchedClient?.paymentTerms ?? DEFAULT_PAYMENT_TERMS;
+      const dueDateParsed = dateSentParsed ? invoiceDueDate(dateSentParsed, dueTerms) : null;
+      const dueDateStr = dueDateParsed
+        ? `${dueDateParsed.getMonth() + 1}/${dueDateParsed.getDate()}`
+        : '[DUE DATE]';
 
       // Compute the invoice month (prior month relative to dateSent)
       const invoiceMonthDate = dateSentParsed
@@ -334,9 +341,18 @@ const AdminInvoices = () => {
       const stage = inv.remindersSent || 0;
       const body = buildReminderBody(stage, { greeting, invoiceMonthLabel, dueDateStr, senderFirstName });
 
+      // Preserve whoever was CC'd on the original invoice thread (e.g. Colin and
+      // Valery) on every reminder reply, and add Sam on the final reminder once
+      // his address is configured. Dedup case-insensitively so a name that was
+      // already CC'd isn't added twice.
+      const ccList = cc ? cc.split(',').map((a) => a.trim()).filter(Boolean) : [];
+      if (stage >= 2 && SAM_CC_EMAIL && !ccList.some((a) => a.toLowerCase().includes(SAM_CC_EMAIL.toLowerCase()))) {
+        ccList.push(SAM_CC_EMAIL);
+      }
+
       const rawLines = [
         `To: ${to}`,
-        ...(stage >= 2 && SAM_CC_EMAIL ? [`Cc: ${SAM_CC_EMAIL}`] : []),
+        ...(ccList.length ? [`Cc: ${ccList.join(', ')}`] : []),
         `Subject: ${replySubject}`,
         `In-Reply-To: ${messageId}`,
         `References: ${messageId}`,
