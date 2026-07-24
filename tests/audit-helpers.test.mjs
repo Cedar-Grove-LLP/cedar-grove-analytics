@@ -78,6 +78,66 @@ test('summarizeMonthDoc flags entry-sum vs sheetTotals mismatches', () => {
   assert.deepEqual(summary.mismatches, ['hours 5.5 != sheet 6']);
 });
 
+test('summarizeMonthDoc flags stored zero vs nonzero entry sums', () => {
+  const billables = summarizeMonthDoc('billables', '2025_February', {
+    month: 'February',
+    year: 2025,
+    entries: [{ hours: 340, earnings: 340, clientFilingFees: 340 }],
+    sheetTotals: { totalBillableHours: 0, billableEarnings: 0, clientFilingFees: 0 },
+  });
+  assert.deepEqual(billables.mismatches, [
+    'hours 340 != sheet 0',
+    'earnings 340 != sheet 0',
+    'clientFilingFees 340 != sheet 0',
+  ]);
+
+  const ops = summarizeMonthDoc('ops', '2025_February', {
+    month: 'February',
+    year: 2025,
+    entries: [{ hours: 340 }],
+    sheetTotals: { opsHours: 0 },
+  });
+  assert.deepEqual(ops.mismatches, ['hours 340 != sheet 0']);
+});
+
+test('summarizeMonthDoc skips absent sheetTotals keys while checking present keys', () => {
+  const summary = summarizeMonthDoc('billables', '2025_March', {
+    month: 'March',
+    year: 2025,
+    entries: [{ hours: 340, earnings: 340, clientFilingFees: 340 }],
+    sheetTotals: { billableEarnings: 0, clientFilingFees: 340 },
+  });
+  assert.deepEqual(summary.mismatches, ['earnings 340 != sheet 0']);
+});
+
+test('summarizeMonthDoc treats matching zero entry and sheet totals as equal', () => {
+  const summary = summarizeMonthDoc('billables', '2025_April', {
+    month: 'April',
+    year: 2025,
+    entries: [{ hours: 0, earnings: 0, clientFilingFees: 0 }],
+    sheetTotals: { totalBillableHours: 0, billableEarnings: 0, clientFilingFees: 0 },
+  });
+  assert.deepEqual(summary.mismatches, []);
+});
+
+test('summarizeMonthDoc applies float tolerance to sheet total comparisons', () => {
+  const withinTolerance = summarizeMonthDoc('billables', '2025_May', {
+    month: 'May',
+    year: 2025,
+    entries: [{ hours: 10 }],
+    sheetTotals: { totalBillableHours: 10.02 },
+  });
+  assert.deepEqual(withinTolerance.mismatches, []);
+
+  const outsideTolerance = summarizeMonthDoc('billables', '2025_June', {
+    month: 'June',
+    year: 2025,
+    entries: [{ hours: 10 }],
+    sheetTotals: { totalBillableHours: 10.03 },
+  });
+  assert.deepEqual(outsideTolerance.mismatches, ['hours 10 != sheet 10.03']);
+});
+
 test('detectOrphans flags parent IDs absent from users', () => {
   const orphans = detectOrphans(
     {

@@ -6,6 +6,8 @@ import { db, waitForAuth } from '@/firebase/config';
 import { useAuth } from './AuthContext';
 import { normalizeBillableEntry, normalizeOpsEntry } from '@/hooks/useFirestoreData';
 import { getMonthNumber, getEntryDate } from '@/utils/dateHelpers';
+import { parseMoney } from '@/utils/entryNormalize.mjs';
+import { zeroAwareCompare } from '@/utils/verify/divergence.mjs';
 
 const FirestoreDataContext = createContext({});
 
@@ -223,7 +225,9 @@ export const FirestoreDataProvider = ({ children }) => {
               const computedHoursRounded = round2(computedHours);
               const computedEarningsRounded = round2(computedEarnings);
 
-              if (sheetTotals.totalBillableHours > 0 && computedHoursRounded !== sheetTotals.totalBillableHours) {
+              // Zero-aware: a stored 0 against a nonzero entries sum is the proven
+              // rollup-zero sync defect and must warn; an absent key still skips.
+              if (zeroAwareCompare(computedHoursRounded, sheetTotals.totalBillableHours).equal === false) {
                 addWarning(userName, {
                   type: 'hours-mismatch',
                   collection: 'billables',
@@ -233,7 +237,7 @@ export const FirestoreDataProvider = ({ children }) => {
                 });
               }
 
-              if (sheetTotals.billableEarnings > 0 && computedEarningsRounded !== sheetTotals.billableEarnings) {
+              if (zeroAwareCompare(computedEarningsRounded, sheetTotals.billableEarnings).equal === false) {
                 addWarning(userName, {
                   type: 'earnings-mismatch',
                   collection: 'billables',
@@ -284,7 +288,7 @@ export const FirestoreDataProvider = ({ children }) => {
             if (sheetTotals) {
               const computedOpsRounded = round2(computedOpsHours);
 
-              if (sheetTotals.opsHours > 0 && computedOpsRounded !== sheetTotals.opsHours) {
+              if (zeroAwareCompare(computedOpsRounded, sheetTotals.opsHours).equal === false) {
                 addWarning(userName, {
                   type: 'hours-mismatch',
                   collection: 'ops',
@@ -345,17 +349,17 @@ export const FirestoreDataProvider = ({ children }) => {
 
           if (type === 'billables') {
             entries.forEach(entry => {
-              userMonthComputedTotals[userName][docKey].billableHours += parseFloat(entry.hours) || 0;
-              userMonthComputedTotals[userName][docKey].billableEarnings += parseFloat(typeof entry.earnings === 'string' ? entry.earnings.replace(/[$,]/g, '') : entry.earnings) || 0;
-              userMonthComputedTotals[userName][docKey].reimbursements += parseFloat(typeof entry.reimbursements === 'string' ? entry.reimbursements.replace(/[$,]/g, '') : entry.reimbursements) || 0;
+              userMonthComputedTotals[userName][docKey].billableHours += parseMoney(entry.hours);
+              userMonthComputedTotals[userName][docKey].billableEarnings += parseMoney(entry.earnings);
+              userMonthComputedTotals[userName][docKey].reimbursements += parseMoney(entry.reimbursements);
             });
           } else if (type === 'ops') {
             entries.forEach(entry => {
-              userMonthComputedTotals[userName][docKey].opsHours += parseFloat(entry.hours) || 0;
+              userMonthComputedTotals[userName][docKey].opsHours += parseMoney(entry.hours);
             });
           } else if (type === 'eightThreeB') {
             entries.forEach(entry => {
-              userMonthComputedTotals[userName][docKey].eightThreeBFees += parseFloat(entry.flatFee) || 0;
+              userMonthComputedTotals[userName][docKey].eightThreeBFees += parseMoney(entry.flatFee);
             });
           }
         });
@@ -370,7 +374,13 @@ export const FirestoreDataProvider = ({ children }) => {
           const [yearStr, month] = docKey.split('_');
           const year = parseInt(yearStr, 10);
 
-          // Total hours check (from ops sheetTotals which has the combined total)
+          // Total hours check (from ops sheetTotals which has the combined total).
+          // Deliberately NOT zero-aware, unlike the per-collection rollups above:
+          // this cell is left unpopulated (stored as 0) for every attorney who
+          // doesn't track ops, so a 0 here means "absent", not "zero hours" —
+          // verified across Agate/Wilson/Skrodzka/Popkin, who bill real hours
+          // against a 0 total. Comparing zero-aware turns ~47 unpopulated cells
+          // into mismatch warnings and buries the rollup defects worth seeing.
           const opsSheetTotals = sheetTotalsByType.ops;
           if (opsSheetTotals?.totalHours > 0) {
             const computedTotalHours = round2(computed.billableHours + computed.opsHours);

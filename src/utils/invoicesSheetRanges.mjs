@@ -18,7 +18,6 @@ const SHEET_NAME = {
   may: 'May', june: 'June', july: 'July',
 };
 const EXTRA_MONTHS = { 'june-original': 'June - original' };
-const CASH_MONTHS = ['january', 'february', 'march', 'april', 'may', 'june'];
 
 // Monthly tab column B rows 2..16, in order (matches invoicesCalc WATERFALL_ROWS).
 const WF_KEYS = [
@@ -65,9 +64,13 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
 // route zips batchGet's valueRanges back to these keys by index.
 // ---------------------------------------------------------------------------
 export const RANGES = [
-  ...MONTHS.map((m) => ({ key: `month:${m}`, range: `'${SHEET_NAME[m]}'!A1:AB200` })),
-  ...Object.entries(EXTRA_MONTHS).map(([k, name]) => ({ key: `monthExtra:${k}`, range: `'${name}'!A1:AB200` })),
-  { key: 'cash', range: "'Cash Accounting Summary'!A1:H12" },
+  // 400 rows: the client matrix passed 200 rows in July 2026 (January reaches
+  // row 262) and a too-short range silently truncates it — see
+  // scripts/verify-invoices-live.mjs, which fails loudly if a grid ever fills
+  // its requested window.
+  ...MONTHS.map((m) => ({ key: `month:${m}`, range: `'${SHEET_NAME[m]}'!A1:AB400` })),
+  ...Object.entries(EXTRA_MONTHS).map(([k, name]) => ({ key: `monthExtra:${k}`, range: `'${name}'!A1:AB400` })),
+  { key: 'cash', range: "'Cash Accounting Summary'!A1:H16" },
   { key: 'pnl', range: "'P&L'!A1:H50" },
   { key: 'paymentStatus', range: "'Payment Status'!A1:H2000" },
   // NB: the live Google tab is "06/30 Copy of Payment Status" (with a slash);
@@ -182,8 +185,11 @@ function extractMonthTab(grid) {
     const attorneys = headers.slice(1, sb);
     const rows = [];
     let totalRows = 0;
-    let r = 21;
-    while (!isBlank(cellAt(grid, r, 1))) {
+    // Walk the whole fetched grid rather than stopping at the first blank
+    // client cell — the live matrix contains blank spacer rows mid-list, and
+    // stopping there silently dropped every client below the gap.
+    for (let r = 21; r <= grid.length; r += 1) {
+      if (isBlank(cellAt(grid, r, 1))) continue;
       totalRows += 1;
       const billings = attorneys.map((_, j) => num(cellAt(grid, r, 2 + j)));
       const obj = { client: String(cellAt(grid, r, 1)), billings };
@@ -198,7 +204,6 @@ function extractMonthTab(grid) {
       const anyBill = billings.some((x) => x);
       const anyNum = [...MATRIX_NUMERIC].some((f) => obj[f]);
       if (anyBill || anyNum) rows.push(obj);
-      r += 1;
     }
     month.matrix = { attorneys, rows, totalRows };
   }
@@ -251,9 +256,25 @@ export function assembleWorkbook(gridsByKey, opts = {}) {
     if (grid.length) out.monthsExtra[k] = extractMonthTab(grid);
   });
 
+  // Cash rows are data-driven: include each row (3..14) whose col-A label is a
+  // month name AND that carries any nonzero figure — so a newly-live month
+  // (e.g. July) appears without a code change, while future all-zero SUMIFS
+  // rows (Aug–Dec) stay excluded. Was a hardcoded jan–jun list, which left the
+  // view one month stale after each month-end.
   const cash = g('cash');
-  CASH_MONTHS.forEach((m, i) => {
-    const r = 3 + i;
+  const cashMonthAt = (r) => {
+    const label = cellAt(cash, r, 1);
+    const name = MONTH_NAMES.find((n) => typeof label === 'string' && label.trim().startsWith(n));
+    if (!name) return null;
+    const anyValue = [2, 3, 4, 5, 6, 7, 8].some((c) => {
+      const v = cellAt(cash, r, c);
+      return typeof v === 'number' && v !== 0;
+    });
+    return anyValue ? name.toLowerCase() : null;
+  };
+  for (let r = 3; r <= Math.min(cash.length, 14); r += 1) {
+    const m = cashMonthAt(r);
+    if (!m) continue;
     const q = cellAt(cash, r, 8);
     out.cash[m] = {
       inputs: {
@@ -268,7 +289,7 @@ export function assembleWorkbook(gridsByKey, opts = {}) {
         qRevenue: typeof q === 'number' ? num(q) : null,
       },
     };
-  });
+  }
 
   const pnl = g('pnl');
   const prow = (r) => Array.from({ length: 6 }, (_, c) => num(cellAt(pnl, r, 2 + c)));

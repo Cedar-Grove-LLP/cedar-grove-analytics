@@ -80,6 +80,9 @@ function cashGrid() {
   ['january', 'february', 'march', 'april', 'may', 'june'].forEach((m, i) => {
     const e = REAL_WORKBOOK.cash[m];
     const r = 3 + i;
+    // Col A month label, as on the real tab — assembleWorkbook detects cash
+    // rows by this label rather than by fixed position.
+    set(r, 1, m[0].toUpperCase() + m.slice(1));
     set(r, 2, e.inputs.cashReceived);
     set(r, 3, e.inputs.expenses);
     set(r, 4, e.inputs.cgfDonation);

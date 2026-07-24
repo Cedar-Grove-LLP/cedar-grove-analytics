@@ -229,3 +229,82 @@ test('labels, ranks, badges, and the Hold flag are wired for all three tags', ()
   }
   assert.ok(getPaymentStatusBadge('nope').includes('bg-gray-100'));
 });
+
+// ------------------------------------------------------- Write Off status
+
+test('a lone Write Off invoice reads as On Target — settled, no outstanding balance, no history counted', () => {
+  const r = computeClientPaymentStatus([
+    inv('4/1/2026', null, { status: 'Write Off' }),
+  ], { today: at('2026-06-30T12:00:00') });
+  assert.equal(r.status, ON_TARGET);
+  assert.equal(r.outstandingCount, 0);
+  assert.equal(r.overdueCount, 0);
+  assert.equal(r.avgDays, null);
+});
+
+test('Write Off does not poison avg-days or pct-within-15 stats', () => {
+  const r = computeClientPaymentStatus([
+    inv('1/1/2026', '1/8/2026'), // paid on time, 7 days
+    inv('1/2/2026', null, { status: 'Write Off' }), // old, never paid, forgiven
+  ], { today: at('2026-06-11T12:00:00') });
+  assert.equal(r.status, ON_TARGET);
+  assert.equal(r.avgDays, 7);
+  assert.equal(r.pctWithin15, 1);
+  assert.equal(r.outstandingCount, 0);
+});
+
+test('Write Off is excluded from the 2-overdue-invoices Hold trigger', () => {
+  const r = computeClientPaymentStatus([
+    inv('4/25/2026'), // genuinely overdue, ~17 days past net-30 terms
+    inv('4/28/2026', null, { status: 'Write Off' }), // would also be overdue, but forgiven
+  ], { today: at('2026-06-11T12:00:00') });
+  assert.equal(r.overdueCount, 1);
+  assert.equal(r.status, WARNING); // 1 overdue alone isn't enough for Hold
+});
+
+test('Write Off is excluded from outstanding/unpaid totals (the Warning accumulation trigger)', () => {
+  const r = computeClientPaymentStatus([
+    inv('6/6/2026'), // genuinely unpaid
+    inv('6/8/2026', null, { status: 'Write Off' }), // written off, not a live balance
+  ], { today: at('2026-06-11T12:00:00') });
+  assert.equal(r.outstandingCount, 1);
+  assert.equal(r.overdueCount, 0);
+  assert.equal(r.status, WARNING);
+});
+
+test('unrecognized status strings are unaffected by Write Off handling (regression)', () => {
+  const r = computeClientPaymentStatus([
+    inv('6/6/2026', null, { status: 'Some Weird Status' }),
+  ], { today: at('2026-06-11T12:00:00') });
+  assert.equal(r.outstandingCount, 1);
+  assert.equal(r.status, WARNING);
+});
+
+// A Hold client's overdue invoice becomes Write Off: 20 good invoices establish
+// a clean track record, invoice C is genuinely 30+ days overdue (triggers Hold
+// alone), and invoice B is written off — if B were still counted as open it
+// would never be paid, permanently blocking the 0-outstanding release
+// condition; because Write Off is excluded, the balance clears once C is paid
+// and the normal sticky 2-clean-cycle release proceeds.
+const writeOffHoldHistory = () => {
+  const rows = [];
+  for (let i = 0; i < 20; i++) rows.push(inv('6/1/2025', '6/6/2025', { year: 2025 }));
+  rows.push(inv('12/1/2025', '3/1/2026')); // C: paid 90 days late
+  rows.push(inv('1/5/2026', null, { status: 'Write Off' })); // B: written off, never paid
+  return rows;
+};
+
+test('Write Off clears the balance for Hold-exit purposes, but the sticky 2-cycle rule still applies', () => {
+  // Only Jan + Feb replayed as of Mar 10 — Hold entered in Jan (C 30+ days
+  // overdue) and only 0 clean cycles served yet, even though C is already
+  // paid (by Mar 1) and B is excluded, so today's raw balance is already zero.
+  const early = computeClientPaymentStatus(writeOffHoldHistory(), { today: at('2026-03-10T12:00:00') });
+  assert.equal(early.status, HOLD);
+  assert.equal(early.outstandingCount, 0);
+
+  // By May 5, March + April have both replayed clean with a zero balance
+  // (2 clean cycles at the April month end) — released, stepping down to
+  // Warning first per the sticky-exit rule, never straight to On Target.
+  const released = computeClientPaymentStatus(writeOffHoldHistory(), { today: at('2026-05-05T12:00:00') });
+  assert.equal(released.status, WARNING);
+});

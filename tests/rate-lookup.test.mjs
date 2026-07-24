@@ -10,7 +10,7 @@ const rates2026 = {
 test('exact month match wins', () => {
   const info = findRateInfo(rates2026, '2026-04');
   assert.deepEqual(info, {
-    rate: 350, found: true, sourceMonthKey: '2026-04', requestedMonthKey: '2026-04',
+    rate: 350, found: true, sourceMonthKey: '2026-04', requestedMonthKey: '2026-04', takeHomeRate: null,
   });
 });
 
@@ -28,7 +28,7 @@ test('pre-history lookup bills retrospectively at the earliest stored rate', () 
   const info = findRateInfo(rates2026, '2025-01');
   assert.deepEqual(info, {
     rate: 300, found: true, retrospective: true,
-    sourceMonthKey: '2026-01', requestedMonthKey: '2025-01',
+    sourceMonthKey: '2026-01', requestedMonthKey: '2025-01', takeHomeRate: null,
   });
   assert.equal(findRateInfo(rates2026, '2025-12').rate, 300);
 });
@@ -57,13 +57,13 @@ test('a zero-rate entry AT the earliest stored key is a miss, not a forward-look
   // zero-rate gap.
   const map = { '2025-01': { rate: 0 }, '2026-06': { rate: 400 } };
   assert.deepEqual(findRateInfo(map, '2025-01'), {
-    rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: '2025-01',
+    rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: '2025-01', takeHomeRate: null,
   });
   // A month genuinely BEFORE the whole history still gets the retrospective
   // fallback to the earliest known nonzero rate (skipping the leading $0).
   assert.deepEqual(findRateInfo(map, '2024-06'), {
     rate: 400, found: true, retrospective: true,
-    sourceMonthKey: '2026-06', requestedMonthKey: '2024-06',
+    sourceMonthKey: '2026-06', requestedMonthKey: '2024-06', takeHomeRate: null,
   });
 });
 
@@ -82,7 +82,7 @@ test('a fallback entry holding rate 0/undefined reports found:false, not a silen
   // Hours billed against these maps yield $0 — the warning must fire.
   const zeroRate = { '2026-01': { rate: 0 } };
   assert.deepEqual(findRateInfo(zeroRate, '2026-03'), {
-    rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: '2026-03',
+    rate: 0, found: false, sourceMonthKey: null, requestedMonthKey: '2026-03', takeHomeRate: null,
   });
   const malformed = { '2026-01': {} };
   assert.equal(findRateInfo(malformed, '2026-03').found, false);
