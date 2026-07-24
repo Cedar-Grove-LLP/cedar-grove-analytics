@@ -15,6 +15,19 @@ export function getDb() {
     return getFirestore();
   }
 
+  // Emulator branch (E2E only): when FIRESTORE_EMULATOR_HOST is set — e.g.
+  // under `firebase emulators:exec` — the Admin SDK talks to the local
+  // emulator and needs no credentials, only a project id.
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    initializeApp({
+      projectId:
+        process.env.GCLOUD_PROJECT ||
+        process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ||
+        'demo-cedar-grove',
+    });
+    return getFirestore();
+  }
+
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (raw) {
     let serviceAccount;

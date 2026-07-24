@@ -1,4 +1,4 @@
-import { MONTH_NAMES_ABBR } from './constants';
+import { MONTH_NAMES_ABBR } from './constants.js';
 
 // Format currency - omit .00 decimals
 export const formatCurrency = (amount) => {
