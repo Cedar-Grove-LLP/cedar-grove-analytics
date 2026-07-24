@@ -128,10 +128,27 @@ invoices/all            — all client invoices in a single doc, synced from the
                            workbook's "Payment Status" sheet tab (source of truth):
                            { entryCount, syncedAt, entries: [{ client, amount, year,
                                dateSent, status ("Paid"|"Not Paid"|"Payment Initiated"),
-                               lastReminder, dateReceived, notes, sheetRowNumber }] }
+                               lastReminder, dateReceived, notes, sheetRowNumber,
+                               matchedTransactionId?, matchedPaymentAmount?,
+                               pendingReminder? }] }
                            Drives the calculated client Payment Status tags
                            (utils/paymentStatus.mjs) and the admin Billing KPIs /
                            invoice-matching pages.
+                           **App-owned fields — the sync MUST merge, not overwrite.**
+                           `matchedTransactionId` / `matchedPaymentAmount` (the Mercury
+                           payment matched to this invoice and the dollar amount applied
+                           — see utils/paymentAllocations.mjs; a payment may be split
+                           across several invoices) and `pendingReminder` (reminder-draft
+                           state) are written by the dashboard, NOT by the sheet. Apps
+                           Script `syncInvoices` / `forceSyncInvoices` must merge these
+                           onto the refreshed rows **by the invoice natural key**
+                           (client|amount|dateSent|year — `invoiceKey` in
+                           AdminInvoices.jsx), never by `sheetRowNumber`, which is
+                           positional and shifts when rows are inserted/deleted. A raw
+                           full overwrite erases payment allocations and reminder
+                           history; keying on the row number instead silently
+                           reattaches a match to the WRONG invoice. See
+                           FirestoreSchema.md → `invoices/all` for the sync flow.
 
 matters/{autoId}         — name, clientName, createdAt, lastUsedAt, createdBy
                            (managed by Google Sheets Apps Script for matter dropdowns)
