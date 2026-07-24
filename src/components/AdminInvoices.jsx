@@ -11,8 +11,14 @@ import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/formatters';
 import { getStatusBadge, getMatchTypeBadge } from '@/utils/statusStyles';
 import { downloadCSV } from '@/utils/csv';
-import { parseInvoiceDate, DEFAULT_PAYMENT_TERMS } from '@/utils/paymentStatus.mjs';
-import { invoiceDueDate } from '@/utils/invoicesCalc.mjs';
+import { parseInvoiceDate } from '@/utils/paymentStatus.mjs';
+import {
+  REMINDER_ORDINALS,
+  SAM_CC_EMAIL,
+  buildReminderBody,
+  resolveDueDateStr,
+  buildReminderCcList,
+} from '@/utils/reminderEmail.mjs';
 import {
   buildPaymentAllocations,
   canFullyAllocateInvoice,
@@ -102,60 +108,6 @@ function invoiceKey(inv) {
   const dateSent = (inv.dateSent ?? '').toString().trim();
   const year = inv.year ?? '';
   return `${client}|${amount}|${dateSent}|${year}`;
-}
-
-// Sam is CC'd on the third/final reminder per the Invoice Reminders System doc
-// ("Please CC Sam on the third reminder email"). Appended on top of the original
-// thread's CC list (Colin, Valery, …) for stage 2+ reminders.
-const SAM_CC_EMAIL = 'sam@cedargrovellp.com';
-
-// Ordinal labels for the three sequential reminders.
-const REMINDER_ORDINALS = ['1st', '2nd', '3rd'];
-
-// Sequential reminder email bodies, one per escalation stage (see the Invoice
-// Reminders System doc — the single source of truth for this copy):
-//   stage 0 → First reminder   (~16 days after the invoice, or day 31 for Net 30)
-//   stage 1 → Second reminder  (14 days after the first)
-//   stage 2+ → Third reminder  (final; CC Sam) — reused for any further nudges
-// `stage` is the count of reminders already drafted for this invoice, so the
-// body returned is the NEXT one to send.
-function buildReminderBody(stage, { greeting, invoiceMonthLabel, dueDateStr, senderFirstName }) {
-  if (stage <= 0) {
-    return [
-      `${greeting}, hope you are doing well.`,
-      ``,
-      `I wanted to follow up on the status of your payment for the ${invoiceMonthLabel} invoice, which was due on ${dueDateStr}.`,
-      ``,
-      `Please let us know if you have already processed the payment. We may have missed it on our end. Otherwise, we ask that you do so at your earliest convenience.`,
-      ``,
-      `As always, please let us know if you have any questions.`,
-      ``,
-      `Best,`,
-      senderFirstName,
-    ].join('\n');
-  }
-  if (stage === 1) {
-    return [
-      `${greeting},`,
-      `Following up on our note below regarding your past due invoice. The payment for the ${invoiceMonthLabel} invoice was due on ${dueDateStr}.`,
-      ``,
-      `Please let us know if you have already processed the payment and we will be sure to check our records again.`,
-      ``,
-      `Otherwise, we ask that you send payment as soon as possible.`,
-      ``,
-      `Best,`,
-      senderFirstName,
-    ].join('\n');
-  }
-  return [
-    `${greeting},`,
-    `Following up regarding the ${invoiceMonthLabel} invoice. The payment was due on ${dueDateStr} and we have sent multiple reminders but have not received the payment.`,
-    ``,
-    `Please provide us with an update on the timing of your payment. We ask that you send the amount due no later than the end of this week.`,
-    ``,
-    `Best,`,
-    senderFirstName,
-  ].join('\n');
 }
 
 const AdminInvoices = () => {
@@ -316,15 +268,9 @@ const AdminInvoices = () => {
       const billingContactFirst = matchedClient?.billingContact?.split(' ')[0] || '';
       const greeting = billingContactFirst ? `Hi ${billingContactFirst}` : 'Hi [NAME]';
 
-      // Due date = Date Sent + the client's payment terms (Net 15/30). Invoice
-      // entries carry no stored `dueDate`, so it's derived here; fall back to the
-      // firm default terms when the client can't be matched, and only to the
-      // [DUE DATE] placeholder when Date Sent itself is unparseable.
-      const dueTerms = matchedClient?.paymentTerms ?? DEFAULT_PAYMENT_TERMS;
-      const dueDateParsed = dateSentParsed ? invoiceDueDate(dateSentParsed, dueTerms) : null;
-      const dueDateStr = dueDateParsed
-        ? `${dueDateParsed.getMonth() + 1}/${dueDateParsed.getDate()}`
-        : '[DUE DATE]';
+      // Due date = Date Sent + the client's payment terms (Net 15/30), derived
+      // since invoice entries carry no stored `dueDate` (see reminderEmail.mjs).
+      const dueDateStr = resolveDueDateStr(dateSentParsed, matchedClient);
 
       // Compute the invoice month (prior month relative to dateSent)
       const invoiceMonthDate = dateSentParsed
@@ -342,13 +288,9 @@ const AdminInvoices = () => {
       const body = buildReminderBody(stage, { greeting, invoiceMonthLabel, dueDateStr, senderFirstName });
 
       // Preserve whoever was CC'd on the original invoice thread (e.g. Colin and
-      // Valery) on every reminder reply, and add Sam on the final reminder once
-      // his address is configured. Dedup case-insensitively so a name that was
-      // already CC'd isn't added twice.
-      const ccList = cc ? cc.split(',').map((a) => a.trim()).filter(Boolean) : [];
-      if (stage >= 2 && SAM_CC_EMAIL && !ccList.some((a) => a.toLowerCase().includes(SAM_CC_EMAIL.toLowerCase()))) {
-        ccList.push(SAM_CC_EMAIL);
-      }
+      // Valery) on every reminder reply, and add Sam on the final reminder
+      // (see reminderEmail.mjs for the dedup rules).
+      const ccList = buildReminderCcList(cc, stage, SAM_CC_EMAIL);
 
       const rawLines = [
         `To: ${to}`,
